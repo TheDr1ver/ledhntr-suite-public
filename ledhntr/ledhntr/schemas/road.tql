@@ -1,0 +1,179 @@
+define
+
+    ############################
+    #### Relations
+    ############################
+
+    hntr-relation sub relation,
+        plays hntr-relation:related,
+        relates related,
+        owns ledid, # required for all relations
+        owns confidence,
+        owns hunt-active,
+        owns hunt-name,
+        owns note,
+        owns tag,
+        owns date-discovered,
+        owns date-seen,
+        owns first-seen,
+        owns last-seen;
+
+    archive-year sub hntr-relation,
+        owns typedb-jump;
+
+    actor-cluster sub hntr-relation,
+        owns cluster-name,
+        owns alias;
+
+    ignore-list sub hntr-relation,
+        relates ignores;
+
+    hunt sub hntr-relation,
+        relates found,
+        owns hunt-endpoint,
+        owns hunt-service,
+        owns hunt-string,
+        owns first-hunted,
+        owns last-hunted,
+        owns frequency;
+
+    road sub hntr-relation;
+
+    ############################
+    #### Entities
+    ############################
+
+    hntr-entity sub entity, abstract,
+        plays hntr-relation:related,
+        owns ledid, # required for all entities
+        owns confidence,
+        owns hunt-active,
+        owns hunt-name,
+        owns note,
+        owns tag,
+        owns typedb-jump,
+        owns date-discovered,
+        owns date-seen,
+        owns first-seen,
+        owns last-seen;
+
+    active-hunts sub hntr-entity;
+
+    actors sub hntr-entity;
+
+    archives sub hntr-entity;
+
+    empty-ent sub hntr-entity;
+
+    index sub hntr-entity;
+
+    last-year sub hntr-entity;
+
+    news sub hntr-entity;
+
+    scratchpad sub hntr-entity;
+
+    ttp sub hntr-entity,
+        owns ttp-name;
+
+    #### Ignore-List Entities ####
+    ignore-ent sub hntr-entity, abstract,
+        plays ignore-list:ignores;
+
+    domain sub ignore-ent,
+        owns domain-name @key;
+
+    file sub ignore-ent,
+        owns fingerprint @key;
+
+    hostname sub ignore-ent,
+        owns fqdn @key;
+
+    ip sub ignore-ent,
+        owns ip-address @key;
+
+    jarm sub ignore-ent,
+        owns fingerprint @key;
+
+    ssl sub ignore-ent,
+        owns fingerprint @key;
+
+
+    ############################
+    #### Attributes
+    ############################
+
+    # NOTE ledid required for all schemas using LED-HNTR
+    ledid sub attribute,
+        value string;
+
+    alias sub attribute,
+        value string;
+
+    cluster-name sub attribute,
+        value string;
+
+    confidence sub attribute,
+        value double;
+
+    date-discovered sub attribute,
+        value datetime;
+
+    date-seen sub attribute,
+        value datetime;
+
+    first-hunted sub attribute,
+        value datetime;
+
+    first-seen sub attribute,
+        value datetime;
+
+    frequency sub attribute,
+        value double;
+
+    hunt-active sub attribute,
+        value boolean;
+
+    hunt-endpoint sub attribute,
+        value string;
+
+    hunt-name sub attribute,
+        value string;
+
+    hunt-service sub attribute,
+        value string;
+
+    hunt-string sub attribute,
+        value string;
+
+    last-hunted sub attribute,
+        value datetime;
+
+    last-seen sub attribute,
+        value datetime;
+
+    note sub attribute,
+        value string;
+
+    tag sub attribute,
+        value string;
+
+    ttp-name sub attribute,
+        value string;
+
+    typedb-jump sub attribute,
+        value string;
+
+    #### Ignore-List Attributes ####
+
+    domain-name sub attribute,
+        value string;
+
+    fingerprint sub attribute,
+        value string;
+
+    fqdn sub attribute,
+        value string;
+
+    ip-address sub attribute,
+        value string;

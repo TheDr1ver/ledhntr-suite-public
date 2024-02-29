@@ -1,0 +1,903 @@
+define
+
+    ############################
+    #### Relations
+    ############################
+
+    # hntr-relation is a meta-relation that serves as a template for almost
+    # all other relations. Basically everything that sub's hntr-relation will
+    # inherit the qualities defined here.
+    # ############
+    # * NOTE - Any Relation or Entity that isn't a meta-relation NEEDS to have a
+    # * @key attribute associated with it. If an entity or relation doesn't have
+    # * a single, natural key field  (e.g. whois/geoloc/etc), then it should use
+    # * the 'comboid' Attribute as its key. The 'comboid' attribute is generated
+    # * by sorting all non-meta attributes, converting them to a string format,
+    # * and sha256-hashing the results.
+
+    hntr-relation sub relation,
+        relates related,
+        plays hntr-relation:related,
+        plays reference:referenced-by, # entity referenced-by entity
+        plays reference:referenced, # entity referenced entity
+        plays hunt:found,
+        plays enrichment:enriches,
+        owns ledid, # required for all relations
+        owns confidence,
+        owns date-discovered,
+        owns date-seen,
+        owns first-seen,
+        owns hunt-name,
+        owns last-seen,
+        owns ref-link,
+        owns note,
+        owns tag;
+
+    autonomous-system sub hntr-relation,
+        relates linked, # asn controls cidr
+        plays cidr:linked,
+        owns comboid @key,
+        owns as-number,
+        owns as-name,
+        owns country-code,
+        owns isp;
+
+    cidr sub hntr-relation,
+        relates contains,
+        relates linked,
+        plays autonomous-system:linked,
+        owns cidr-range @key;
+
+    diff sub hntr-relation,
+        relates diffed-first,
+        relates diffed-second,
+        owns comboid @key,
+        owns diff-added,
+        owns diff-removed,
+        owns diff-modified;
+
+    email sub hntr-relation,
+        relates sent-by,
+        relates sent-to,
+        relates attached,
+        owns comboid @key,
+        owns email-address,
+        owns email-body,
+        owns email-headers,
+        owns link,
+        owns email-subject;
+
+    # meta-relation
+    enrichment sub hunt,
+        relates enriches;
+
+    # These should  be replaced by 'plays' on their associated entities.
+    # e.g. "file" -> "plays file:executed-by, plays file:executed,"
+    # e.g. "file" -> "plays url:executed-by, plays url:opens,"
+    #
+    # // execution sub hntr-relation,
+    # //    relates executed-by,
+    # //    relates executed;
+
+    # // generic-link sub hntr-relation,
+    # //    relates linked;
+
+    geoloc sub hntr-relation,
+        relates located-in,
+        owns comboid @key,
+        owns continent,
+        owns country,
+        owns country-code,
+        owns city,
+        owns postal-code,
+        owns timezone,
+        owns province,
+        owns registered-country,
+        owns registered-country-code;
+
+    hunt sub relation,
+        # can't inherit hntr-relation so we'll manually add all that here
+        relates related,
+        plays reference:referenced-by, # entity referenced-by entity
+        plays reference:referenced, # entity referenced entity
+        plays hunt:found,
+        plays enrichment:enriches,
+        owns ledid, # required for all relations
+        owns confidence,
+        owns date-discovered,
+        owns date-seen,
+        owns first-seen,
+        owns last-seen,
+        owns note,
+        owns tag,
+
+        # A hunt should be able to own ANYTHING it finds. Kinda wish owns * would work
+        owns account-service,
+        owns email-address,
+        owns first-name,
+        owns last-name,
+        owns password,
+        owns user,
+        owns actor-name,
+        owns alias,
+        owns domain-name,
+        owns fqdn,
+        owns ip-address,
+        owns name-server,
+        owns family,
+        owns filename,
+        owns hash,
+        owns md5,
+        owns sha1,
+        owns sha256,
+        owns sha512,
+        owns ssdeep,
+        owns imphash,
+        owns mime-type,
+        owns auth-ssl-response,
+        owns auth-tls-response,
+        owns http-header-pair,
+        owns http-headers-hash,
+        owns http-html-hash,
+        owns http-favicon-hash,
+        owns http-robots-hash,
+        owns http-securitytxt-hash,
+        owns http-sitemap-hash,
+        owns http-title,
+        owns jarm-fingerprint,
+        owns fingerprint,
+        owns sha256,
+        owns issuer-c,
+        owns issuer-cn,
+        owns issuer-o,
+        owns issuer-l,
+        owns issuer-st,
+        owns issuer-ou,
+        owns subject-c,
+        owns subject-cn,
+        owns subject-o,
+        owns subject-l,
+        owns subject-st,
+        owns subject-ou,
+        owns ja3s,
+        owns uri,
+        owns link,
+        owns phone-number,
+        owns fax-number,
+        owns org,
+        owns registrar,
+
+        # The rest is hunt-specific
+        relates found,
+        owns hunt-active,
+        owns hunt-endpoint,
+        owns hunt-name @key,
+        owns hunt-service,
+        owns hunt-string,
+        owns first-hunted,
+        owns last-hunted,
+        owns frequency;
+
+    misp-event sub hntr-relation,
+        relates contains,
+        owns misp-event-info @key,
+        owns link,
+        owns misp-org,
+        owns misp-orgc,
+        owns actor-name,
+        owns alias,
+        owns domain-name,
+        owns http-html,
+        owns ip-address,
+        owns date-published,
+        owns summary;
+
+    network-service sub hntr-relation,
+        relates serves,
+        relates running-on,
+        owns comboid @key,
+        owns cpe23,
+        owns fingerprint,
+        owns domain-name,
+        owns fqdn,
+        owns ip-address,
+        owns jarm-fingerprint,
+        owns name-server,
+        owns port,
+        owns product,
+        owns service-header,
+        owns service-name,
+        owns service-provider,
+        owns service-body,
+        owns shodan-hash;
+
+    # These should  be replaced by 'plays' on their associated entities.
+    # e.g. "file" -> "plays file:executed-by, plays file:executed,"
+    # e.g. "file" -> "plays url:executed-by, plays url:opens,"
+    reference sub hntr-relation,
+        relates referenced-by,
+        relates referenced;
+
+    # // registration sub hntr-relation,
+    # //     relates registered-by,
+    # //     relates registered;
+
+    resolution sub hntr-relation,
+        relates resolves,
+        relates answer,
+        relates query,
+        owns comboid @key,
+        owns ip-address,
+        owns dns-type,
+        owns dns-value,
+        owns name-server,
+        owns fqdn;
+
+    # These should  be replaced by 'plays' on their associated entities.
+    # e.g. "file" -> "plays file:executed-by, plays file:executed,"
+    # e.g. "file" -> "plays url:executed-by, plays url:opens,"
+    # // running sub hntr-relation,
+    # //     relates running-on,
+    # //     relates seen-running;
+
+    # // signature sub hntr-relation,
+    # //     relates signed-by,
+    # //     relates signed;
+
+    ############################
+    #### Entities
+    ############################
+
+    # meta-entity
+    hntr-entity sub entity, abstract,
+        plays hntr-relation:related,
+        plays reference:referenced-by, # entity referenced-by entity
+        plays reference:referenced, # entity referenced entity
+        plays misp-event:contains,
+        plays hunt:found,
+        plays hunt:related,
+        plays enrichment:enriches,
+        plays network-service:serves,
+        owns ledid, # required for all entities
+        owns confidence,
+        owns date-discovered,
+        owns date-seen,
+        owns first-seen,
+        owns hunt-name,
+        owns last-seen,
+        owns ref-link,
+        owns note,
+        owns tag;
+
+    account sub hntr-entity,
+        plays email:sent-by, # send-mail sent-by account
+        owns comboid @key,
+        owns account-service,
+        owns email-address,
+        owns first-name,
+        owns last-name,
+        owns password,
+        owns user;
+
+    actor sub hntr-entity,
+        plays geoloc:located-in,
+        # // plays registration:registered-by, # register regitsered-by
+        plays email:sent-by, # send-mail sent-by actor
+        owns comboid @key,
+        owns actor-name,
+        owns alias;
+
+    cert-host sub hntr-entity, # I hate this entity - it should be changed to ip.
+        owns comboid @key,
+        owns ip-address,
+        owns fqdn;
+
+    dns-record sub hntr-entity, # Trying to avoid this to consolidate Things
+        plays resolution:query, # resolution resolved-from dns-record
+        plays resolution:answer,
+        plays resolution:resolves,
+        owns comboid @key,
+        owns dns-server-type,
+        owns dns-type,
+        owns dns-value,
+        owns name-server,
+        owns ip-address,
+        owns fqdn;
+
+    domain sub hntr-entity,
+        # // plays registration:registered,
+        plays resolution:answer,  # domain resolved-to ip
+        plays resolution:query, # domain resolved-from dns-record
+        plays resolution:resolves,
+        owns hunt-active,
+        owns name-server,
+        owns domain-name @key;
+
+    empty-ent sub hntr-entity;
+
+    # I'm not worried about files right now, BUT WHEN I DO, THIS SHOULD BE
+    # CONVERTED INTO A  RELATION. That way you can associate diffs/hashes/behaviors
+    # etc (which are all entities) easily.
+    # Also needs a key (fingerprint per road schema), but it will have to be
+    # programmatically selected. (e.g. if file has sha254, sha1, and md5, then
+    # sha256 becomes the fingerprint. Otherwise if it only has one hash, that
+    # hash becomes to key.)
+    file sub hntr-entity,
+        plays diff:diffed-first, # file diffed-with filename
+        plays diff:diffed-second,
+        # // plays execution:executed, # file ran file
+        # // plays execution:executed-by, # file executed-by file
+        # // plays signature:signed,
+        owns comboid @key,
+        owns family,
+        owns filename,
+        owns filesize,
+        owns hash,
+        owns md5,
+        owns sha1,
+        owns sha256,
+        owns sha512,
+        owns ssdeep,
+        owns imphash,
+        owns mime-type;
+
+    ftp sub hntr-entity,
+        owns comboid @key,
+        owns auth-ssl-response,
+        owns auth-tls-response,
+        owns status-code,
+        owns status-meaning;
+
+    http sub hntr-entity,
+        owns comboid @key,
+        owns ip-address,
+        owns http-header-pair,
+        owns http-headers-hash,
+        owns http-html,
+        owns http-html-hash,
+        owns http-html-size,
+        owns http-protocol,
+        owns http-favicon-hash,
+        owns http-robots-hash,
+        owns http-securitytxt-hash,
+        owns http-sitemap-hash,
+        owns status-code,
+        owns http-title;
+
+    hostname sub hntr-entity,
+        plays resolution:answer,  # hostname resolved-to ip
+        plays resolution:query, # hostname resolved-from dns-record
+        plays resolution:resolves,
+        owns hunt-active,
+        owns fqdn @key;
+
+    # // hunt-res-json sub hntr-entity,
+    # //     owns json-blob,
+    # //     owns fingerprint;
+
+    ip sub hntr-entity,
+        plays autonomous-system:linked,
+        plays cidr:contains,
+        plays geoloc:located-in,
+        plays network-service:running-on,
+        plays resolution:query,
+        plays resolution:answer, # resolution resolved-to ip
+        plays resolution:resolves,
+        owns continent,
+        owns country,
+        owns country-code,
+        owns city,
+        owns postal-code,
+        owns timezone,
+        owns province,
+        owns registered-country,
+        owns registered-country-code,
+        owns hunt-active,
+        owns cidr-range,
+        owns ip-address @key;
+
+    jarm sub hntr-entity,
+        owns fingerprint @key,
+        owns jarm-cipher,
+        owns jarm-fingerprint,
+        owns jarm-tls-ext;
+
+    os sub hntr-entity,
+        owns comboid @key,
+        owns uniform-resource-identifier,
+        owns part,
+        owns vendor,
+        owns product,
+        owns version;
+
+    software sub hntr-entity,
+        owns comboid @key,
+        owns product,
+        owns uniform-resource-identifier,
+        owns part,
+        owns vendor,
+        owns version;
+
+    ssl sub hntr-entity,
+        owns fqdn, # used for storing SANs
+        owns fingerprint @key,
+        owns sha256,
+        owns issued-date,
+        owns expires-date,
+        owns issuer-c,
+        owns issuer-cn,
+        owns issuer-o,
+        owns issuer-l,
+        owns issuer-st,
+        owns issuer-ou,
+        owns pubkey-bits,
+        owns pubkey-type,
+        owns sig-alg,
+        owns version,
+        owns subject-c,
+        owns subject-cn,
+        owns subject-o,
+        owns subject-l,
+        owns subject-st,
+        owns subject-ou,
+        owns cipher-bits,
+        owns cipher-name,
+        owns ja3s;
+
+    trusted-third-party sub hntr-entity;
+
+    url sub hntr-entity,
+        owns domain-name,
+        owns fqdn,
+        owns hunt-active,
+        owns uri @key;
+
+    website sub hntr-entity,
+        owns link @key,
+        owns account-service; # Gmail/Reddit/GitHub/Twitter
+
+    whois sub hntr-entity,
+        owns comboid @key,
+        # ipwhois-specific fields
+        owns as-number,
+        owns as-name,
+        owns country-code,
+        owns isp,
+        # normal whois fields
+        owns domain-name,
+        owns ip-address,
+        owns first-name,
+        owns last-name,
+        owns email-address,
+        owns phone-number,
+        owns fax-number,
+        owns org,
+        owns registrar,
+        owns created-date,
+        owns expires-date,
+        owns name-server;
+
+    ############################
+    #### Attributes
+    ############################
+
+    # NOTE ledid required for all schemas using LED-HNTR
+    ledid sub attribute,
+        value string;
+
+    account-service sub attribute,
+        value string;
+
+    actor-name sub attribute,
+        value string;
+
+    alias sub attribute,
+        value string;
+
+    as-name sub attribute,
+        value string;
+
+    as-number sub attribute,
+        value string;
+
+    auth-ssl-response sub attribute,
+        value string;
+
+    auth-tls-response sub attribute,
+        value string;
+
+    summary sub attribute,
+        value string;
+
+    bytes-transferred sub attribute,
+        value double;
+
+    cert-subject sub attribute,
+        value string;
+
+    cert-tls-version sub attribute,
+        value double;
+
+    cidr-range sub attribute,
+        value string;
+
+    cipher-bits sub attribute,
+        value string;
+
+    cipher-name sub attribute,
+        value string;
+
+    city sub attribute,
+        value string;
+
+    comboid sub attribute,
+        value string;
+
+    common-name sub attribute,
+        value string;
+
+    confidence sub attribute,
+        value double;
+
+    continent sub attribute,
+        value string;
+
+    country sub attribute,
+        value string;
+
+    country-code sub attribute,
+        value string;
+
+    cpe23 sub attribute,
+        value string;
+
+    created-date sub attribute,
+        value datetime;
+
+    date-discovered sub attribute,
+        value datetime;
+
+    date-published sub attribute,
+        value datetime;
+
+    date-seen sub attribute,
+        value datetime;
+
+    dest-port sub attribute,
+        value double;
+
+    diff-added sub attribute,
+        value string;
+
+    diff-modified sub attribute,
+        value string;
+
+    diff-removed sub attribute,
+        value string;
+
+    dns-server-type sub attribute,
+        value string;
+
+    dns-type sub attribute,
+        value string;
+
+    dns-value sub attribute,
+        value string;
+
+    domain-name sub attribute,
+        value string;
+
+    email-address sub attribute,
+        value string;
+
+    email-body sub attribute,
+        value string;
+
+    email-headers sub attribute,
+        value string;
+
+    email-subject sub attribute,
+        value string;
+
+    expires-date sub attribute,
+        value datetime;
+
+    family sub attribute,
+        value string;
+
+    fax-number sub attribute,
+        value string;
+
+    filename sub attribute,
+        value string;
+
+    filesize sub attribute,
+        value double;
+
+    fingerprint sub attribute,
+        value string;
+
+    first-name sub attribute,
+        value string;
+
+    first-hunted sub attribute,
+        value datetime;
+
+    first-seen sub attribute,
+        value datetime;
+
+    fqdn sub attribute,
+        value string;
+
+    frequency sub attribute,
+        value double;
+
+    hash sub attribute,
+        value string;
+
+    http-header-pair sub attribute,
+        value string;
+
+    http-headers-hash sub attribute,
+        value string;
+
+    http-html sub attribute,
+        value string;
+
+    http-html-hash sub attribute,
+        value string;
+
+    http-html-size sub attribute,
+        value double;
+
+    http-favicon-hash sub attribute,
+        value string;
+
+    http-protocol sub attribute,
+        value string;
+
+    http-robots-hash sub attribute,
+        value string;
+
+    http-securitytxt-hash sub attribute,
+        value string;
+
+    http-sitemap-hash sub attribute,
+        value string;
+
+    http-title sub attribute,
+        value string;
+
+    hunt-active sub attribute,
+        value boolean;
+
+    hunt-endpoint sub attribute,
+        value string;
+
+    hunt-name sub attribute,
+        value string;
+
+    hunt-service sub attribute,
+        value string;
+
+    hunt-string sub attribute,
+        value string;
+
+    imphash sub attribute,
+        value string;
+
+    ip-address sub attribute,
+        value string;
+
+    ip-version sub attribute,
+        value string;
+
+    isp sub attribute,
+        value string;
+
+    issued-date sub attribute,
+        value datetime;
+
+    issuer-c sub attribute,
+        value string;
+
+    issuer-cn sub attribute,
+        value string;
+
+    issuer-o sub attribute,
+        value string;
+
+    issuer-l sub attribute,
+        value string;
+
+    issuer-st sub attribute,
+        value string;
+
+    issuer-ou sub attribute,
+        value string;
+
+    ja3s sub attribute,
+        value string;
+
+    jarm-cipher sub attribute,
+        value string;
+
+    jarm-fingerprint sub attribute,
+        value string;
+
+    jarm-tls-ext sub attribute,
+        value string;
+
+    json-blob sub attribute,
+        value string;
+
+    last-name sub attribute,
+        value string;
+
+    last-hunted sub attribute,
+        value datetime;
+
+    last-seen sub attribute,
+        value datetime;
+
+    link sub attribute,
+        value string;
+
+    md5 sub attribute,
+        value string;
+
+    mime-type sub attribute,
+        value string;
+
+    misp-event-info sub attribute,
+        value string;
+
+    misp-link sub attribute,
+        value string;
+
+    misp-org sub attribute,
+        value string;
+
+    misp-orgc sub attribute,
+        value string;
+
+    name-server sub attribute,
+        value string;
+
+    note sub attribute,
+        value string;
+
+    org sub attribute,
+        value string;
+
+    password sub attribute,
+        value string;
+
+    phone-number sub attribute,
+        value string;
+
+    part sub attribute,
+        value string;
+
+    port sub attribute,
+        value double;
+
+    postal-code sub attribute,
+        value string;
+
+    product sub attribute,
+        value string;
+
+    province sub attribute,
+        value string;
+
+    pubkey-bits sub attribute,
+        value double;
+
+    pubkey-type sub attribute,
+        value string;
+
+    public-key-length sub attribute,
+        value double;
+
+    ref-link sub attribute,
+        value string;
+
+    registered-country sub attribute,
+        value string;
+
+    registered-country-code sub attribute,
+        value string;
+
+    registrar sub attribute,
+        value string;
+
+    screenshot-blob sub attribute,
+        value string;
+
+    service-body sub attribute,
+        value string;
+
+    service-header sub attribute,
+        value string;
+
+    service-name sub attribute,
+        value string;
+
+    service-provider sub attribute,
+        value string;
+
+    sha1 sub attribute,
+        value string;
+
+    sha256 sub attribute,
+        value string;
+
+    sha512 sub attribute,
+        value string;
+
+    shodan-hash sub attribute,
+        value string;
+
+    sig-alg sub attribute,
+        value string;
+
+    source-port sub attribute,
+        value double;
+
+    ssdeep sub attribute,
+        value string;
+
+    status-code sub attribute,
+        value double;
+
+    status-meaning sub attribute,
+        value string;
+
+    subject-c sub attribute,
+        value string;
+
+    subject-cn sub attribute,
+        value string;
+
+    subject-o sub attribute,
+        value string;
+
+    subject-l sub attribute,
+        value string;
+
+    subject-st sub attribute,
+        value string;
+
+    subject-ou sub attribute,
+        value string;
+
+    tag sub attribute,
+        value string;
+
+    timezone sub attribute,
+        value string;
+
+    title sub attribute,
+        value string;
+
+    uniform-resource-identifier sub attribute,
+        value string;
+
+    uri sub attribute,
+        value string;
+
+    user sub attribute,
+        value string;
+
+    valid-end sub attribute,
+        value datetime;
+
+    valid-start sub attribute,
+        value datetime;
+
+    vendor sub attribute,
+        value string;
+
+    version sub attribute,
+        value string;
