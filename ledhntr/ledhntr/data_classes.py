@@ -913,14 +913,9 @@ class Relation(Thing):
                 self.players[k]=[v]
 
     def _get_keyattr(self):
-        for _, things in default_schema.items():
-            keyattr = ''
-            for thing in things:
-                if thing.label == self.label:
-                    keyattr = thing.keyattr
-                    break
-                if keyattr:
-                    break
+        keyattr = ''
+        if self.label in default_schema:
+            keyattr = default_schema[self.label]
         return keyattr
 
     def _sort_attributes(self, attributes: List = [],):
