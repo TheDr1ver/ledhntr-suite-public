@@ -5,11 +5,14 @@
 Link Every Detail - Heuristic Network Threat Research
 
 LEDHNTR is an attempt to combine data collection, enrichment, and analysis into
-a single platform that relies on graph database principles for pivoting.
+a single platform ~~that relies on graph database principles for pivoting.~~
+*The TypeDB module needs some work before I can publicly release it. For now
+we're storing everything in flat JSON files.
 
 It currently consists of the core framework (LEDHNTR), various modular plugins
-(LEDHNTR-Plugins), and a crappy web UI (LEDMGMT) that makes pivoting and
-navigating the results less painful that living in Jupyter Notebooks all day.
+(LEDHNTR-Plugins), ~~and a crappy web UI (LEDMGMT) that makes pivoting and
+navigating the results less painful that living in Jupyter Notebooks all day.~~ 
+*Maybe I'll release that one day, but that day is not today :)
 
 ## DISCLAIMER
 
