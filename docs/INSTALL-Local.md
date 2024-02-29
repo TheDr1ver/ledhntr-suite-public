@@ -154,4 +154,57 @@ from pprint import pprint
 pprint(res['things'][0].to_dict()) # pretty-prints first parsed Thing object
 
 # Write results to flat JSON file
+filesys_client = led.load_plugin('localfile_client')
+fc = filesys_client
+fc.set_path(path="./data/local/", db_name='20240229_TEST')
+fc.write_thing(res['things'][0])
+fc.write_raw_json(res['raw'])
+pprint(fc.list_dir(fc.full_path))
+
+# Loop through Shodan results and pull details for each found IP
+for thing in res['things']:
+    if thing.label == 'ip' and thing.keyval:
+        api_conf2 = shodan.api_confs.get('host_details')
+        api_conf2.params['query'] = thing.keyval
+        detail_res = shodan.search(api_conf2)
+        fc.write_raw_json(detail_res['raw'], filename=f"{thing.keyval}-", append_date=True)
+```
+
+### Censys Get Up To 10 Pages of Results
+
+```python
+import copy
+from ledhntr import LEDHNTR
+led = LEDHNTR()
+censys = led.load_plugin('censys')
+# Set up your file storage
+filesys_client = led.load_plugin('localfile_client')
+fc = filesys_client
+fc.set_path(path="./data/local/", db_name='20240229_TEST_CENSYS')
+# Run your base Censys search
+api_conf = censys.api_confs.get('search')
+q = '(autonomous_system.asn="44477") and services.software.product=`vsFTPd`'
+api_conf.params['q']=q
+all_things = []
+counter = 0
+# Loop through a max of 10 pages of results
+while counter < 10:
+    res = censys.search(api_conf=api_conf)
+    # Store all the parsed things that were found
+    all_things.append(res['things'])
+    # Write the results to disk
+    fc.write_raw_json(res['raw'], filename=f"{counter}-", append_date=True)
+    cursor = res['raw']['result'].get('links', {}).get('next')
+    # If a cursor exists, grab the next page. Otherwise kill the loop
+    if not cursor:
+        break
+    api_conf.params['cursor'] = cursor
+    counter += 1
+# Get each IP's individual details
+for thing in all_things:
+    if thing.label == 'ip' and thing.keyval:
+        api_conf2 = copy.deepcopy(censys.api_confs.get('host_details'))
+        api_conf2.params['q']=thing.keyval
+        detail_res = censys.search(api_conf2)
+        fc.write_raw_json(detail_res['raw'], filename=f"{thing.keyval}-", append_date=True)
 ```

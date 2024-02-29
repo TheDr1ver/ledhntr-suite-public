@@ -238,6 +238,7 @@ class LocalFileClient(ConnectorPlugin):
         raw_json: str = "",
         path: Optional[str] = '',
         filename: Optional[str] = '',
+        append_date: Optional[bool] = False,
     ):
         """Write raw JSON to file
         Converts a result (list or dict) to a raw JSON string and writes it to
@@ -247,14 +248,18 @@ class LocalFileClient(ConnectorPlugin):
         :para path: The full folder path the file will be written to 
             (e.g. ~/.ledhntr/data/local/test_db/api_results/)
         :para filename: The filename to write to the path (e.g. blob.json)
+        :para append_date: Boolean - determines if the date should be appended
+        to the filename.
         """
         _log = self.logger
 
         if not path:
             path = self.full_path
-        if not filename:
+        if append_date or not filename:
             dto = datetime.now(timezone.utc)
-            filename = dto.strftime("%Y%m%d_%H_%M_%S_UTC")
+            filename += dto.strftime("%Y%m%d_%H_%M_%S_UTC")
+            filename += ".json"
+        if not filename.endswith(".json"):
             filename += ".json"
         os.makedirs(path, exist_ok=True)
         if isinstance(path, str):
