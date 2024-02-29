@@ -44,6 +44,16 @@ class JSONFlatsClient(ConnectorPlugin):
     """
     JSONFlatsClient
 
+    This is a connector plugin that is meant to be used similar to a DB connector.
+    In theory, it's supposed to read/write/organize data essentially the same
+    way as something like the typedb_client would, however this particular one
+    has been designed to store Things in flat JSON files directly on disk.
+
+    It requires a file system client (e.g. localfile_client or s3_client) in order
+    to operate properly.... Maybe those file system clients should be under a
+    different plugin name that isn't ConnectorPlugin to clear up ambiguity, but
+    for now it is what it is.
+
     """
     def __init__(
         self,

@@ -139,7 +139,6 @@ rate_limit = 2
 Assuming you are still running a terminal under which you activated your virtual environment (e.g. `source ~/.ledhntr/.venv/bin/activate` or `C:\Users\<user>\.ledhntr\.venv\Scripts\> activate.bat`) open an interactive Python prompt and run the following to test various functionalities:
 
 ### Test a Shodan Search
-TODO
 
 ```python
 from ledhntr import LEDHNTR
@@ -153,4 +152,6 @@ res = shodan.search(api_conf=api_conf)
 res['raw']['total'] # total shodan hits
 from pprint import pprint
 pprint(res['things'][0].to_dict()) # pretty-prints first parsed Thing object
+
+# Write results to flat JSON file
 ```

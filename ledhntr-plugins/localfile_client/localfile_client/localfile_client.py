@@ -41,6 +41,13 @@ from ledhntr.plugins.connector import ConnectorPlugin
 
 class LocalFileClient(ConnectorPlugin):
     """LocalFileClient
+
+    This is a file system client that's used to read and write files to disk.
+    It can be invoked through a caching plugin like json_collector, or an
+    organizer/search engine like jsonflats_client.
+
+    Alternatively, you can use it to simply read and write local files without
+    all the complicated operations of a caching plugin.
     """
     def __init__(
         self,
@@ -110,11 +117,13 @@ class LocalFileClient(ConnectorPlugin):
     def write_thing(
         self,
         thing: Thing = None,
+        path: Optional[str] = '',
         return_things: Optional[bool] = False,
     ):
         """Add Thing to db folder as a JSON file
 
         :param thing: Thing object to add
+        :param path: Optional path to save the thing to. Defaults to self.full_path
         :param return_things: True if you want the added attribute returned,
             False to return True or invalid data
 
@@ -125,7 +134,10 @@ class LocalFileClient(ConnectorPlugin):
 
         data = dumps(thing.to_dict(), compactly=True)
 
-        full_path = self.set_path()
+        if path or not self.full_path:
+            full_path = self.set_path(path=path)
+        else:
+            full_path = self.full_path
         full_dir = self.get_search_path(path=full_path, label=thing.label)
 
         filename = ""
@@ -224,8 +236,8 @@ class LocalFileClient(ConnectorPlugin):
     def write_raw_json(
         self,
         raw_json: str = "",
-        path: str = '',
-        filename: str = '',
+        path: Optional[str] = '',
+        filename: Optional[str] = '',
     ):
         """Write raw JSON to file
         Converts a result (list or dict) to a raw JSON string and writes it to
@@ -238,6 +250,12 @@ class LocalFileClient(ConnectorPlugin):
         """
         _log = self.logger
 
+        if not path:
+            path = self.full_path
+        if not filename:
+            dto = datetime.now(timezone.utc)
+            filename = dto.strftime("%Y%m%d_%H_%M_%S_UTC")
+            filename += ".json"
         os.makedirs(path, exist_ok=True)
         if isinstance(path, str):
             p = Path(path)
@@ -245,6 +263,11 @@ class LocalFileClient(ConnectorPlugin):
             p = path
         full_path = p.joinpath(filename)
         write_path = os.path.abspath(full_path)
+
+        # Check if it's proper JSON
+        if not isinstance(raw_json, str):
+            raw_json = dumps(raw_json, compactly=True)
+
         try:
             with open(write_path, 'x', encoding='utf-8') as f:
                 f.write(f"{raw_json}\n")
