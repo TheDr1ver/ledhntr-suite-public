@@ -12,7 +12,7 @@ _log = logging.getLogger()
 
 class LEDHNTRPluginInstaller:
 
-    DEFAULT_REPO = 'git+https://github.com/TheDr1ver/ledhntr-plugins-public.git'
+    DEFAULT_REPO = 'git+https://github.com/TheDr1ver/ledhntr-suite-public.git'
 
     @staticmethod
     def install(
@@ -23,7 +23,7 @@ class LEDHNTRPluginInstaller:
                 pass
             elif plugin_path.startswith('ledhntr:'):
                 plugin_name = plugin_path.split(':')[1]
-                plugin_path = f'{LEDHNTRPluginInstaller.DEFAULT_REPO}#egg={plugin_name}&subdirectory={plugin_name}'
+                plugin_path = f'{LEDHNTRPluginInstaller.DEFAULT_REPO}#egg={plugin_name}&subdirectory=ledhntr-plugins/{plugin_name}'
             else:
                 _log.error(f'Invalid Github repository specified. {plugin_path}')
                 raise

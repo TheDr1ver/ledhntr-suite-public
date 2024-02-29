@@ -51,7 +51,9 @@ C:\Users\<myuser>\.ledhntr\.venv\Scripts\> activate.bat
 ## Install LEDHNTR
 
 ```bash
-cd ~/LEDHNTR/ledhntr
+cd ~
+git clone https://github.com/TheDr1ver/ledhntr-suite-public.git
+cd ~/ledhntr-suite-public/ledhntr
 pip install -r requirements.txt
 pip install -e . # -e switch lets you apply changes on the fly without reinstalling
 ```
@@ -61,7 +63,6 @@ pip install -e . # -e switch lets you apply changes on the fly without reinstall
 Example plugins to install:
 
 ```bash
-ledhntr install --github ledhntr:typedb_client
 ledhntr install --github ledhntr:json_collector
 ledhntr install --github ledhntr:shodan
 ledhntr install --github ledhntr:censys
@@ -127,22 +128,17 @@ default_threshold=24
 rate_limit = 2
 ```
 
-**IMPORTANT** - `[typedb_client] -> db_server` this value of `127.0.0.1:1729` should work if you are using an LEDHNTR install on the same host that's running LEDHNTR-Docker, OR if you installed LEDHNTR on another host and used the SSH Tunneling configs discussed in this README.
+**IMPORTANT** - `[typedb_client] -> db_server` this value of `127.0.0.1:1729` should work if you are using an LEDHNTR install on the same host that's running LEDHNTR-Docker.
 
 # Test Runs
 
 Assuming you are still running a terminal under which you activated your virtual environment (e.g. `source ~/.ledhntr/.venv/bin/activate` or `C:\Users\<user>\.ledhntr\.venv\Scripts\> activate.bat`) open an interactive Python prompt and run the following to test various functionalities:
 
-### Test LEDHNTR TypeDB Connection
+### Test a Shodan Search
+TODO
 
 ```python
 from ledhntr import LEDHNTR
 led = LEDHNTR()
-tdb = led.load_plugin('typedb_client')
-tdb.check_db('road')
-# Should return True if connections are working and everything initialized properly
-tdb.check_db('foo')
-# Should return False unless you have created a database named 'foo'
+shodan = led.load_plugin('shodan')
 ```
-
-### Test a Shodan 

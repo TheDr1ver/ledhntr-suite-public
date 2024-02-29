@@ -1,54 +1,20 @@
 #!/usr/bin/env python3
-import copy
-import configparser
-import json
 import logging, logging.handlers
 import os
-import time 
 
 from pathlib import Path
 from pprint import pformat
 
 from typing import (
-    DefaultDict,
     Dict,
     List,
     Optional,
-    Set,
-    Tuple,
     Union,
 )
 _UNSET = object()
 
-
-
 import ledhntr.helpers as helpers
-# import ledhntr.helpers.dbclient as dbc
 from ledhntr.plugin_loader import PluginLoader
-
-from ledhntr.data_classes import (
-    Thing,
-    Relation,
-    Entity,
-    Attribute,
-    Role,
-    Query
-)
-
-"""
-from . import helpers
-from .plugin_loader import PluginLoader
-from .data_classes import(
-    Thing,
-    Relation,
-    Entity,
-    Attribute,
-    Role,
-    Query,
-)
-"""
-
-
 
 
 class LEDHNTR(PluginLoader):
@@ -109,15 +75,6 @@ class LEDHNTR(PluginLoader):
         )
         _log = self.logger
 
-        '''
-        self.db_server = db_server or config.get(
-            'core', 'db_server', fallback="localhost:1729",
-        )
-        self.db_name = db_name or config.get(
-            'core', 'db_name', fallback="my_database",
-        )
-        '''
-
         plugin_dir_list = plugin_dir_list or config.getlist(
             'core', 'plugin_dir_list', fallback=os.path.join(base_dir, 'plugins')
         )
@@ -128,10 +85,6 @@ class LEDHNTR(PluginLoader):
 
         # Additional Vars
         self.schema = []
-        '''
-        if schema_load:
-            self.schema = self._reload_schema()
-        '''
 
         # Load all active plugins
         if not self.plugins:
@@ -159,11 +112,7 @@ class LEDHNTR(PluginLoader):
         formatter = logging.Formatter
 
         stderr_handler = logging.StreamHandler()
-        '''
-        stderr_logformat = formatter(
-            '[%(asctime)s %(levelname)s] %(name)s: ' '%(message)s'
-        )
-        '''
+
         stderr_logformat = formatter(
             u"%(asctime)s [%(levelname)s] %(name)s[%(process)d] > "
             u"%(filename)s > (%(funcName)s) [%(lineno)d] > "
