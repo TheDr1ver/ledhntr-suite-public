@@ -3,6 +3,7 @@
 import copy
 import dateutil.parser
 import hashlib
+import re
 import uuid
 
 from abc import ABCMeta
@@ -13,6 +14,7 @@ except ImportError:
 
 from datetime import datetime, timezone
 from operator import itemgetter
+from pkg_resources import resource_stream
 from pprint import pprint, pformat
 from time import time
 from typing import Dict, List, Optional, DefaultDict, Union
@@ -151,6 +153,81 @@ def _ledid_glue(objdict: dict = {}):
     
     return result
 
+def _load_default_schema():
+    """Manually parses schema files and grabs keyvals
+
+    This basically does the exact same thing as helpers.parse_schema_file, but 
+    if I want to use it in defining the data classes, I can't have it return the
+    data classes themselves.
+
+    :param schema: string location of targeted schema.tql file
+    :returns: dict of Thing labels and their associated keyattr thing labels
+    """
+
+    schema = resource_stream('ledhntr', 'schemas/schema.tql').name
+
+    scheyattrs = {}
+
+    thing_types = {
+        'attribute': ['attribute'],
+        'entity': ['entity'],
+        'relation': ['relation'],
+    }
+
+    with open(schema, 'r') as s:
+        data = s.read()
+
+    pattern = r"(?s)([a-z0-9\-]+\s+sub.*?);"
+    things = re.findall(pattern, data)
+    type_parsing = copy.deepcopy(things)
+
+    role_pattern = r"(?s)relates\s+([a-z0-9\-]+)\s*(,|$)"
+    attr_pattern = r"(?s)owns\s+([a-z0-9\-]+)\s*(@|,|$)"
+    keyattr_pattern = r"(?s)owns\s+([a-z0-9\-]+)\s*@key"
+
+    re_role = re.compile(role_pattern)
+    re_attr = re.compile(attr_pattern)
+    re_keyattr = re.compile(keyattr_pattern)
+
+    counter = 1
+    while type_parsing and counter < 5:
+        safe_thing_types = copy.deepcopy(thing_types)
+        for key, types in safe_thing_types.items():
+            for t in types:
+                label_pattern = rf"(?s)([a-z0-9\-]+)\s+sub\s+({t})"
+                re_label = re.compile(label_pattern)
+                safe_type_parsing = copy.deepcopy(type_parsing)
+                for thing in safe_type_parsing:
+                    res = re_label.search(thing)
+                    # match = [<full_string>, <new_label>, <existing_label>]
+                    if res:
+                        # Get Label
+                        label = res[1]
+                        parent_label = res[2]
+                        if label not in thing_types[key]:
+                            thing_types[key].append(label)
+
+                        # Get KeyAttr
+                        found_keyattr = re_keyattr.search(thing)
+                        keyattr = None
+                        if found_keyattr:
+                            keyattr = found_keyattr[1]
+
+                        if label not in scheyattrs and keyattr:
+                            scheyattrs[label]=keyattr
+
+                        type_parsing.remove(thing)
+
+        # . _log.debug(f"unparsed types left: {len(type_parsing)}")
+        counter += 1
+        if counter > 10:
+            # ! _log.error(
+            # !     f"It should not take more than 10 iterations to processes a schema."
+            # !     f" Check your schema layout and try that again..."
+            # ! )
+            break
+    return scheyattrs
+
 def _to_dict(obj, classkey=None, ledid_glue:Optional[bool]=False):
     """Function used for all classes to convert them into dicts.
     :param classkey: TBH, IDK how to use this properly. I pulled this code off 
@@ -177,6 +254,8 @@ def _to_dict(obj, classkey=None, ledid_glue:Optional[bool]=False):
         return [_to_dict(v, classkey) for v in obj]
     else:
         return obj
+
+default_schema = _load_default_schema()
 
 class Thing(MutableMapping, metaclass=ABCMeta):
     def __init__(
@@ -485,10 +564,20 @@ class Entity(Thing):
                 self._ledid = _gen_ledid(self._label)
                 self.has.append(self._ledid)
 
-        self.keyattr = keyattr
+        # self.keyattr = keyattr
+        if keyattr:
+            self.keyattr = keyattr
+        else:
+            self.keyattr = self._get_keyattr()
         self.owns = owns or []
         self.relations = relations or []
         self.plays = plays or []
+
+    def _get_keyattr(self):
+        keyattr = ''
+        if self.label in default_schema:
+            keyattr = default_schema[self.label]
+        return keyattr
 
     def _sort_attributes(self, attributes: List = [],):
         res_tups = []
@@ -810,7 +899,11 @@ class Relation(Thing):
                 self.has.append(self._ledid)
 
         self.entities = entities or {}
-        self.keyattr = keyattr
+        # self.keyattr = keyattr
+        if keyattr:
+            self.keyattr = keyattr
+        else:
+            self.keyattr = self._get_keyattr()
         self.owns = owns or []
         self.relations = relations or []
         self.roles = roles or []
@@ -818,6 +911,17 @@ class Relation(Thing):
         for k, v in self.players.items():
             if not isinstance(v, list):
                 self.players[k]=[v]
+
+    def _get_keyattr(self):
+        for _, things in default_schema.items():
+            keyattr = ''
+            for thing in things:
+                if thing.label == self.label:
+                    keyattr = thing.keyattr
+                    break
+                if keyattr:
+                    break
+        return keyattr
 
     def _sort_attributes(self, attributes: List = [],):
         res_tups = []

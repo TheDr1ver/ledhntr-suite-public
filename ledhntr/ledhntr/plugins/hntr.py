@@ -16,7 +16,7 @@ from time import time, sleep
 from ledhntr.data_classes import Attribute, Entity, Relation, Thing
 from ledhntr.plugins import BasePlugin
 from ledhntr.plugins.connector import ConnectorPlugin
-from ledhntr.helpers import LEDConfigParser, format_date, flatten_dict
+from ledhntr.helpers import LEDConfigParser, format_date, flatten_dict, parse_schema_file
 
 
 from typing import (
@@ -713,10 +713,6 @@ class HNTRPlugin(BasePlugin, ABC):
             containing the enrichment map.
         """
         _log = self.logger
-        if not dbc:
-            _log.error(f"Database connector required to generate enrichment map!")
-            return {}
-
         '''
         self.enrich_map = {
             'ip': {
@@ -743,7 +739,10 @@ class HNTRPlugin(BasePlugin, ABC):
             },
         }
         '''
-        schema_things = dbc.parse_schema_file(schema=schema)
+        if not dbc:
+            schema_things = parse_schema_file(schema=schema)
+        else:
+            schema_things = dbc.parse_schema_file(schema=schema)
         self.enrich_map = {}
 
         if not hasattr(self, 'api_confs'):

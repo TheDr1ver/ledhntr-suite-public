@@ -66,6 +66,10 @@ Example plugins to install:
 ledhntr install --github ledhntr:json_collector
 ledhntr install --github ledhntr:shodan
 ledhntr install --github ledhntr:censys
+# To upgrade plugins you MUST include the --upgrade flag
+# You may also install local plugins by omitting the --github flag and 
+#     specifying the local directory
+#     e.g. ledhntr install /home/leduser/ledhntr-suite-public/ledhntr-plugins/sample-plugin/
 ```
 
 ## Configure LEDHNTR
@@ -141,4 +145,12 @@ TODO
 from ledhntr import LEDHNTR
 led = LEDHNTR()
 shodan = led.load_plugin('shodan')
+api_conf = shodan.api_confs.get('hosts_search')
+q = 'asn:AS44477 os:Unix product:vsftpd'
+api_conf.params['query'] = q
+res = shodan.search(api_conf=api_conf)
+# res is a dictionary containing parsed Thing objects and raw API response
+res['raw']['total'] # total shodan hits
+from pprint import pprint
+pprint(res['things'][0].to_dict()) # pretty-prints first parsed Thing object
 ```

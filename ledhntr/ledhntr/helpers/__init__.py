@@ -1,10 +1,13 @@
+import copy
 import dateutil.parser
 import logging, logging.handlers
 import json
+import re
 
 from configparser import ConfigParser
 from datetime import datetime, timezone
 from itertools import chain, starmap
+from pkg_resources import resource_stream
 from pprint import pformat
 from typing import Any, Optional, Dict, DefaultDict, Union, List
 
@@ -469,3 +472,155 @@ def get_hunt_name(hunt: Relation=None):
             hunt_name = attr.value
     return hunt_name
 
+def parse_schema_file(
+    schema: Optional[str] = "",
+):
+    """Manually parses schema files
+
+    Manually parses schema.tql files so things like keyattrs can be read
+    without needing a specific database to read the results from.
+
+    :param schema: string location of targeted schema.tql file.
+    :returns: dict of 'attributes', 'entities', and 'relations'
+    """
+    # . _log = self.logger
+    if not schema:
+        schema = resource_stream('ledhntr', 'schemas/schema.tql').name
+
+    thing_objs = {
+        'attribute': [],
+        'entity': [],
+        'relation': [],
+    }
+
+    thing_types = {
+        'attribute': ['attribute'],
+        'entity': ['entity'],
+        'relation': ['relation'],
+    }
+
+    with open(schema, 'r') as s:
+        data = s.read()
+
+    pattern = r"(?s)([a-z0-9\-]+\s+sub.*?);"
+    things = re.findall(pattern, data)
+    type_parsing = copy.deepcopy(things)
+
+    role_pattern = r"(?s)relates\s+([a-z0-9\-]+)\s*(,|$)"
+    attr_pattern = r"(?s)owns\s+([a-z0-9\-]+)\s*(@|,|$)"
+    keyattr_pattern = r"(?s)owns\s+([a-z0-9\-]+)\s*@key"
+
+    re_role = re.compile(role_pattern)
+    re_attr = re.compile(attr_pattern)
+    re_keyattr = re.compile(keyattr_pattern)
+
+    counter = 1
+    # . _log.debug(f"Attempting to parse schema {schema}...")
+    while type_parsing and counter < 5:
+        # . _log.debug(f"\nStarting loop # {counter}")
+        # . _log.debug(f"unparsed types left: {len(type_parsing)}")
+        safe_thing_types = copy.deepcopy(thing_types)
+        for key, types in safe_thing_types.items():
+            for t in types:
+                label_pattern = rf"(?s)([a-z0-9\-]+)\s+sub\s+({t})"
+                re_label = re.compile(label_pattern)
+                safe_type_parsing = copy.deepcopy(type_parsing)
+                for thing in safe_type_parsing:
+                    res = re_label.search(thing)
+                    # match = [<full_string>, <new_label>, <existing_label>]
+                    if res:
+                        # Get Label
+                        label = res[1]
+                        parent_label = res[2]
+                        if label not in thing_types[key]:
+                            thing_types[key].append(label)
+
+                        # Get Roles
+                        found_roles = re_role.findall(thing)
+                        roles = []
+                        for fr in found_roles:
+                            if fr[0] not in roles:
+                                roles.append(fr[0])
+
+                        # Get Attributes
+                        found_attributes = re_attr.findall(thing)
+                        attributes = []
+                        for fa in found_attributes:
+                            if fa[0] not in attributes:
+                                attributes.append(fa[0])
+
+                        # Get KeyAttr
+                        found_keyattr = re_keyattr.search(thing)
+                        keyattr = None
+                        if found_keyattr:
+                            keyattr = found_keyattr[1]
+
+                        # Get Plays - TODO
+                        '''
+                        Maybe I'll care about this at some point, but right now I honestly
+                        just started this whole parsing thing in order to get the keyattrs
+                        without having to connect to a DB.
+
+                        In order to parse plays correctly there would have to be a lot
+                        of cycling through thing_objects in order to match and object
+                        type with its players, and that's not something I feel like
+                        wasting time on at the moment.
+                        '''
+
+                        # Convert to Thing object
+                        th = None
+                        if parent_label == 'attribute':
+                            th = Attribute(label=label)
+                        elif parent_label == 'entity':
+                            th = Entity(label=label)
+                        elif parent_label == 'relation':
+                            th = Relation(label=label)
+                        else:
+                            for _, tos in thing_objs.items():
+                                for to in tos:
+                                    if to.label==parent_label:
+                                        th = copy.deepcopy(to)
+                                        del th.ledid
+                            th._label=label
+                        if th is None:
+                            # . _log.debug(
+                            # .     f"No viable parent label ({parent_label}) found for "
+                            # .     f"new thing label {label}. Skipping!"
+                            # . )
+                            continue
+
+                        for attribute in attributes:
+                            attr = Attribute(label=attribute)
+                            if attr not in th.has:
+                                th.has.append(attr)
+
+                        if keyattr:
+                            th.keyattr = keyattr
+
+                        for role in roles:
+                            if role not in th.players:
+                                th.players[role] = []
+
+                        # purge ledid
+                        if isinstance(thing, (Entity, Relation)):
+                            del th.ledid
+
+                        if th not in thing_objs[key]:
+                            thing_objs[key].append(th)
+
+                        # Mark this thing as already parsed
+                        # ! if thing not in type_parsing:
+                            # ! _log.error(f"Thing not in type_parsing:")
+                            # ! _log.error(pformat(thing))
+
+                        type_parsing.remove(thing)
+        # . _log.debug(f"unparsed types left: {len(type_parsing)}")
+        counter += 1
+        if counter > 10:
+            # ! _log.error(
+            # !     f"It should not take more than 10 iterations to processes a schema."
+            # !     f" Check your schema layout and try that again..."
+            # ! )
+            break
+
+    return thing_objs
