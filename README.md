@@ -23,10 +23,10 @@ Use at your own risk. You have been warned.
 
 ## INSTALL
 
-See [INSTALL-Docker](https://github.com/TheDr1ver/ledhntr-suite-public/docs/INSTALL-Docker.md) to
+See [INSTALL-Docker](https://github.com/TheDr1ver/ledhntr-suite-public/blob/main/docs/INSTALL-Docker.md) to
 get up and running quickly with Docker.
 
-See [INSTALL-Local](https://github.com/TheDr1ver/ledhntr-suite-public/docs/INSTALL-Local.md) to
+See [INSTALL-Local](https://github.com/TheDr1ver/ledhntr-suite-public/blob/main/docs/INSTALL-Local.md) to
 install LEDHNTR and your desired plugins on your local machine. This makes it easier
 to develop notebooks that can easily interact with the LEDHNTR-Docker instance, OR
 may be desirable if you're running something lean that doesn't require a TypeDB database.
