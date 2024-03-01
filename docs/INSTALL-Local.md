@@ -232,7 +232,7 @@ for hunt in yaml.hunts:
     if not hasattr(plugin, 'enrich_map') or not plugin.enrich_map:
         plugin._gen_enrich_map()
     # Set the output location based on the YAML's output field
-    files.set_path(path=f"{hunt['output']}/{hunt['plugin']}/")
+    files.set_path(path=f"{hunt['output']}/", db_name=hunt['id'])
     # Load the plugin configs for the endpoint we're about to hit
     api_conf = copy.deepcopy(plugin.api_confs.get(hunt['endpoint']))
     api_conf.paginate=True

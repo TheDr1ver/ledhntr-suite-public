@@ -1017,7 +1017,7 @@ class Shodan(HNTRPlugin):
         total_results = search_res['raw']['total']
         f_val = total_results/self.results_per_page
         pages_needed = int(f_val) + (1 if f_val - int(f_val) > 0 else 0)
-        current_page = api_conf.params.get('page')
+        current_page = api_conf.page_count
         if current_page >= pages_needed:
             return search_res
 
