@@ -231,24 +231,33 @@ for hunt in yaml.hunts:
         failed_load = True
     if failed_load:
         continue
-    # Build enrichment map
+    # Build enrichment map # TODO - Roll this into the plugins automatically
     if not hasattr(plugin, 'enrich_map') or not plugin.enrich_map:
         plugin._gen_enrich_map()
     # Set the output location based on the YAML's output field
     files.set_path(path=f"{hunt['output']}/", db_name=hunt['id'])
     # Load the plugin configs for the endpoint we're about to hit
     api_conf = copy.deepcopy(plugin.api_confs.get(hunt['endpoint']))
+    # Tell it we want ALL the results (default is max of 10 pages)
     api_conf.paginate=True
-    # Set hunt parameters
+    # Set hunt parameters based on YAML data
     for k, v in hunt[hunt['endpoint']].items():
         api_conf.params[k]=v
     all_things = []
+    # Run the search
     res = plugin.search(api_conf=api_conf)
+    # Collect all the things!
     for thing in res['things']:
         if thing not in all_things:
             all_things.append(thing)
+    # If the plugin doesn't have proper chunking enabled, just write the whole blob to disk
     if not hasattr(plugin, 'chunk_results'):
-        files.write_raw_json(res['raw_pages'], filename=f"{hunt['id']}-no_chunks-", append_date=True))
+        files.write_raw_json(
+            res['raw_pages'],
+            filename=f"{hunt['id']}-no_chunks-",
+            append_date=True
+        )
+    # Otherwise number the chunks and write them one at a time
     else:
         chunks = plugin.chunk_results(res['raw_pages'], api_conf=api_conf)
         chunk_no = 1
