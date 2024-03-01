@@ -1209,7 +1209,7 @@ class Censys(HNTRPlugin):
         if not isinstance(raw, list):
             raw = [raw]
 
-        if api_conf.endpoint=='hosts_search':
+        if api_conf.endpoint=='search':
             counter = 1
             for r in raw:
                 chunk = {

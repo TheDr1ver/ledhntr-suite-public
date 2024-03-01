@@ -245,9 +245,13 @@ for hunt in yaml.hunts:
         if thing not in all_things:
             all_things.append(thing)
     if not hasattr(plugin, 'chunk_results'):
-        files.write_raw_json(res['raw_pages'], filename=f"{hunt['id']}-{counter}-", append_date=True))
+        files.write_raw_json(res['raw_pages'], filename=f"{hunt['id']}-no_chunks-", append_date=True))
     else:
-        chunks = plugin.chunk_results(res['raw_pages'])
+        chunks = plugin.chunk_results(res['raw_pages'], api_conf=api_conf)
+        chunk_no = 1
+        for chunk in chunks:
+            files.write_raw_json(chunk, filename=f"{hunt['id']}-{chunk_no}_of_{len(chunks)}-", append_date=True)
+            chunk_no+=1
 
     # Get each IP's individual details
     for thing in all_things:
@@ -264,5 +268,5 @@ for hunt in yaml.hunts:
             )
 
     # Update the last run time
-    yaml.update_lastrun()
+    yaml.update_lastrun(hunts=[hunt])
 ```
