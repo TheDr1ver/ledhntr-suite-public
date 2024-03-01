@@ -223,10 +223,13 @@ yaml.set_path('/opt/test/hunts') # Location of *.yaml files to load
 yaml.load_hunts()
 yaml.check_threshold() # Checks threshold timestamps to remove recently-run hunts
 for hunt in yaml.hunts:
+    failed_load = False
     try:
         plugin = led.load_plugin(hunt['plugin'])
     except Exception as e:
         led.logger.error(f"Could not load {hunt['plugin']} - {e}")
+        failed_load = True
+    if failed_load:
         continue
     # Build enrichment map
     if not hasattr(plugin, 'enrich_map') or not plugin.enrich_map:
