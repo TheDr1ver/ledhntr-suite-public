@@ -1,0 +1,18 @@
+id: stark_vsfptd
+enabled: true
+# Frequency is how often this should fire in hours
+frequency: 168
+description: Find vsFTPd servers on Starknet
+actor: unk
+# plugin should be the name of the plugin
+plugin: censys
+# endpoint should be the APIConf endpoint that gets loaded
+endpoint: search
+confidence: high
+# This will be the parent output folder for all saved results
+output: /opt/ledhntr/results/
+author: driver
+
+# These values should be a hierarchy of APIConf endpoint -> Param key/vals
+search:
+        q: '(autonomous_system.asn="44477") and services.software.product=`vsFTPd`'

@@ -97,6 +97,18 @@ class Shodan(HNTRPlugin):
             fallback = '3',
         ))
 
+        self.results_per_page = int(config.get(
+            'options',
+            'results_per_page',
+            fallback = '100',
+        ))
+
+        self.max_pages = int(config.get(
+            'options',
+            'max_pages',
+            fallback = '10',
+        ))
+
         self._load_api_configs()
 
     def _load_api_configs(
@@ -126,6 +138,8 @@ class Shodan(HNTRPlugin):
                 "page": None,
                 "minify": False,
             },
+            paginate = False,
+            paginator = self.main_paginator,
             parser = self.parse_hosts_search,
             add_to_db = self.add_hunt, # This can probably be revisited
             simple_query_types = [],
@@ -276,8 +290,8 @@ class Shodan(HNTRPlugin):
     ### Data Parsing Functions
     #################################################
     def parse_hosts_search(
-        self, 
-        raw: Dict = {}, 
+        self,
+        raw: Dict = {},
         api_conf: Optional[APIConfig] = None,
         check_dates: Optional[List]=[],
     ):
@@ -964,6 +978,108 @@ class Shodan(HNTRPlugin):
             dedup_things.append(merged_thing)
 
         return dedup_things
+
+    #################################################
+    ### Pagination Functions
+    #################################################
+
+    def main_paginator(
+        self,
+        search_res: dict = {},
+        api_conf: APIConfig = None,
+    ):
+        """Handles pagination in the event that's something we want
+
+        Basically, if the 'page' parameter is set, we're going to assume
+        we want to paginate through everything until we hit the self.max_pages
+        limit.
+
+        :param search_res: a dictionary containing raw results + parsed things
+            from previous pages. This will get fed by HNTRPlugin.search()
+        :param api_conf: APIConfig file of the endpoint we're hitting. This
+            will be used to keep track of how many pages we've hit.
+        :returns: updated search_res dictionary
+        """
+        _log = self.logger
+        # * Add the last result to our 'raw_pages' collection
+        search_res['raw_pages'].append(search_res['raw'])
+        # * if the page parameter isn't set (or set to zero) we're not going to
+        # * paginate the results, just return the first set like normal.
+        if not api_conf.paginate:
+            return search_res
+
+        # * If we've gone past our max_pages count, stop collecting
+        # _log.info(f"CURRENT PAGE_COUNT: {api_conf.page_count}")
+        if api_conf.page_count >= self.max_pages:
+            return search_res
+
+        # * Calculate how many pages we need to get all the results
+        total_results = search_res['raw']['total']
+        f_val = total_results/self.results_per_page
+        pages_needed = int(f_val) + (1 if f_val - int(f_val) > 0 else 0)
+        current_page = api_conf.params.get('page')
+        if current_page >= pages_needed:
+            return search_res
+
+        # @ If you've made it this far, we still have pages to request.
+        # @ Advance the counters and let 'er rip.
+        next_page = int(current_page)+1
+        api_conf.params['page']=next_page
+        api_conf.page_count += 1
+        # _log.info(f"NEW PAGE COUNT: {api_conf.page_count}")
+
+        if pages_needed <= self.max_pages:
+            x = f"{pages_needed} pages TOTAL."
+        else:
+            x = f"{self.max_pages} pages allowed by the max_pages config."
+
+        safe_copy = copy.deepcopy(search_res)
+        _log.info(f"Searching page {next_page} of {x}")
+        search_res = self.search(api_conf, search_res=search_res)
+        return search_res
+
+    #################################################
+    ### Make Splunking Happy
+    #################################################
+
+    def chunk_results(
+        self,
+        raw: dict = {},
+        api_conf: Optional[APIConfig] = None,
+    ):
+        """ Given raw results, break them up in happy little chunks
+
+        :param raw: Raw JSON output in dict format returned from endpoint
+        :param api_conf: APIConfig for determining how to handle processing
+        :returns: List of bite-sized dictionaries
+        """
+        _log = self.logger
+        chunks = []
+        if not isinstance(raw, list):
+            raw = [raw]
+
+        if api_conf.endpoint=='hosts_search':
+            counter = 1
+            for r in raw:
+                chunk = {
+                    'total': r['total'],
+                    'result': 0,
+                    'plugin': 'shodan',
+                    'endpoint': api_conf.endpoint,
+                    'query': api_conf.params.get(api_conf.param_query_key),
+                    'chunking_time': int(time()),
+                    'hit': None,
+                }
+                for match in r['matches']:
+                    new_chunk = copy.deepcopy(chunk)
+                    new_chunk['result'] = counter
+                    new_chunk['chunking_time'] = int(time())
+                    new_chunk['hit'] = match
+                    chunks.append(new_chunk)
+                    counter += 1
+
+        return chunks
+
 
     #### TODO
 

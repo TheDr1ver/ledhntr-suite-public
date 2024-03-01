@@ -45,6 +45,9 @@ class APIConfig():
         hunt_active: Optional[bool] = True,
         hunt_name: Optional[str] = "",
         hok_logic: Optional[Any] = None,
+        paginate: Optional[bool] = False,
+        paginator: Optional[Any] = None,
+        page_count: Optional[int] = 1,
     ) -> None:
         """ Configuration object that holds the details of each endpoint
 
@@ -109,6 +112,8 @@ class APIConfig():
 
             If the set of logical factors are triggered again, the same
             process will repeat.
+        :param paginate: Boolean value to trigger pagination as needed
+        :param paginator: Function for handling pagination of the endpoint
 
         TODO - Add API endpoint description and a function to HNTRPlugin()
             that lists all loaded APIConfigs, their function, and their
@@ -128,6 +133,9 @@ class APIConfig():
         self.hunt_active = hunt_active
         self.hunt_name = hunt_name
         self.hok_logic = hok_logic
+        self.paginate = paginate
+        self.paginator = paginator
+        self.page_count = page_count
 
     def get_query(
         self,
@@ -1804,6 +1812,7 @@ class HNTRPlugin(BasePlugin, ABC):
         cached_data: Optional[str] = "",
         hunt: Optional[Relation] = None,
         simple: Optional[dict] = {},
+        search_res: Optional[dict] = {},
     ):
         """Search API endpoints
         Given a fully-modified APIConfig object, run an API search with
@@ -1823,7 +1832,9 @@ class HNTRPlugin(BasePlugin, ABC):
             }
             api_conf will be configured with this data  before the search is run.
             key is optional, and if not provided self.param_query_key will be used.
-
+        :param search_res: Optional dictionary holding pre-existing search results
+            in the event we want to run multiple searches for pagination.
+        
         :returns: search_res Dictionary. Example:
             search_res = {
                 'things': things,
@@ -1837,10 +1848,12 @@ class HNTRPlugin(BasePlugin, ABC):
         new_api_conf = copy.deepcopy(api_conf)
         api_conf = new_api_conf
 
-        search_res = {
-            'things': [],
-            'raw': {},
-        }
+        if not search_res:
+            search_res = {
+                'things': [],
+                'raw': {},
+                'raw_pages': [],
+            }
 
         pqk = None
 
@@ -2044,9 +2057,21 @@ class HNTRPlugin(BasePlugin, ABC):
             _log.error(f"Error setting confidence for all things: {e}")
             things = []
 
-        search_res = {
-            'things': things,
-            'raw': data,
-        }
+        for thing in things:
+            if thing not in search_res['things']:
+                search_res['things'].append(thing)
+
+        search_res['raw'] = data
+        
+        if api_conf.paginator:
+            try:
+                search_res = api_conf.paginator(
+                    search_res = search_res,
+                    api_conf = api_conf,
+                )
+            except Exception as e:
+                _log.error(
+                    f"Results truncated. Error paginating through search: {e}"
+                )
 
         return search_res

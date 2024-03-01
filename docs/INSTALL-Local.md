@@ -67,7 +67,7 @@ ledhntr install --github ledhntr:json_collector
 ledhntr install --github ledhntr:shodan
 ledhntr install --github ledhntr:censys
 # To upgrade plugins you MUST include the --upgrade flag
-# You may also install local plugins by omitting the --github flag and 
+# You may also install local plugins by omitting the --github flag and
 #     specifying the local directory
 #     e.g. ledhntr install /home/leduser/ledhntr-suite-public/ledhntr-plugins/sample-plugin/
 ```
@@ -100,7 +100,7 @@ parallelisation=4
 ## Default name of the typedb database to interact with
 db_name = test_db
 
-## NOTE: in the top dir this is set to typedb:1729 for Docker purposes. 
+## NOTE: in the top dir this is set to typedb:1729 for Docker purposes.
 ## If installing locally you'll probably want this set to localhost.
 ## Otherwise, if you have an external TypeDB server that you know is listening
 ## set this value to that IP/port combination.
@@ -207,4 +207,62 @@ for thing in all_things:
         api_conf2.params['q']=thing.keyval
         detail_res = censys.search(api_conf2)
         fc.write_raw_json(detail_res['raw'], filename=f"{thing.keyval}-", append_date=True)
+```
+
+### Read a dir full of rules and run ones that have reached the appropriate threshold
+
+```python
+import copy
+from ledhntr import LEDHNTR
+led = LEDHNTR()
+# Load storage plugin
+files = led.load_plugin('localfile_client')
+# Load YAML plugin
+yaml = led.load_plugin('yaml_client')
+yaml.set_path('/opt/test/hunts') # Location of *.yaml files to load
+yaml.load_hunts()
+yaml.check_threshold() # Checks threshold timestamps to remove recently-run hunts
+for hunt in yaml.hunts:
+    try:
+        plugin = led.load_plugin(hunt['plugin'])
+    except Exception as e:
+        led.logger.error(f"Could not load {hunt['plugin']} - {e}")
+        continue
+    # Build enrichment map
+    if not hasattr(plugin, 'enrich_map') or not plugin.enrich_map:
+        plugin._gen_enrich_map()
+    # Set the output location based on the YAML's output field
+    files.set_path(path=f"{hunt['output']}/{hunt['plugin']}/")
+    # Load the plugin configs for the endpoint we're about to hit
+    api_conf = copy.deepcopy(plugin.api_confs.get(hunt['endpoint']))
+    api_conf.paginate=True
+    # Set hunt parameters
+    for k, v in hunt[hunt['endpoint']].items():
+        api_conf.params[k]=v
+    all_things = []
+    res = plugin.search(api_conf=api_conf)
+    for thing in res['things']:
+        if thing not in all_things:
+            all_things.append(thing)
+    if not hasattr(plugin, 'chunk_results'):
+        files.write_raw_json(res['raw_pages'], filename=f"{hunt['id']}-{counter}-", append_date=True))
+    else:
+        chunks = plugin.chunk_results(res['raw_pages'])
+
+    # Get each IP's individual details
+    for thing in all_things:
+        if thing.label == 'ip' and thing.keyval:
+            api_conf2 = copy.deepcopy(
+                plugin.api_confs.get(plugin.enrich_map['ip']['endpoints'][0])
+            )
+            api_conf2.params[api_conf2.param_query_key]=thing.keyval
+            detail_res = plugin.search(api_conf2)
+            files.write_raw_json(
+                detail_res['raw'],
+                filename=f"{hunt['id']}-{thing.keyval}-",
+                append_date=True
+            )
+
+    # Update the last run time
+    yaml.update_lastrun()
 ```
