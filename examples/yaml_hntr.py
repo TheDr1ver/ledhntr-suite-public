@@ -50,6 +50,8 @@ def run(args):
         yaml.hunts = one_hunt
         if not yaml.hunts:
             _log.error(f"No hunt found with ID {args.id}")
+        else:
+            _log.info(f"Running {len(yaml.hunts)} specific hunt(s): {args.id}")
     if not args.force:
         yaml.check_threshold()
     for hunt in yaml.hunts:
