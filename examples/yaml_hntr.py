@@ -8,9 +8,6 @@ from ledhntr import LEDHNTR
 def git_pull(args, led):
     # If git flag is set, cd to args.dir and run `git pull`
     _log = led.logger
-    # change directory
-    abs_path = os.path.abspath(args.dir)
-    os.chdir(abs_path)
     # git pull
     try:
         gitres = subprocess.run(
@@ -34,6 +31,7 @@ def run(args, led):
     yaml = led.load_plugin('yaml_client')
     # Get full path
     abs_path = os.path.abspath(args.dir)
+    os.chdir(abs_path)
 
     # If git flag set, run git pull on the YAML hunt dir
     if args.git:
