@@ -107,6 +107,9 @@ def run(args):
 
         # Update threshold to prevent additional runs prior to timer resetting
         yaml.update_lastrun(hunts=[hunt])
+        _log.info(f"Hunt {hunt['id']} complete!")
+
+    _log.info(f"All hunts complete! Going to sleep...")
 
 def main():
     parser = argparse.ArgumentParser(
