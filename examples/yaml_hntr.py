@@ -33,11 +33,12 @@ def run(args):
     files = led.load_plugin('localfile_client')
     # Load YAML plugin
     yaml = led.load_plugin('yaml_client')
+    # Get full path
+    abs_path = os.path.abspath(args.dir)
 
     # If git flag set, run git pull on the YAML hunt dir
     if args.git:
         git_pull(args, led)
-    abs_path = os.path.abspath(args.dir)
     yaml.set_path(abs_path)
     yaml.load_hunts()
     if args.id:
@@ -48,7 +49,7 @@ def run(args):
                 break
         yaml.hunts = one_hunt
         if not yaml.hunts:
-            _log.error(f"No hunt found with ID {hunt['id']}")
+            _log.error(f"No hunt found with ID {args.id}")
     if not args.force:
         yaml.check_threshold()
     for hunt in yaml.hunts:
