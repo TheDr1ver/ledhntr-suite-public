@@ -1,0 +1,23 @@
+# YAMLHNTR Service - Keeps yaml_hntr.py running after reboots
+# cp yaml_hntr.service /etc/systemd/system/
+# systemctl daemon-reload
+# systemctl enable --now yamlhntr
+# systemctl start yamlhntr
+# systemctl status yamlhntr
+
+[Unit]
+Description=YAMLHNTR
+After=yamlhntr.service
+
+[Service]
+Type=simple
+User=leduser
+Group=leduser
+WorkingDirectory=/opt/yaml_hntr/
+Environment=PATH=/home/leduser/.ledhntr/.venv/bin
+ExecStart=/home/leduser/.ledhntr/.venv/bin/python /opt/yaml_hntr/yaml_hntr.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
