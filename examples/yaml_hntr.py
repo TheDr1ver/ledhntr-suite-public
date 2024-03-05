@@ -21,7 +21,7 @@ def git_pull(args, led):
         _log.error(f"Error updating repository: {e}")
     _log.info(f"git pull result from {args.dir}: {gitres.stdout}")
     if gitres.stderr:
-        _log.error(f"Error running git pull from {args.d}: {gitres.stderr}")
+        _log.error(f"Error running git pull from {args.dir}: {gitres.stderr}")
 
 def run(args, led):
     _log = led.logger

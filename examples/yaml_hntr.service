@@ -1,9 +1,9 @@
 # YAMLHNTR Service - Keeps yaml_hntr.py running after reboots
 # cp yaml_hntr.service /etc/systemd/system/
 # systemctl daemon-reload
-# systemctl enable --now yamlhntr
-# systemctl start yamlhntr
-# systemctl status yamlhntr
+# systemctl enable --now yaml_hntr
+# systemctl start yaml_hntr
+# systemctl status yaml_hntr
 
 [Unit]
 Description=YAMLHNTR
