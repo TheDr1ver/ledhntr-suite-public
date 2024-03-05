@@ -9,7 +9,7 @@ def git_pull(args, led):
     # If git flag is set, cd to args.dir and run `git pull`
     _log = led.logger
     # change directory
-    abs_path = os.path.abspath(args.d)
+    abs_path = os.path.abspath(args.dir)
     os.chdir(abs_path)
     # git pull
     try:
@@ -22,7 +22,7 @@ def git_pull(args, led):
         )
     except subprocess.CalledProcessError as e:
         _log.error(f"Error updating repository: {e}")
-    _log.info(f"git pull result from {args.d}: {gitres.stdout}")
+    _log.info(f"git pull result from {args.dir}: {gitres.stdout}")
     if gitres.stderr:
         _log.error(f"Error running git pull from {args.d}: {gitres.stderr}")
 
@@ -35,12 +35,22 @@ def run(args):
     yaml = led.load_plugin('yaml_client')
 
     # If git flag set, run git pull on the YAML hunt dir
-    if args.g:
+    if args.git:
         git_pull(args, led)
-    abs_path = os.path.abspath(args.d)
+    abs_path = os.path.abspath(args.dir)
     yaml.set_path(abs_path)
     yaml.load_hunts()
-    yaml.check_threshold()
+    if args.id:
+        one_hunt = []
+        for hunt in yaml.hunts:
+            if hunt['id']==args.id:
+                one_hunt.append(hunt)
+                break
+        yaml.hunts = one_hunt
+        if not yaml.hunts:
+            _log.error(f"No hunt found with ID {hunt['id']}")
+    if not args.force:
+        yaml.check_threshold()
     for hunt in yaml.hunts:
         failed = False
         try:
@@ -111,9 +121,19 @@ def main():
     parser.add_argument(
         '-g',
         '--git',
-        type=bool,
-        default=False,
+        action="store_true",
         help="If set, runs git pull from the hunt directory before running hunts"
+    )
+    parser.add_argument(
+        '-f',
+        '--force',
+        action='store_true',
+        help="If set, ignores lastrun times for all hunts"
+    )
+    parser.add_argument(
+        '--id',
+        type=str,
+        help="If specified, runs a single hunt based on hunt ID value."
     )
 
     args = parser.parse_args()
