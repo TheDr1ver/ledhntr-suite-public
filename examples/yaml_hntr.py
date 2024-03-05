@@ -36,8 +36,12 @@ def run(args, led):
     # If git flag set, run git pull on the YAML hunt dir
     if args.git:
         git_pull(args, led)
+
+    # Set path to load YAML rules from
     yaml.set_path(abs_path)
+    # Load all hunts from that path
     yaml.load_hunts()
+    # If we specify the --id arg, only run hunts for that hunt ID
     if args.id:
         one_hunt = []
         for hunt in yaml.hunts:
@@ -49,15 +53,23 @@ def run(args, led):
             _log.error(f"No hunt found with ID {args.id}")
         else:
             _log.info(f"Running {len(yaml.hunts)} specific hunt(s): {args.id}")
+
+    # If args.force is set, we can ignore the timer/frequency thresholds
     if not args.force:
         yaml.check_threshold()
+
+    # Loop through all the hunts we loaded
     for hunt in yaml.hunts:
         failed = False
+        # Attempt to load the associated LEDHNTR plugin
         try:
             plugin=led.load_plugin(hunt['plugin'])
         except Exception as e:
-            _log.error(f"Could not load {hunt['plugin']} for {hunt['id']} - {e}")
+            _log.error(
+                f"Could not load {hunt['plugin']} for {hunt['id']} - {e}"
+            )
             failed = True
+        # If it didn't load, skip to the next YAML hunt file
         if failed:
             continue
         # Build enrichment map
@@ -74,26 +86,38 @@ def run(args, led):
         all_things = []
         # @ Run the search
         res = plugin.search(api_conf=api_conf)
-
+        # collect all the unique things parsed from the results
         for thing in res['things']:
             if thing not in all_things:
                 all_things.append(thing)
 
         # Make Splunk-friendly chunks from the batch-results
+        # If the plugin doesn't support chunking, just dump the
+        #   raw results instead
         if not hasattr(plugin, 'chunk_results'):
-            files.write_raw_json(res['raw_pages'], filename=f"{hunt['id']}-no_chunks-", append_date=True)
+            files.write_raw_json(
+                res['raw_pages'],
+                filename=f"{hunt['id']}-no_chunks-",
+                append_date=True
+            )
         else:
             chunks = plugin.chunk_results(res['raw_pages'], api_conf=api_conf)
             chunk_no = 1
             for chunk in chunks:
-                files.write_raw_json(chunk, filename=f"{hunt['id']}-{chunk_no}_of_{len(chunks)}-", append_date=True)
+                files.write_raw_json(
+                    chunk,
+                    filename=f"{hunt['id']}-{chunk_no}_of_{len(chunks)}-",
+                    append_date=True
+                )
                 chunk_no+=1
 
-        # Query and write each resulting IP
+        # Query and write each resulting IP's details
         for thing in all_things:
             if thing.label == 'ip' and thing.keyval:
                 api_conf2 = copy.deepcopy(
-                    plugin.api_confs.get(plugin.enrich_map['ip']['endpoints'][0])
+                    plugin.api_confs.get(
+                        plugin.enrich_map['ip']['endpoints'][0]
+                    )
                 )
                 api_conf2.params[api_conf2.param_query_key]=thing.keyval
                 # @ Run the search
@@ -125,7 +149,7 @@ def main():
         '-g',
         '--git',
         action="store_true",
-        help="If set, runs git pull from the hunt directory before running hunts"
+        help="If set, runs git pull from the hunt dir before running hunts"
     )
     parser.add_argument(
         '-f',
