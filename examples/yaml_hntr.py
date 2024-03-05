@@ -26,8 +26,7 @@ def git_pull(args, led):
     if gitres.stderr:
         _log.error(f"Error running git pull from {args.d}: {gitres.stderr}")
 
-def run(args):
-    led = LEDHNTR()
+def run(args, led):
     _log = led.logger
     # Load storage plugin
     files = led.load_plugin('localfile_client')
@@ -143,10 +142,15 @@ def main():
     )
 
     args = parser.parse_args()
-    # Re-run every 10 minutes
-    while True:
+    # Re-run every 10 minutes as long as force isn't set
+    led = LEDHNTR()
+    if not args.force:
+        while True:
+            run(args, led)
+            time.sleep(600)
+    else:
+        led.logger.info(f"--force flag set, so only running once!")
         run(args)
-        time.sleep(600)
 
 if __name__ == "__main__":
     main()
