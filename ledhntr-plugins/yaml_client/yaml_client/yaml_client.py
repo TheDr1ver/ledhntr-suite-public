@@ -161,7 +161,7 @@ class YAMLClient(ConnectorPlugin):
             # delta = now-int(readtime)
             # thresh = now-(hunt['frequency'] * 60 * 60) # @ hrs * min * sec
             thresh = int(readtime)+(hunt['frequency'] * 60 * 60) # @ hrs * min * sec
-            if now > thresh:
+            if now < thresh:
                 _log.debug(
                     f"Threshold NOT met for {hunt['id']}."
                     f" Next run after {format_date(thresh)}"
