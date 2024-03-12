@@ -33,7 +33,8 @@ def run(args, led):
     yaml = led.load_plugin('yaml_client', duplicate=True)
     # Get full path
     abs_path = os.path.abspath(args.dir)
-    os.chdir(abs_path)
+    if os.path.isdir(abs_path):
+        os.chdir(abs_path)
 
     # If git flag set, run git pull on the YAML hunt dir
     if args.git:
