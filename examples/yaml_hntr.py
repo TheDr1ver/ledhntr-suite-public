@@ -133,7 +133,7 @@ def run(args, led):
                 api_conf2.params[api_conf2.param_query_key]=thing.keyval
                 # @ Run the search
                 detail_res = plugin.search(api_conf2)
-                if detail_res['raw'].get('total'):
+                if detail_res['raw'] and detail_res['raw'].get('total'):
                     files.write_raw_json(
                         detail_res['raw'],
                         filename=f"{hunt['id']}-{thing.keyval}-",
