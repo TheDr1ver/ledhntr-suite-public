@@ -152,7 +152,7 @@ class LocalFileClient(ConnectorPlugin):
 
         full_path = os.path.join(full_dir, filename)
         if unsafe:
-            os.makedirs(full_dir, exist_ok=True, mode=0777)
+            os.makedirs(full_dir, exist_ok=True, mode=0o777)
         else:
             os.makedirs(full_dir, exist_ok=True)
 
@@ -164,7 +164,7 @@ class LocalFileClient(ConnectorPlugin):
                 _log.error(f"Error writing JSON blob: {e}")
                 return data
         if unsafe:
-            os.chmod(write_path, 0777)
+            os.chmod(write_path, 0o777)
 
         if return_things:
             json_data = self.load_json(write_path)
@@ -273,7 +273,7 @@ class LocalFileClient(ConnectorPlugin):
         if not filename.endswith(".json"):
             filename += ".json"
         if unsafe:
-            os.makedirs(path, exist_ok=True, mode=0777)
+            os.makedirs(path, exist_ok=True, mode=0o777)
         else:
             os.makedirs(path, exist_ok=True)
         if isinstance(path, str):
@@ -295,7 +295,7 @@ class LocalFileClient(ConnectorPlugin):
             return False
 
         if unsafe:
-            os.chmod(write_path, 0777)
+            os.chmod(write_path, 0o777)
 
         return True
 
