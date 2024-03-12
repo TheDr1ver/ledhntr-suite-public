@@ -132,7 +132,11 @@ def run(args, led):
                 )
                 api_conf2.params[api_conf2.param_query_key]=thing.keyval
                 # @ Run the search
-                detail_res = plugin.search(api_conf2)
+                try:
+                    detail_res = plugin.search(api_conf2)
+                except Exception as e:
+                    _log.error(f"Search failed: {e}")
+                    continue
                 if detail_res['raw'] and detail_res['raw'].get('total'):
                     files.write_raw_json(
                         detail_res['raw'],
