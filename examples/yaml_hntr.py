@@ -11,7 +11,7 @@ def git_pull(args, led):
     # git pull
     try:
         gitres = subprocess.run(
-            ['git', 'pull'],
+            ['/usr/bin/git', 'pull'],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
