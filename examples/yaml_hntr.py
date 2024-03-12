@@ -100,6 +100,9 @@ def run(args, led):
         if not res['raw_pages']:
             _log.error(f"No pages returned!")
             continue
+        if not res['raw_pages'][0].get('total'):
+            _log.error(f"No pages returned!")
+            continue
         if not hasattr(plugin, 'chunk_results'):
             files.write_raw_json(
                 res['raw_pages'],
@@ -130,7 +133,7 @@ def run(args, led):
                 api_conf2.params[api_conf2.param_query_key]=thing.keyval
                 # @ Run the search
                 detail_res = plugin.search(api_conf2)
-                if detail_res['raw']:
+                if detail_res['raw'].get('total'):
                     files.write_raw_json(
                         detail_res['raw'],
                         filename=f"{hunt['id']}-{thing.keyval}-",
