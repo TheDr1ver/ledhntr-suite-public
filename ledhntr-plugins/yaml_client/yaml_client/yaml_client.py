@@ -158,9 +158,10 @@ class YAMLClient(ConnectorPlugin):
                 continue
             with open(last_run_id, 'r') as f:
                 readtime = f.read()
-            delta = now-int(readtime)
-            thresh = now-(hunt['frequency'] * 60 * 60) # @ hrs * min * sec
-            if thresh > delta:
+            # delta = now-int(readtime)
+            # thresh = now-(hunt['frequency'] * 60 * 60) # @ hrs * min * sec
+            thresh = int(readtime)+(hunt['frequency'] * 60 * 60) # @ hrs * min * sec
+            if now > thresh:
                 _log.debug(
                     f"Threshold NOT met for {hunt['id']}."
                     f" Next run after {format_date(thresh)}"
