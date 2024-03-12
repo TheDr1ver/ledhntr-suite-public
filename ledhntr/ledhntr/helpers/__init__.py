@@ -4,6 +4,7 @@ import json
 import logging, logging.handlers
 import re
 
+from bs4 import UnicodeDammit
 from configparser import ConfigParser
 from datetime import datetime, timezone
 from itertools import chain, starmap
