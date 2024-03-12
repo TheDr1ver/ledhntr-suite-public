@@ -152,7 +152,9 @@ class LocalFileClient(ConnectorPlugin):
 
         full_path = os.path.join(full_dir, filename)
         if unsafe:
+            ogmask = os.umask(0)
             os.makedirs(full_dir, exist_ok=True, mode=0o777)
+            os.umask(ogmask)
         else:
             os.makedirs(full_dir, exist_ok=True)
 
@@ -273,7 +275,9 @@ class LocalFileClient(ConnectorPlugin):
         if not filename.endswith(".json"):
             filename += ".json"
         if unsafe:
+            ogmask = os.umask(0)
             os.makedirs(path, exist_ok=True, mode=0o777)
+            os.umask(ogmask)
         else:
             os.makedirs(path, exist_ok=True)
         if isinstance(path, str):
