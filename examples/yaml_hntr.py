@@ -26,9 +26,9 @@ def git_pull(args, led):
 def run(args, led):
     _log = led.logger
     # Load storage plugin
-    files = led.load_plugin('localfile_client')
+    files = led.load_plugin('localfile_client', duplicate=True)
     # Load YAML plugin
-    yaml = led.load_plugin('yaml_client')
+    yaml = led.load_plugin('yaml_client', duplicate=True)
     # Get full path
     abs_path = os.path.abspath(args.dir)
     os.chdir(abs_path)
@@ -63,7 +63,7 @@ def run(args, led):
         failed = False
         # Attempt to load the associated LEDHNTR plugin
         try:
-            plugin=led.load_plugin(hunt['plugin'])
+            plugin=led.load_plugin(hunt['plugin'], duplicate=True)
         except Exception as e:
             _log.error(
                 f"Could not load {hunt['plugin']} for {hunt['id']} - {e}"
@@ -162,10 +162,19 @@ def main():
         type=str,
         help="If specified, runs a single hunt based on hunt ID value."
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Run with verbose logging."
+    )
 
     args = parser.parse_args()
     # Re-run every 10 minutes as long as force isn't set
-    led = LEDHNTR()
+    if args.verbose:
+        led = LEDHNTR(log_level="DEBUG")
+    else:
+        led = LEDHNTR()
     if not args.force:
         while True:
             run(args, led)

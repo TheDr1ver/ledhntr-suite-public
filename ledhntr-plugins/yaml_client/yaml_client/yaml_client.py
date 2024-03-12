@@ -152,8 +152,8 @@ class YAMLClient(ConnectorPlugin):
             last_run_id = last_run_path.joinpath(hunt['id'])
             last_run_id = os.path.abspath(last_run_id)
             if not os.path.exists(last_run_id):
-                # _log.info(f"No file {last_run_id}")
-                # _log.info(f"Hunt {hunt['id']} never run!")
+                _log.debug(f"No file {last_run_id}")
+                _log.debug(f"Hunt {hunt['id']} never run!")
                 updated_hunts.append(hunt)
                 continue
             with open(last_run_id, 'r') as f:
@@ -161,10 +161,15 @@ class YAMLClient(ConnectorPlugin):
             delta = now-int(readtime)
             thresh = now-(hunt['frequency'] * 60 * 60) # @ hrs * min * sec
             if thresh > delta:
-                # _log.info(f"Threshold NOT met for {hunt['id']}")
+                _log.debug(
+                    f"Threshold NOT met for {hunt['id']}."
+                    f" Next run after {format_date(thresh)}"
+                )
                 continue
             else:
-                # _log.info(f"Threshold met for {hunt['id']}")
+                _log.debug(
+                    f"Threshold of {format_date(thresh)} met for {hunt['id']}"
+                )
                 updated_hunts.append(hunt)
 
         self.hunts = updated_hunts
