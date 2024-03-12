@@ -97,6 +97,9 @@ def run(args, led):
         # Make Splunk-friendly chunks from the batch-results
         # If the plugin doesn't support chunking, just dump the
         #   raw results instead
+        if not res['raw_pages']:
+            _log.error(f"No pages returned!")
+            continue
         if not hasattr(plugin, 'chunk_results'):
             files.write_raw_json(
                 res['raw_pages'],
@@ -127,12 +130,13 @@ def run(args, led):
                 api_conf2.params[api_conf2.param_query_key]=thing.keyval
                 # @ Run the search
                 detail_res = plugin.search(api_conf2)
-                files.write_raw_json(
-                    detail_res['raw'],
-                    filename=f"{hunt['id']}-{thing.keyval}-",
-                    append_date=True,
-                    unsafe=args.unsafe,
-                )
+                if detail_res['raw']:
+                    files.write_raw_json(
+                        detail_res['raw'],
+                        filename=f"{hunt['id']}-{thing.keyval}-",
+                        append_date=True,
+                        unsafe=args.unsafe,
+                    )
 
         # Update threshold to prevent additional runs prior to timer resetting
         yaml.update_lastrun(hunts=[hunt])
