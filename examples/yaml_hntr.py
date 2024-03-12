@@ -18,7 +18,7 @@ def git_pull(args, led):
             text=True,
         )
     except subprocess.CalledProcessError as e:
-        _log.error(f"Error updating repository:")
+        _log.error('Error updating repository:')
         _log.error(e)
 
     _log.info(f"git pull result from {args.dir}: {gitres.stdout}")
