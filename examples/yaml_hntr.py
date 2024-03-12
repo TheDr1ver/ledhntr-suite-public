@@ -98,7 +98,8 @@ def run(args, led):
             files.write_raw_json(
                 res['raw_pages'],
                 filename=f"{hunt['id']}-no_chunks-",
-                append_date=True
+                append_date=True,
+                unsafe=args.unsafe,
             )
         else:
             chunks = plugin.chunk_results(res['raw_pages'], api_conf=api_conf)
@@ -107,7 +108,8 @@ def run(args, led):
                 files.write_raw_json(
                     chunk,
                     filename=f"{hunt['id']}-{chunk_no}_of_{len(chunks)}-",
-                    append_date=True
+                    append_date=True,
+                    unsafe=args.unsafe,
                 )
                 chunk_no+=1
 
@@ -125,7 +127,8 @@ def run(args, led):
                 files.write_raw_json(
                     detail_res['raw'],
                     filename=f"{hunt['id']}-{thing.keyval}-",
-                    append_date=True
+                    append_date=True,
+                    unsafe=args.unsafe,
                 )
 
         # Update threshold to prevent additional runs prior to timer resetting
@@ -167,6 +170,14 @@ def main():
         "--verbose",
         action="store_true",
         help="Run with verbose logging."
+    )
+    parser.add_argument(
+        "-u",
+        "--unsafe",
+        action="store_true",
+        help="If set, stores all results in files/folders with 777 access. "\
+            "Useful in cases where a log-ingesting user is different from the "\
+            "one running the script."
     )
 
     args = parser.parse_args()

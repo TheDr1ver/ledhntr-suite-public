@@ -119,6 +119,7 @@ class LocalFileClient(ConnectorPlugin):
         thing: Thing = None,
         path: Optional[str] = '',
         return_things: Optional[bool] = False,
+        unsafe: Optional[bool] = False,
     ):
         """Add Thing to db folder as a JSON file
 
@@ -126,6 +127,8 @@ class LocalFileClient(ConnectorPlugin):
         :param path: Optional path to save the thing to. Defaults to self.full_path
         :param return_things: True if you want the added attribute returned,
             False to return True or invalid data
+        :param unsafe: True if you want the files and directories to be created
+            in chmod 777 mode.
 
         :returns: added Thing object if return_things=True, otherwise boolean value
             as it pertains to the write result.
@@ -148,7 +151,10 @@ class LocalFileClient(ConnectorPlugin):
         filename += ".json"
 
         full_path = os.path.join(full_dir, filename)
-        os.makedirs(full_dir, exist_ok=True)
+        if unsafe:
+            os.makedirs(full_dir, exist_ok=True, mode=0777)
+        else:
+            os.makedirs(full_dir, exist_ok=True)
 
         write_path = os.path.abspath(full_path)
         with open(write_path, 'w', encoding='utf-8') as f:
@@ -157,6 +163,8 @@ class LocalFileClient(ConnectorPlugin):
             except Exception as e:
                 _log.error(f"Error writing JSON blob: {e}")
                 return data
+        if unsafe:
+            os.chmod(write_path, 0777)
 
         if return_things:
             json_data = self.load_json(write_path)
@@ -239,6 +247,7 @@ class LocalFileClient(ConnectorPlugin):
         path: Optional[str] = '',
         filename: Optional[str] = '',
         append_date: Optional[bool] = False,
+        unsafe: Optional[bool] = False,
     ):
         """Write raw JSON to file
         Converts a result (list or dict) to a raw JSON string and writes it to
@@ -250,6 +259,8 @@ class LocalFileClient(ConnectorPlugin):
         :para filename: The filename to write to the path (e.g. blob.json)
         :para append_date: Boolean - determines if the date should be appended
         to the filename.
+        :param unsafe: True if you want the files and directories to be created
+            in chmod 777 mode.
         """
         _log = self.logger
 
@@ -261,7 +272,10 @@ class LocalFileClient(ConnectorPlugin):
             filename += ".json"
         if not filename.endswith(".json"):
             filename += ".json"
-        os.makedirs(path, exist_ok=True)
+        if unsafe:
+            os.makedirs(path, exist_ok=True, mode=0777)
+        else:
+            os.makedirs(path, exist_ok=True)
         if isinstance(path, str):
             p = Path(path)
         else:
@@ -276,10 +290,14 @@ class LocalFileClient(ConnectorPlugin):
         try:
             with open(write_path, 'x', encoding='utf-8') as f:
                 f.write(f"{raw_json}\n")
-            return True
         except Exception as ex:
             _log.error(f"Failed writing {write_path}! {ex}")
             return False
+
+        if unsafe:
+            os.chmod(write_path, 0777)
+
+        return True
 
     def get_search_path(
         self,
