@@ -100,7 +100,7 @@ def run(args, led):
         if not res['raw_pages']:
             _log.error(f"No pages returned!")
             continue
-        if not res['raw_pages'][0].get('total'):
+        if not 0 <= 0 < len(res['raw_pages']):
             _log.error(f"No pages returned!")
             continue
         if not hasattr(plugin, 'chunk_results'):
