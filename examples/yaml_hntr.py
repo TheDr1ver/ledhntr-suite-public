@@ -137,7 +137,7 @@ def run(args, led):
                 except Exception as e:
                     _log.error(f"Search failed: {e}")
                     continue
-                if detail_res['raw'] and detail_res['raw'].get('total'):
+                if detail_res['raw']:
                     files.write_raw_json(
                         detail_res['raw'],
                         filename=f"{hunt['id']}-{thing.keyval}-",
