@@ -265,6 +265,13 @@ class HNTRPlugin(BasePlugin, ABC):
         self.rate_limit_respect(self.search_time, self.rate_limit)
         self.search_time = time()
         res = api_conf.http_method(**reqkwargs)
+        req = res.request
+        _log.debug(f"### REQUEST SENT ###")
+        _log.debug(f"\tURL: {req.url}")
+        _log.debug(f"\tMETHOD: {req.method}")
+        _log.debug(f"\tHEADERS: {req.headers}")
+        _log.debug(f"\tBODY: {req.body}")
+        _log.debug(f"### END REQUEST ###")
         if not str(res.status_code).startswith('2'):
             _log.error(
                 f"Error obtaining reports: [{res.status_code}] - {res.text}"
@@ -860,7 +867,7 @@ class HNTRPlugin(BasePlugin, ABC):
 
         # has = self._add_data_as_attribute(
         # has = self._add_data_as_attribute_new(
-        _log.debug(f"Generating relation (before parsing attrs): {relation.to_dict()}")
+        # _log.debug(f"Generating relation (before parsing attrs): {relation.to_dict()}")
         parsed_attrs = self._add_data_as_attribute(
             data=data,
             datakey_attrlbls=datakey_attrlbls,

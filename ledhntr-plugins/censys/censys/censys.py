@@ -167,6 +167,7 @@ class Censys(HNTRPlugin):
                 "per_page": self.per_page,
                 "virtual_hosts": "EXCLUDE", # EXLUDE|INCLUDE|ONLY
                 "cursor": None,
+                "fields": None,
             },
             paginate = False,
             paginator = self.main_paginator,
