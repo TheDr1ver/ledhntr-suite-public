@@ -901,3 +901,23 @@ define
 
     version sub attribute,
         value string;
+
+    ############################
+    #### Development Tests
+    ############################
+
+    # UTC fast-indexing timestamps
+    year sub attribute, value double;
+    month sub attribute, value double;
+    day sub attribute, value double;
+    hour sub attribute, value double;
+    minute sub attribute, value double;
+    second sub attribute, value double;
+
+    utc sub hntr-entity,
+        owns year,
+        owns month,
+        owns day,
+        owns hour,
+        owns minute,
+        owns second;
