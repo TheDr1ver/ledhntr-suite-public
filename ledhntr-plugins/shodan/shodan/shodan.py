@@ -208,8 +208,8 @@ class Shodan(HNTRPlugin):
 
         # Find IP in database and get associated thing -
         # if doesn't exist, create it
-        attr = Attribute(label='ip-address', value=ip)
-        search_ent = Entity(label='ip', has=[attr])
+        ip_attr = Attribute(label='ip-address', value=ip)
+        search_ent = Entity(label='ip', has=[ip_attr])
         ip_ent = dbc.find_things(search_ent, limit_get=True)
 
         if not ip_ent:
