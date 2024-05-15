@@ -1311,9 +1311,9 @@ class HNTRPlugin(BasePlugin, ABC):
                 # //     hunt.players['found'] = []
                 for thing in found['things']:
                     if isinstance(thing, Attribute):
-                        if thing not in hunt.has:
+                        if thing not in hunt.has and thing.label not in hunt.meta_attrs:
                             hunt.has.append(thing)
-                            continue
+                        continue
                     # Make sure all Entity and Relation things have this 
                     # hunt-name attached
                     if hunt_name_attr not in thing.has:
@@ -1804,6 +1804,17 @@ class HNTRPlugin(BasePlugin, ABC):
                     now = datetime.now(timezone.utc)
                     now_attr = Attribute(label='date-seen', value=now)
                     hunt.has.append(now_attr)
+
+                # Attach everything found to the hunt
+                if search_res.get('things'):
+                    for thing in search_res['things']:
+                        if not isinstance(thing, Attribute):
+                            for attr in thing.has:
+                                if attr.label not in hunt.meta_attrs and attr not in hunt.has:
+                                    hunt.has.append(attr)
+                        else:
+                            if thing.label not in hunt.meta_attrs and thing not in hunt.has:
+                                hunt.has.append(attr)
 
                 hunt_results[endpoint][hunt_name] = {
                     'hunt': hunt,

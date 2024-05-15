@@ -34,7 +34,7 @@ define
         owns note,
         owns tag;
 
-    attachment sub relation,
+    attachment sub hntr-relation,
         relates attachment-file,
         relates attachment-email;
 

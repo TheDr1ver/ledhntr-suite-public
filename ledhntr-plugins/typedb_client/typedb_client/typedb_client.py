@@ -2050,8 +2050,9 @@ class TypeDBClient(ConnectorPlugin):
                 # Get valid thing.labels
                 tx = self.check_tx()
                 concepts = tx.concepts
-                valid_labels = []
+                valid_labels = ['thing']
                 # ! thing_type = concepts.get_thing_type(thing.label)
+                thing_type = None
                 if isinstance(thing, Attribute):
                     thing_type = concepts.get_attribute_type(thing.label).resolve()
                     if not thing_type:
@@ -2095,7 +2096,7 @@ class TypeDBClient(ConnectorPlugin):
                             thing_type = concepts.get_attribute_type(thing.label).resolve()
                             if not thing_type:
                                 _log.warning(
-                                    f"Unable to determine proper type of {thing.label}. Skipping!"
+                                    f"Unable to determine proper type of label {thing.label}. Skipping!"
                                 )
                                 continue
                             else:
@@ -2103,14 +2104,16 @@ class TypeDBClient(ConnectorPlugin):
                         else:
                             _log.warning(f"{thing.label} is an Entity!")
 
-                thing_type_subs = thing_type.get_subtypes(tx)
-                for tts in thing_type_subs:
-                    valid_labels.append(tts.get_label().name)
+                # ; if no thing_type then this might be a generic object retrieved by iid
+                if thing_type:
+                    thing_type_subs = thing_type.get_subtypes(tx)
+                    for tts in thing_type_subs:
+                        valid_labels.append(tts.get_label().name)
+                    resp_copy = copy.deepcopy(response_query)
+                    for rc in resp_copy.answers:
+                        if not rc.label in valid_labels:
+                            response_query.answers.remove(rc)
 
-                resp_copy = copy.deepcopy(response_query)
-                for rc in resp_copy.answers:
-                    if not rc.label in valid_labels:
-                        response_query.answers.remove(rc)
             if not final_query:
                 final_query = response_query
             else:
@@ -2623,7 +2626,7 @@ class TypeDBClient(ConnectorPlugin):
             tql += ";"
             if hasattr(thing, 'value') and thing.value is not None:
                 fmt_val = self.format_value_query(thing.value)
-                tql += f' ${thing.label}_{thing.counter}={fmt_val};'
+                tql += f' ${thing.label}_{thing.counter}={fmt_val}; get;'
             return tql
         if len(thing.has) > 0:
             first = True
@@ -3524,6 +3527,7 @@ class TypeDBClient(ConnectorPlugin):
 
         _log = self.logger
         blank_thing = copy.deepcopy(Thing())
+        # // blank_thing = copy.deepcopy(Relation(label='relation'))
 
         # Make sure we get the full details of the existing thing before comparing
         # NOTE - This doesn't work with no_backtrace, so don't bother trying
@@ -3646,12 +3650,17 @@ class TypeDBClient(ConnectorPlugin):
             return old_thing
 
         # Get final updated thing
-        newest_thing = self.find_things(
-            blank_thing,
-            search_mode='no_backtrace',
-            limit_get=True
-        )[0]
-        _log.debug(f"updated_thing: {newest_thing}")
+        try:
+            newest_thing = self.find_things(
+                blank_thing,
+                search_mode='no_backtrace',
+                limit_get=True
+            )[0]
+            _log.debug(f"updated_thing: {newest_thing}")
+        except IndexError:
+            _log.error(f"Nothing found - something went horribly wrong!")
+            _log.error(f"search_thing: {blank_thing}")
+            raise
 
         # Scrub empty entities used for creating base-line relations
         if hasattr(newest_thing, 'players'):

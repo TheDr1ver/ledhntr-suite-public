@@ -322,7 +322,7 @@ class Shodan(HNTRPlugin):
                         return False
                 last_updated = Attribute(label='date-seen', value=date_seen)
 
-            data=match
+            data=copy.deepcopy(match)
 
             host_ip = Attribute(label='note', value=data['ip_str'])
             # Add IP
@@ -387,14 +387,14 @@ class Shodan(HNTRPlugin):
                         things.append(dom_ent)
 
 
-            if 'location' in match:
-                data = match['location']
+            if 'location' in data:
+                data = copy.deepcopy(match['location'])
                 dka = {
                     'city': 'city',
                     'region_code': 'province',
                     'country_code': 'country-code',
                     'country_name': 'country',
-                    'postal_code': 'postal-code',
+                    # // 'postal_code': 'postal-code',
                 }
                 has = [host_ip]
                 rel = self._generate_entity_from_data(
@@ -404,11 +404,14 @@ class Shodan(HNTRPlugin):
                     has=has,
                     # // players = {'located-in': [ent_ip]},
                 )
+                if rel.keyattr=='comboid':
+                    comboid = rel.get_comboid()
+                    rel.has.append(comboid)
                 if rel not in things:
                     things.append(rel)
 
             # ASN
-            data = match
+            data = copy.deepcopy(match)
             cc = Attribute(
                 label='country-code',
                 value=data['location']['country_code']
@@ -440,6 +443,9 @@ class Shodan(HNTRPlugin):
                     )
                     rel_asn.has.append(new_attr)
             rel_asn = self.check_dateseen(rel_asn, last_updated)
+            if rel_asn.keyattr == 'comboid':
+                comboid = rel_asn.get_comboid()
+                rel_asn.has.append(comboid)
             if rel_asn not in things:
                 things.append(rel_asn)
 
@@ -592,6 +598,9 @@ class Shodan(HNTRPlugin):
             has=has,
             # // players = {'located-in': [ent_ip]},
         )
+        if rel.keyattr == 'comboid':
+            comboid = rel.get_comboid()
+            rel.has.append(comboid)
         if rel not in things:
             things.append(rel)
 
@@ -624,6 +633,9 @@ class Shodan(HNTRPlugin):
                 rel_asn.has.append(new_attr)
         # _log.debug(f"rel_asn: {rel_asn.to_dict()}")
         rel_asn = self.check_dateseen(rel_asn, last_updated)
+        if rel_asn.keyattr == 'comboid':
+            comboid = rel_asn.get_comboid()
+            rel_asn.has.append(comboid)
         if rel_asn not in things:
             things.append(rel_asn)
 
