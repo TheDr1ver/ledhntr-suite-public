@@ -193,7 +193,7 @@ class Shodan(HNTRPlugin):
         last_seen: Optional[Union[datetime, str]] = None,
         cached_data: Optional[object] =  None,
         force: Optional[bool] = False,
-        hunt: Optional[Relation] = None,
+        hunt: Optional[Entity] = None,
     ):
         """
         Use this function to add historical data for a given IP.
@@ -261,10 +261,10 @@ class Shodan(HNTRPlugin):
         hunt_name = f"{self.__class__.__name__.lower()}-{hunt_name}"
         has.append(Attribute(label='hunt-name', value=hunt_name))
 
-        hunt = Relation(
+        hunt = Entity(
             label='enrichment',
             has = has,
-            players = {'enriches': [ip_ent]},
+            # // players = {'enriches': [ip_ent]},
         )
         added_hunt = dbc.add_thing(hunt, return_things=True)
 
@@ -396,13 +396,13 @@ class Shodan(HNTRPlugin):
                     'country_name': 'country',
                     'postal_code': 'postal-code',
                 }
-                has = []
-                rel = self._generate_relation_from_data(
+                has = [host_ip]
+                rel = self._generate_entity_from_data(
                     data=data,
                     datakey_attrlbls=dka,
                     label='geoloc',
                     has=has,
-                    players = {'located-in': [ent_ip]},
+                    # // players = {'located-in': [ent_ip]},
                 )
                 if rel not in things:
                     things.append(rel)
@@ -419,15 +419,15 @@ class Shodan(HNTRPlugin):
                 'org': 'as-name',
                 'timestamp': 'date-seen',
             }
-            has = [cc]
-            rel_asn = self._generate_relation_from_data(
+            has = [cc, host_ip]
+            rel_asn = self._generate_entity_from_data(
                 data=data,
                 datakey_attrlbls=dka,
                 label='autonomous-system',
                 has=has,
-                players = {
-                    'linked': [ent_ip],
-                }
+                #// players = {
+                #//     'linked': [ent_ip],
+                #// }
             )
             # _log.debug(f"rel_asn: {rel_asn.to_dict()}")
             asn_safe_copy = copy.deepcopy(rel_asn.has)
@@ -584,13 +584,13 @@ class Shodan(HNTRPlugin):
             'country_name': 'country',
             'postal_code': 'postal-code',
         }
-        has = []
-        rel = self._generate_relation_from_data(
+        has = [host_ip]
+        rel = self._generate_entity_from_data(
             data=data,
             datakey_attrlbls=dka,
             label='geoloc',
             has=has,
-            players = {'located-in': [ent_ip]},
+            # // players = {'located-in': [ent_ip]},
         )
         if rel not in things:
             things.append(rel)
@@ -603,15 +603,15 @@ class Shodan(HNTRPlugin):
             'country_code': 'country-code',
             'timestamp': 'date-seen',
         }
-        has = []
-        rel_asn = self._generate_relation_from_data(
+        has = [host_ip]
+        rel_asn = self._generate_entity_from_data(
             data=data,
             datakey_attrlbls=dka,
             label='autonomous-system',
             has=has,
-            players = {
-                'linked': [ent_ip],
-            }
+            #!! players = {
+            #!!     'linked': [ent_ip],
+            #!! }
         )
         asn_safe_copy = copy.deepcopy(rel_asn.has)
         for attr in asn_safe_copy:
@@ -631,7 +631,7 @@ class Shodan(HNTRPlugin):
         if 'os' in data and data['os']:
             attr = Attribute(label='product', value=data['os'])
             # hope this doesn't break it - should attach 'product'
-            # attr to 'enrichment' relation
+            # attr to 'enrichment' entity
             things.append(attr)
 
         # Add Version
@@ -661,16 +661,16 @@ class Shodan(HNTRPlugin):
                 'port': 'port',
             }
             has = [provider, host_ip, seen]
-            service_rel = self._generate_relation_from_data(
+            service_rel = self._generate_entity_from_data(
                 data=data,
                 datakey_attrlbls=dka,
                 label='network-service',
                 has=has,
-                players = {
-                    'running-on': [ent_ip],
-                    'serves': [],
-                    'related': [],
-                }
+                #!! players = {
+                #!!     'running-on': [ent_ip],
+                #!!     'serves': [],
+                #!!     'related': [],
+                #!! }
             )
 
             # Add hostnames
@@ -762,7 +762,9 @@ class Shodan(HNTRPlugin):
                     label='http',
                     has=has,
                 )
-                service_rel.players['serves'].append(http_ent)
+                # // service_rel.players['serves'].append(http_ent)
+                things.append(http_ent)
+                service_rel.has += http_ent.has
 
             # SSL
             if 'ssl' in service:
@@ -770,19 +772,21 @@ class Shodan(HNTRPlugin):
                 # JARM
                 if 'jarm' in ssl_data and ssl_data['jarm']:
                     jarm_fingerprint = Attribute(
-                        label='fingerprint',
+                        label='jarm-fingerprint',
                         value=ssl_data['jarm']
                     )
                     has = [seen, jarm_fingerprint]
                     jarm_ent = Entity(label='jarm', has=has)
-                    service_rel.players['serves'].append(jarm_ent)
+                    # // service_rel.players['serves'].append(jarm_ent)
+                    things.append(jarm_ent)
+                    service_rel.has.append(jarm_fingerprint)
 
                 # Manually build all attributes b/c I don't
                 # have a better way to do it
                 has = []
                 # JA3
-                if 'ja3' in ssl_data and ssl_data['ja3']:
-                    ja3 = Attribute(label='ja3', value=ssl_data['ja3'])
+                if 'ja3s' in ssl_data and ssl_data['ja3s']:
+                    ja3 = Attribute(label='ja3s', value=ssl_data['ja3s'])
                     has.append(ja3)
                 # Fingerprint
                 attr = Attribute(
@@ -925,7 +929,9 @@ class Shodan(HNTRPlugin):
                     has=has,
                 )
 
-                service_rel.players['serves'].append(cert_ent)
+                # // service_rel.players['serves'].append(cert_ent)
+                service_rel.has += has
+                things.append(cert_ent)
 
             ####################################################################
             #### Additional Services Parsing
@@ -1089,7 +1095,7 @@ class Shodan(HNTRPlugin):
 
     def hok_hosts(
         self,
-        thing: Relation = None,
+        thing: Entity = None,
     ):
         """hunt-or-kill host enrichment logic
 

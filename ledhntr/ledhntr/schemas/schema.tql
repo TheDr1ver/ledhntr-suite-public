@@ -14,14 +14,15 @@ define
     # * the 'comboid' Attribute as its key. The 'comboid' attribute is generated
     # * by sorting all non-meta attributes, converting them to a string format,
     # * and sha256-hashing the results.
+    # & ...
+    # & I'm gonna try and avoid comboid with the attachment relation and see if
+    # & that works out.
 
     hntr-relation sub relation,
         relates related,
         plays hntr-relation:related,
         plays reference:referenced-by, # entity referenced-by entity
         plays reference:referenced, # entity referenced entity
-        plays hunt:found,
-        plays enrichment:enriches,
         owns ledid, # required for all relations
         owns confidence,
         owns date-discovered,
@@ -33,20 +34,9 @@ define
         owns note,
         owns tag;
 
-    autonomous-system sub hntr-relation,
-        relates linked, # asn controls cidr
-        plays cidr:linked,
-        owns comboid @key,
-        owns as-number,
-        owns as-name,
-        owns country-code,
-        owns isp;
-
-    cidr sub hntr-relation,
-        relates contains,
-        relates linked,
-        plays autonomous-system:linked,
-        owns cidr-range @key;
+    attachment sub relation,
+        relates attachment-file,
+        relates attachment-email;
 
     diff sub hntr-relation,
         relates diffed-first,
@@ -56,171 +46,18 @@ define
         owns diff-removed,
         owns diff-modified;
 
-    email sub hntr-relation,
-        relates sent-by,
-        relates sent-to,
-        relates attached,
-        owns comboid @key,
-        owns email-address,
-        owns email-body,
-        owns email-headers,
-        owns link,
-        owns email-subject;
-
-    # meta-relation
-    enrichment sub hunt,
-        relates enriches;
-
-    # These should  be replaced by 'plays' on their associated entities.
-    # e.g. "file" -> "plays file:executed-by, plays file:executed,"
-    # e.g. "file" -> "plays url:executed-by, plays url:opens,"
-    #
-    # // execution sub hntr-relation,
-    # //    relates executed-by,
-    # //    relates executed;
-
-    # // generic-link sub hntr-relation,
-    # //    relates linked;
-
-    geoloc sub hntr-relation,
-        relates located-in,
-        owns comboid @key,
-        owns continent,
-        owns country,
-        owns country-code,
-        owns city,
-        owns postal-code,
-        owns timezone,
-        owns province,
-        owns registered-country,
-        owns registered-country-code;
-
-    hunt sub relation,
-        # can't inherit hntr-relation so we'll manually add all that here
-        relates related,
-        plays reference:referenced-by, # entity referenced-by entity
-        plays reference:referenced, # entity referenced entity
-        plays hunt:found,
-        plays enrichment:enriches,
-        owns ledid, # required for all relations
-        owns confidence,
-        owns date-discovered,
-        owns date-seen,
-        owns first-seen,
-        owns last-seen,
-        owns note,
-        owns tag,
-
-        # A hunt should be able to own ANYTHING it finds. Kinda wish owns * would work
-        owns account-service,
-        owns email-address,
-        owns first-name,
-        owns last-name,
-        owns password,
-        owns user,
-        owns actor-name,
-        owns alias,
-        owns domain-name,
+    host sub hntr-relation,
+        relates hosted-on, # host hosted-on ip
+        relates serves, # host serves network-service 
+        owns ip-address,
         owns fqdn,
-        owns ip-address,
-        owns name-server,
-        owns family,
-        owns filename,
-        owns hash,
-        owns md5,
-        owns sha1,
-        owns sha256,
-        owns sha512,
-        owns ssdeep,
-        owns imphash,
-        owns mime-type,
-        owns auth-ssl-response,
-        owns auth-tls-response,
-        owns http-header-pair,
-        owns http-headers-hash,
-        owns http-html-hash,
-        owns http-favicon-hash,
-        owns http-robots-hash,
-        owns http-securitytxt-hash,
-        owns http-sitemap-hash,
-        owns http-title,
-        owns jarm-fingerprint,
-        owns fingerprint,
-        owns sha256,
-        owns issuer-c,
-        owns issuer-cn,
-        owns issuer-o,
-        owns issuer-l,
-        owns issuer-st,
-        owns issuer-ou,
-        owns subject-c,
-        owns subject-cn,
-        owns subject-o,
-        owns subject-l,
-        owns subject-st,
-        owns subject-ou,
-        owns ja3s,
-        owns uri,
-        owns link,
-        owns phone-number,
-        owns fax-number,
-        owns org,
-        owns registrar,
-
-        # The rest is hunt-specific
-        relates found,
-        owns hunt-active,
-        owns hunt-endpoint,
-        owns hunt-name @key,
-        owns hunt-service,
-        owns hunt-string,
-        owns first-hunted,
-        owns last-hunted,
-        owns frequency;
-
-    misp-event sub hntr-relation,
-        relates contains,
-        owns misp-event-info @key,
-        owns link,
-        owns misp-org,
-        owns misp-orgc,
-        owns actor-name,
-        owns alias,
         owns domain-name,
-        owns http-html,
-        owns ip-address,
-        owns date-published,
-        owns summary;
-
-    network-service sub hntr-relation,
-        relates serves,
-        relates running-on,
-        owns comboid @key,
-        owns cpe23,
-        owns fingerprint,
-        owns domain-name,
-        owns fqdn,
-        owns ip-address,
-        owns jarm-fingerprint,
         owns name-server,
-        owns port,
-        owns product,
-        owns service-header,
-        owns service-name,
-        owns service-provider,
-        owns service-body,
-        owns shodan-hash;
+        owns comboid @key;
 
-    # These should  be replaced by 'plays' on their associated entities.
-    # e.g. "file" -> "plays file:executed-by, plays file:executed,"
-    # e.g. "file" -> "plays url:executed-by, plays url:opens,"
     reference sub hntr-relation,
         relates referenced-by,
         relates referenced;
-
-    # // registration sub hntr-relation,
-    # //     relates registered-by,
-    # //     relates registered;
 
     resolution sub hntr-relation,
         relates resolves,
@@ -233,17 +70,6 @@ define
         owns name-server,
         owns fqdn;
 
-    # These should  be replaced by 'plays' on their associated entities.
-    # e.g. "file" -> "plays file:executed-by, plays file:executed,"
-    # e.g. "file" -> "plays url:executed-by, plays url:opens,"
-    # // running sub hntr-relation,
-    # //     relates running-on,
-    # //     relates seen-running;
-
-    # // signature sub hntr-relation,
-    # //     relates signed-by,
-    # //     relates signed;
-
     ############################
     #### Entities
     ############################
@@ -253,11 +79,6 @@ define
         plays hntr-relation:related,
         plays reference:referenced-by, # entity referenced-by entity
         plays reference:referenced, # entity referenced entity
-        plays misp-event:contains,
-        plays hunt:found,
-        plays hunt:related,
-        plays enrichment:enriches,
-        plays network-service:serves,
         owns ledid, # required for all entities
         owns confidence,
         owns date-discovered,
@@ -270,7 +91,6 @@ define
         owns tag;
 
     account sub hntr-entity,
-        plays email:sent-by, # send-mail sent-by account
         owns comboid @key,
         owns account-service,
         owns email-address,
@@ -280,12 +100,17 @@ define
         owns user;
 
     actor sub hntr-entity,
-        plays geoloc:located-in,
-        # // plays registration:registered-by, # register regitsered-by
-        plays email:sent-by, # send-mail sent-by actor
         owns comboid @key,
         owns actor-name,
         owns alias;
+
+    autonomous-system sub hntr-entity,
+        owns comboid @key,
+        owns as-number,
+        owns as-name,
+        owns cidr-range,
+        owns country-code,
+        owns isp;
 
     cert-host sub hntr-entity, # I hate this entity - it should be changed to ip.
         owns comboid @key,
@@ -309,17 +134,39 @@ define
         plays resolution:answer,  # domain resolved-to ip
         plays resolution:query, # domain resolved-from dns-record
         plays resolution:resolves,
-        owns hunt-active,
         owns name-server,
         owns domain-name @key;
 
+    email sub hntr-entity,
+        plays attachment:attachment-file,
+        plays attachment:attachment-email,
+        owns comboid @key,
+        owns email-address,
+        owns email-bcc,
+        owns email-body,
+        owns email-cc,
+        owns email-from,
+        owns email-headers,
+        owns email-subject,
+        owns email-to,
+        owns filename,
+        owns ip-address,
+        owns link,
+        owns md5,
+        owns sha1,
+        owns sha256,
+        owns sha512;
+
     empty-ent sub hntr-entity;
+
+    # sub-type of hunt
+    enrichment sub hunt;
 
     # I'm not worried about files right now, BUT WHEN I DO, THIS SHOULD BE
     # CONVERTED INTO A  RELATION. That way you can associate diffs/hashes/behaviors
     # etc (which are all entities) easily.
     # Also needs a key (fingerprint per road schema), but it will have to be
-    # programmatically selected. (e.g. if file has sha254, sha1, and md5, then
+    # programmatically selected. (e.g. if file has sha256, sha1, and md5, then
     # sha256 becomes the fingerprint. Otherwise if it only has one hash, that
     # hash becomes to key.)
     file sub hntr-entity,
@@ -364,25 +211,126 @@ define
         owns status-code,
         owns http-title;
 
+    geoloc sub hntr-entity,
+        owns comboid @key,
+        owns continent,
+        owns country,
+        owns country-code,
+        owns city,
+        owns postal-code,
+        owns timezone,
+        owns province,
+        owns registered-country,
+        owns registered-country-code;
+
     hostname sub hntr-entity,
         plays resolution:answer,  # hostname resolved-to ip
         plays resolution:query, # hostname resolved-from dns-record
         plays resolution:resolves,
-        owns hunt-active,
         owns fqdn @key;
 
-    # // hunt-res-json sub hntr-entity,
-    # //     owns json-blob,
-    # //     owns fingerprint;
+    hunt sub entity,
+        plays reference:referenced-by, # entity referenced-by entity
+        plays reference:referenced, # entity referenced entity
+        owns ledid, # required for all relations
+        owns confidence,
+        owns date-discovered,
+        owns date-seen,
+        owns first-seen,
+        owns last-seen,
+        owns note,
+        owns tag,
+
+        # A hunt should be able to own ANYTHING it finds. Kinda wish owns * would work
+        owns account-service,
+        owns actor-name,
+        owns alias,
+        owns auth-ssl-response,
+        owns auth-tls-response,
+        owns cipher-bits,
+        owns cipher-name,
+        owns cpe23,
+        owns domain-name,
+        owns expires-date,
+        owns email-address,
+        owns family,
+        owns fax-number,
+        owns filename,
+        owns fingerprint,
+        owns first-name,
+        owns fqdn,
+        owns hash,
+        owns http-favicon-hash,
+        owns http-header-pair,
+        owns http-headers-hash,
+        owns http-html-hash,
+        owns http-robots-hash,
+        owns http-securitytxt-hash,
+        owns http-sitemap-hash,
+        owns http-title,
+        owns imphash,
+        owns ip-address,
+        owns issued-date,
+        owns issuer-c,
+        owns issuer-cn,
+        owns issuer-l,
+        owns issuer-o,
+        owns issuer-ou,
+        owns issuer-st,
+        owns ja3s,
+        owns ja4s,
+        owns jarm-fingerprint,
+        owns last-name,
+        owns link,
+        owns md5,
+        owns mime-type,
+        owns name-server,
+        owns org,
+        owns password,
+        owns phone-number,
+        owns port,
+        owns product,
+        owns pubkey-bits,
+        owns pubkey-type,
+        owns registrar,
+        owns service-header,
+        owns service-name,
+        owns service-provider,
+        owns service-body,
+        owns sha1,
+        owns sha256,
+        owns sha512,
+        owns shodan-hash,
+        owns sig-alg,
+        owns ssdeep,
+        owns subject-c,
+        owns subject-cn,
+        owns subject-l,
+        owns subject-o,
+        owns subject-ou,
+        owns subject-st,
+        owns uri,
+        owns user,
+        owns version,
+
+        # The rest is hunt-specific
+        owns hunt-active,
+        owns hunt-endpoint,
+        owns hunt-name @key,
+        owns hunt-service,
+        owns hunt-string,
+        owns first-hunted,
+        owns last-hunted,
+        owns frequency;
 
     ip sub hntr-entity,
-        plays autonomous-system:linked,
-        plays cidr:contains,
-        plays geoloc:located-in,
-        plays network-service:running-on,
         plays resolution:query,
         plays resolution:answer, # resolution resolved-to ip
         plays resolution:resolves,
+        plays host:hosted-on,
+        owns as-name,
+        owns as-number,
+        owns cidr-range,
         owns continent,
         owns country,
         owns country-code,
@@ -392,8 +340,6 @@ define
         owns province,
         owns registered-country,
         owns registered-country-code,
-        owns hunt-active,
-        owns cidr-range,
         owns ip-address @key;
 
     jarm sub hntr-entity,
@@ -401,6 +347,61 @@ define
         owns jarm-cipher,
         owns jarm-fingerprint,
         owns jarm-tls-ext;
+
+    misp-event sub hntr-entity,
+        owns misp-event-info @key,
+        owns link,
+        owns misp-org,
+        owns misp-orgc,
+        owns actor-name,
+        owns alias,
+        owns domain-name,
+        owns http-html,
+        owns ip-address,
+        owns date-published,
+        owns summary;
+
+    network-service sub hntr-entity,
+        plays host:serves,
+        owns comboid @key,
+        owns cpe23,
+        owns domain-name,
+        owns fingerprint,
+        owns fqdn,
+        owns http-favicon-hash,
+        owns http-header-pair,
+        owns http-headers-hash,
+        owns http-html-hash,
+        owns http-robots-hash,
+        owns http-securitytxt-hash,
+        owns http-sitemap-hash,
+        owns http-title,
+        owns ip-address,
+        owns issuer-c,
+        owns issuer-cn,
+        owns issuer-l,
+        owns issuer-o,
+        owns issuer-ou,
+        owns issuer-st,
+        owns ja3s,
+        owns ja4s,
+        owns jarm-fingerprint,
+        owns name-server,
+        owns port,
+        owns product,
+        owns registrar,
+        owns service-header,
+        owns service-name,
+        owns service-provider,
+        owns service-body,
+        owns shodan-hash,
+        owns subject-c,
+        owns subject-cn,
+        owns subject-l,
+        owns subject-o,
+        owns subject-ou,
+        owns subject-st,
+        owns uri;
 
     os sub hntr-entity,
         owns comboid @key,
@@ -419,37 +420,37 @@ define
         owns version;
 
     ssl sub hntr-entity,
-        owns fqdn, # used for storing SANs
-        owns fingerprint @key,
-        owns sha256,
-        owns issued-date,
-        owns expires-date,
-        owns issuer-c,
-        owns issuer-cn,
-        owns issuer-o,
-        owns issuer-l,
-        owns issuer-st,
-        owns issuer-ou,
-        owns pubkey-bits,
-        owns pubkey-type,
-        owns sig-alg,
-        owns version,
-        owns subject-c,
-        owns subject-cn,
-        owns subject-o,
-        owns subject-l,
-        owns subject-st,
-        owns subject-ou,
         owns cipher-bits,
         owns cipher-name,
-        owns ja3s;
+        owns expires-date,
+        owns fqdn, # used for storing SANs
+        owns issuer-c,
+        owns issuer-cn,
+        owns issued-date,
+        owns issuer-l,
+        owns issuer-o,
+        owns issuer-ou,
+        owns issuer-st,
+        owns ja3s,
+        owns ja4s,
+        owns pubkey-bits,
+        owns pubkey-type,
+        owns sha256,
+        owns sig-alg,
+        owns subject-c,
+        owns subject-cn,
+        owns subject-l,
+        owns subject-o,
+        owns subject-ou,
+        owns subject-st,
+        owns version,
+        owns fingerprint @key;
 
     trusted-third-party sub hntr-entity;
 
     url sub hntr-entity,
         owns domain-name,
         owns fqdn,
-        owns hunt-active,
         owns uri @key;
 
     website sub hntr-entity,
@@ -590,13 +591,25 @@ define
     email-address sub attribute,
         value string;
 
+    email-bcc sub attribute,
+        value string;
+
     email-body sub attribute,
+        value string;
+
+    email-cc sub attribute,
+        value string;
+
+    email-from sub attribute,
         value string;
 
     email-headers sub attribute,
         value string;
 
     email-subject sub attribute,
+        value string;
+
+    email-to sub attribute,
         value string;
 
     expires-date sub attribute,
@@ -717,6 +730,9 @@ define
         value string;
 
     ja3s sub attribute,
+        value string;
+
+    ja4s sub attribute,
         value string;
 
     jarm-cipher sub attribute,

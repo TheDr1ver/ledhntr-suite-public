@@ -332,13 +332,36 @@ class HNTRPlugin(BasePlugin, ABC):
             return ignore_me
 
         _log.debug(f"Initial Entity confidence low. Checking parent hunts.")
-        if not thing.relations:
-            thing = dbc.find_things(
-                thing,
-                search_mode='no_backtrace'
-            )[0]
+        # // if not thing.relations:
+        # //     thing = dbc.find_things(
+        # //         thing,
+        # //         search_mode='no_backtrace'
+        # //     )[0]
         thing_parent_acceptable = False
-        for rel in thing.relations:
+        hns = thing.get_attributes('hunt-name')
+        for hn in hns:
+            so = Entity(label='hunt', has=[hn])
+            parent_hunt = dbc.find_things(
+                so,
+                search_mode='lite',
+                include_meta_attrs=True
+            )
+            parent_con = parent_hunt.get_attributes('confidence', first_only=True)
+            if not parent_con:
+                continue
+            if parent_con.value < con_threshold:
+                # this parent hunt's threshold was too low - check another.
+                continue
+            else:
+                thing_parent_acceptable = True
+                _log.info(f"{parent_hunt} had confidence of {parent_con.value}.")
+                _log.info(f"{thing} deemed good enough to auto-enrich.")
+                break
+
+        # ! REMOVE ALL THIS
+        '''
+        # ! REMOVED WHEN CONVERTING HUNTS TO ENTITIES
+        # // for rel in thing.relations:
             # Only look at enrichments and hunts...
             if not (rel.label=='enrichment' or rel.label=='hunt'):
                 continue
@@ -382,11 +405,17 @@ class HNTRPlugin(BasePlugin, ABC):
                 )
                 _log.info(f"{thing} deemed 'good enough' to enrich")
                 break
+        '''
+        # ! END REMOVAL
 
         if not thing_parent_acceptable:
             ignore_me = True
         return ignore_me
 
+    # ! REMOVE ME - THIS ONLY GETS CALLED BY ITSELF AND _add_data_as_attribute_new
+    # ! WHICH NEVER GETS CALLED...
+    # @ THIS SHOULD ALL BE REPLACED WITH jsonpath_ng
+    '''
     def _walk_data(
         self,
         data: Union[Dict, List]={},
@@ -417,7 +446,7 @@ class HNTRPlugin(BasePlugin, ABC):
                     for v in val:
                         # something about the attrlabel=='date-seen' feels hacky
                         # and I don't like it. But for now it's better than checking
-                        # to see if v is a string that can be converted succesfully
+                        # to see if v is a string that can be converted successfully
                         # to a datetime object first
                         if isinstance(v, datetime) or attrlabel=='date-seen':
                             v = self._format_date(v)
@@ -453,7 +482,10 @@ class HNTRPlugin(BasePlugin, ABC):
                     }
                     _log.error(pformat(d))
         return attrs
-
+    '''
+    # ! REMOVE ME - THIS NEVER GETS CALLED
+    # @ AND SHOULD BE REPLACED WITH jsonpath_ng ANYWAY
+    '''
     def _add_data_as_attribute_new(
         self,
         data: Dict = {},
@@ -504,6 +536,8 @@ class HNTRPlugin(BasePlugin, ABC):
                 if attr not in has:
                     has.append(attr)
         return has
+    '''
+    # ! END REMOVAL
 
     def _add_data_as_attribute(
         self,
@@ -603,7 +637,7 @@ class HNTRPlugin(BasePlugin, ABC):
             label='hunt-service',
             value=self.__class__.__name__
         )
-        search_object = Relation(
+        search_object = Entity(
             label="hunt",
             has = [active, service, endpoint, string]
         )
@@ -954,7 +988,7 @@ class HNTRPlugin(BasePlugin, ABC):
         confidence: Optional[float] = 0.0,
         add_as_enrichment: Optional[bool] = False,
         return_things: Optional[bool] = False,
-        source_things: Optional[Union[List[Thing], Thing]] = None,
+        # // source_things: Optional[Union[List[Thing], Thing]] = None,
     ):
         """Adds a hunt to the database
 
@@ -974,7 +1008,7 @@ class HNTRPlugin(BasePlugin, ABC):
         :param add_as_enrichment: Whether or not the hunt is an explicit `hunt`
             type or if it's an `enrichment` type.
         :param return_things: Return the Hunt as a Thing object after added.
-        :param source_things: Tie this hunt to a parent hunt (primarily for enrichments)
+        # // :param source_things: Tie this hunt to a parent hunt (primarily for enrichments)
 
         :returns: added_hunt Relation object (if return_things == True)
 
@@ -1022,22 +1056,20 @@ class HNTRPlugin(BasePlugin, ABC):
         has.append(attr)
 
         if not add_as_enrichment:
-            hunt = Relation(
+            hunt = Entity(
                 label='hunt',
                 has = has,
-                players = {},
             )
         else:
-            hunt = Relation(
+            hunt = Entity(
                 label='enrichment',
                 has = has,
-                players = {},
             )
 
-        if source_things:
-            if not isinstance(source_things, list):
-                source_things = [source_things]
-            hunt.players['enriches'] = source_things
+        # // if source_things:
+        # //     if not isinstance(source_things, list):
+        # //         source_things = [source_things]
+        # //     hunt.players['enriches'] = source_things
 
         _log.info(f"Adding Hunt: {hunt}")
         _log.debug(pformat(hunt.to_dict()))
@@ -1117,22 +1149,34 @@ class HNTRPlugin(BasePlugin, ABC):
                 endpoint = f"{self.__class__.__name__.lower()}_{endpoint}"
                 # if we made it this far, time to get the whole thing
                 thing = dbc.find_things(thing, search_mode='full')[0]
-                if not hasattr(thing, 'relations'):
-                    _log.info(f"{thing} has no attribute 'relations'!")
+                # ! REMOVE ME
+                # // if not hasattr(thing, 'relations'):
+                # //     _log.info(f"{thing} has no attribute 'relations'!")
+                # //     continue
+                # ! END REMOVE
+                if thing.get_attributes(keyattr, first_only=True):
+                    keyval = str(thing.get_attributes(keyattr, first_only=True).value)
+                if keyval is None:
+                    _log.error(f"No valid keyvalue found for {thing}!")
                     continue
 
                 # Check if enrichment already exists
                 enrich_exists = False
                 enrich_hunt_name = None
-                for rel in thing.relations:
-                    for attr in rel.has:
-                        if attr.label=='hunt-endpoint':
-                            if attr.value==endpoint:
-                                enrich_exists= True
-                                enrich_hunt_name = rel.get_attributes('hunt-name', first_only=True)
-                                break
-                    if enrich_exists:
-                        break
+                # ! REMOVE ME
+                # // for rel in thing.relations:
+                # //     for attr in rel.has:
+                # //         if attr.label=='hunt-endpoint':
+                # //             if attr.value==endpoint:
+                # //                 enrich_exists= True
+                # //                 enrich_hunt_name = rel.get_attributes('hunt-name', first_only=True)
+                # //                 break
+                # ! END REMOVE
+                he = Attribute(label='hunt-endpoint', value=endpoint)
+                hs = Attribute(label='hunt-string', value=keyval)
+                so = Entity(label='enrichment', has=[he, hs])
+                enrich_exists = dbc.find_things(so, search_mode='lite')[0]
+
                 if enrich_exists:
                     _log.info(f"{endpoint} enrichment already exists for {thing}")
                     if enrich_hunt_name and enrich_hunt_name not in thing.has:
@@ -1145,12 +1189,14 @@ class HNTRPlugin(BasePlugin, ABC):
                 # string as well as its hunt name.
                 if endpoint not in added_hunts:
                     added_hunts[endpoint] = {}
-                keyval = None
-                if thing.get_attributes(keyattr, first_only=True):
-                    keyval = str(thing.get_attributes(keyattr, first_only=True).value)
-                if keyval is None:
-                    _log.error(f"No valid keyvalue found for {thing}!")
-                    continue
+                # ! REMOVE ME
+                # // keyval = None
+                # // if thing.get_attributes(keyattr, first_only=True):
+                # //     keyval = str(thing.get_attributes(keyattr, first_only=True).value)
+                # // if keyval is None:
+                # //     _log.error(f"No valid keyvalue found for {thing}!")
+                # //     continue
+                # ! END REMOVE
                 if keyval not in added_hunts[endpoint]:
                     added_hunts[endpoint][keyval] = []
 
@@ -1160,9 +1206,8 @@ class HNTRPlugin(BasePlugin, ABC):
                 added_hunts[endpoint][keyval].append(thing)
 
         for endpoint, keyvals in added_hunts.items():
+            # ! REMOVE ME
             # api_conf = None
-            # Get the appropriate APIConf object for this endpoint
-
             '''
             for ac in self.api_confs:
                 if f"{self.__class__.__name__.lower()}_{ac.endpoint}" == endpoint:
@@ -1173,7 +1218,9 @@ class HNTRPlugin(BasePlugin, ABC):
                 _log.error(f"No APIConfig found for endpoint {endpoint}!")
                 continue
             '''
+            # ! END REMOVE
 
+            # Get the appropriate APIConf object for this endpoint
             ep = endpoint.replace(f"{self.__class__.__name__.lower()}_","")
             _log.info(f"self.api_confs: {self.api_confs}")
             ac = self.api_confs.get(ep)
@@ -1198,7 +1245,7 @@ class HNTRPlugin(BasePlugin, ABC):
                     hunt_active=api_conf.hunt_active,
                     hunt_name=hunt_name,
                     add_as_enrichment=True,
-                    source_things=things,
+                    # // source_things=things,
                     return_things=True,
                 )
                 # Add the hunt_name to all associated things
@@ -1260,13 +1307,19 @@ class HNTRPlugin(BasePlugin, ABC):
                     continue
                 hunt_name_attr = Attribute(label='hunt-name', value=hunt_name)
 
-                if 'found' not in hunt.players:
-                    hunt.players['found'] = []
+                # // if 'found' not in hunt.players:
+                # //     hunt.players['found'] = []
                 for thing in found['things']:
                     if isinstance(thing, Attribute):
                         if thing not in hunt.has:
                             hunt.has.append(thing)
                             continue
+                    # Make sure all Entity and Relation things have this 
+                    # hunt-name attached
+                    if hunt_name_attr not in thing.has:
+                        thing.has.append(hunt_name_attr)
+                    if isinstance(thing, Entity):
+                        bulk_add['entities'].append(thing)
                     if isinstance(thing, Relation):
                         for _, players in thing.players.items():
                             for player in players:
@@ -1274,13 +1327,17 @@ class HNTRPlugin(BasePlugin, ABC):
                                 # this relation may have discovered
                                 if hunt_name_attr not in player.has:
                                     player.has.append(hunt_name_attr)
-                                # make sure anything a connected relation discovered
-                                # is also related to the original hunt
-                                if player not in hunt.players['found']:
-                                    hunt.players['found'].append(player)
+                                # ! REMOVE ME - HUNTS ARE NOW ENTITIES
+                                # // # make sure anything a connected relation discovered
+                                # // # is also related to the original hunt
+                                # // if player not in hunt.players['found']:
+                                # //     hunt.players['found'].append(player)
+                                # ! END REMOVE
                         # finally, add the relation to the bulk-add
                         bulk_add['relations'].append(thing)
 
+                    # ! REMOVE ME - INSTEAD WE'LL MAKE SURE THE HUNT-NAME IS ATTACHED TO THE THING
+                    '''
                     if thing not in hunt.players['found']:
                         if not isinstance(thing, Attribute):
                             # basically, we're only adding Entities and Relations
@@ -1294,6 +1351,9 @@ class HNTRPlugin(BasePlugin, ABC):
                             hunt.players['found'].append(thing)
                             if isinstance(thing, Entity):
                                 bulk_add['entities'].append(thing)
+                    '''
+                    # ! END REMOVE
+                    
 
                 # add date-seen to hunt
                 bulk_add['relations'].append(hunt)
@@ -1379,7 +1439,7 @@ class HNTRPlugin(BasePlugin, ABC):
 
     def get_trigger_date(
         self,
-        thing: Relation = None,
+        thing: Entity = None,
     ):
         """Get trigger date for Hunt-or-Kill logic checks
 
@@ -1446,7 +1506,7 @@ class HNTRPlugin(BasePlugin, ABC):
     def hok_decision(
         self,
         dbc: ConnectorPlugin = None,
-        thing: Relation = None,
+        thing: Entity = None,
         reason: Optional[str] = None,
         hunted: Optional[bool] = False,
     ):
@@ -1461,7 +1521,7 @@ class HNTRPlugin(BasePlugin, ABC):
             - Add `hok:hunted|killed:<date>` note to thing
 
         :param dbc: Database ConnectorPlugin for checking logic
-        :params thing: 'Enrichment' or 'Hunt' relation object
+        :params thing: 'Enrichment' or 'Hunt' entity object
         :params reason: Reason for the hok_trigger firing
         :params hunted: If True, re-enable hunt. If False, leave as-is
         :returns: True
@@ -1502,7 +1562,7 @@ class HNTRPlugin(BasePlugin, ABC):
     def hok_trigger(
         self,
         dbc: ConnectorPlugin = None,
-        thing: Relation = None,
+        thing: Entity = None,
         reason: Optional[str] = None,
     ):
         """Trigger Hunt-or-Kill
@@ -1515,7 +1575,7 @@ class HNTRPlugin(BasePlugin, ABC):
             - Add `hok:<date>:<reason>` note to thing
 
         :param dbc: Database ConnectorPlugin for checking logic
-        :params thing: 'Enrichment' or 'Hunt' relation object
+        :params thing: 'Enrichment' or 'Hunt' Entity object
         :params reason: Reason for the hok_trigger firing
         :returns: True
         """
@@ -1618,7 +1678,7 @@ class HNTRPlugin(BasePlugin, ABC):
                 label='hunt-endpoint',
                 value=ep,
             )
-            ae_frame = Relation(label='enrichment', has=[hunt_active, hunt_ep])
+            ae_frame = Entity(label='enrichment', has=[hunt_active, hunt_ep])
             results = dbc.find_things(
                 ae_frame,
                 search_mode='no_backtrace',
@@ -1647,7 +1707,7 @@ class HNTRPlugin(BasePlugin, ABC):
         cached_hunts: Optional[Dict[str,str]] = "",
     ):
         """Run Active Hunts found in the database
-        After being fed a list of active hunts (Relation Objects labeled "hunt"
+        After being fed a list of active hunts (Entity Objects labeled "hunt"
         in the DB with "hunt-service" attribute == <this_service>), pull out their
         details (e.g. query string) and run them against the <service> API.
 
@@ -1673,7 +1733,7 @@ class HNTRPlugin(BasePlugin, ABC):
             {
                 'endpoint': {
                     'hunt_001': {
-                        'hunt': Relation(label='hunt'),
+                        'hunt': Entity(label='hunt'),
                         'found': {
                             'things': [thing1, thing2],
                             'raw': {<raw_json>},
@@ -1753,6 +1813,7 @@ class HNTRPlugin(BasePlugin, ABC):
 
         return hunt_results
 
+    # ; THIS CAN PROBABLY GO - IT DOESN'T APPEAR TO BE USED BY ANYTHING
     def scrub_junk(
         self,
         flat_res: Dict = None,
