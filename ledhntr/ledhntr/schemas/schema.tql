@@ -23,6 +23,11 @@ define
         plays hntr-relation:related,
         plays reference:referenced-by, # entity referenced-by entity
         plays reference:referenced, # entity referenced entity
+        # common threads that can be used to tie things together
+        owns domain-name,
+        owns fqdn,
+        owns ip-address,
+        # meta attributes
         owns ledid, # required for all relations
         owns confidence,
         owns date-discovered,
@@ -49,9 +54,6 @@ define
     host sub hntr-relation,
         relates hosted-on, # host hosted-on ip
         relates serves, # host serves network-service 
-        owns ip-address,
-        owns fqdn,
-        owns domain-name,
         owns name-server,
         owns comboid @key;
 
@@ -63,12 +65,10 @@ define
         relates resolves,
         relates answer,
         relates query,
-        owns comboid @key,
-        owns ip-address,
         owns dns-type,
         owns dns-value,
         owns name-server,
-        owns fqdn;
+        owns comboid @key;
 
     ############################
     #### Entities
@@ -79,6 +79,11 @@ define
         plays hntr-relation:related,
         plays reference:referenced-by, # entity referenced-by entity
         plays reference:referenced, # entity referenced entity
+        # common threads that can be used to tie things together
+        owns domain-name,
+        owns fqdn,
+        owns ip-address,
+        # meta attributes
         owns ledid, # required for all entities
         owns confidence,
         owns date-discovered,
@@ -112,22 +117,19 @@ define
         owns country-code,
         owns isp;
 
-    cert-host sub hntr-entity, # I hate this entity - it should be changed to ip.
-        owns comboid @key,
-        owns ip-address,
-        owns fqdn;
+    # I hate this entity. Planning to migrate it to the HOST relation
+    cert-host sub hntr-entity,
+        owns comboid @key;
 
     dns-record sub hntr-entity, # Trying to avoid this to consolidate Things
         plays resolution:query, # resolution resolved-from dns-record
         plays resolution:answer,
         plays resolution:resolves,
-        owns comboid @key,
         owns dns-server-type,
         owns dns-type,
         owns dns-value,
         owns name-server,
-        owns ip-address,
-        owns fqdn;
+        owns comboid @key;
 
     domain sub hntr-entity,
         # // plays registration:registered,
@@ -150,13 +152,15 @@ define
         owns email-subject,
         owns email-to,
         owns filename,
-        owns ip-address,
         owns link,
         owns md5,
         owns sha1,
         owns sha256,
         owns sha512;
 
+    # Required for making Relations that don't yet have players
+    # but really the new schema should negate the need for this entity
+    # going forward.
     empty-ent sub hntr-entity;
 
     # sub-type of hunt
@@ -197,7 +201,6 @@ define
 
     http sub hntr-entity,
         owns comboid @key,
-        owns ip-address,
         owns http-header-pair,
         owns http-headers-hash,
         owns http-html,
@@ -355,19 +358,14 @@ define
         owns misp-orgc,
         owns actor-name,
         owns alias,
-        owns domain-name,
         owns http-html,
-        owns ip-address,
         owns date-published,
         owns summary;
 
     network-service sub hntr-entity,
         plays host:serves,
-        owns comboid @key,
         owns cpe23,
-        owns domain-name,
         owns fingerprint,
-        owns fqdn,
         owns http-favicon-hash,
         owns http-header-pair,
         owns http-headers-hash,
@@ -376,7 +374,6 @@ define
         owns http-securitytxt-hash,
         owns http-sitemap-hash,
         owns http-title,
-        owns ip-address,
         owns issuer-c,
         owns issuer-cn,
         owns issuer-l,
@@ -401,7 +398,8 @@ define
         owns subject-o,
         owns subject-ou,
         owns subject-st,
-        owns uri;
+        owns uri,
+        owns comboid @key;
 
     os sub hntr-entity,
         owns comboid @key,
@@ -419,11 +417,18 @@ define
         owns vendor,
         owns version;
 
+    ssh sub hntr-entity,
+        owns cipher,
+        owns kex-algorithm,
+        owns encryption-algorithm,
+        owns mac-algorithm,
+        owns compression-algorithm,
+        owns fingerprint @key;
+
     ssl sub hntr-entity,
         owns cipher-bits,
         owns cipher-name,
         owns expires-date,
-        owns fqdn, # used for storing SANs
         owns issuer-c,
         owns issuer-cn,
         owns issued-date,
@@ -449,24 +454,23 @@ define
     trusted-third-party sub hntr-entity;
 
     url sub hntr-entity,
-        owns domain-name,
-        owns fqdn,
         owns uri @key;
+
+    vulns sub hntr-entity,
+        owns cve,
+        owns comboid @key;
 
     website sub hntr-entity,
         owns link @key,
         owns account-service; # Gmail/Reddit/GitHub/Twitter
 
     whois sub hntr-entity,
-        owns comboid @key,
         # ipwhois-specific fields
         owns as-number,
         owns as-name,
         owns country-code,
         owns isp,
         # normal whois fields
-        owns domain-name,
-        owns ip-address,
         owns first-name,
         owns last-name,
         owns email-address,
@@ -476,7 +480,8 @@ define
         owns registrar,
         owns created-date,
         owns expires-date,
-        owns name-server;
+        owns name-server,
+        owns comboid @key;
 
     ############################
     #### Attributes
@@ -522,6 +527,9 @@ define
     cidr-range sub attribute,
         value string;
 
+    cipher sub attribute,
+        value string;
+
     cipher-bits sub attribute,
         value string;
 
@@ -535,6 +543,9 @@ define
         value string;
 
     common-name sub attribute,
+        value string;
+
+    compression-algorithm sub attribute,
         value string;
 
     confidence sub attribute,
@@ -554,6 +565,9 @@ define
 
     created-date sub attribute,
         value datetime;
+    
+    cve sub attribute,
+        value string;
 
     date-discovered sub attribute,
         value datetime;
@@ -610,6 +624,9 @@ define
         value string;
 
     email-to sub attribute,
+        value string;
+
+    encryption-algorithm sub attribute,
         value string;
 
     expires-date sub attribute,
@@ -747,6 +764,9 @@ define
     json-blob sub attribute,
         value string;
 
+    kex-algorithm sub attribute,
+        value string;
+
     last-name sub attribute,
         value string;
 
@@ -757,6 +777,9 @@ define
         value datetime;
 
     link sub attribute,
+        value string;
+
+    mac-algorithm sub attribute,
         value string;
 
     md5 sub attribute,
