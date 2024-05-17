@@ -461,9 +461,11 @@ def _comboid_calc(obj):
     sha256 = None
 
     if not hasattr(obj, 'has'):
-        return sha256
+        # // return sha256
+        return Attribute(label='comboid', value="")
     if not hasattr(obj, 'meta_attrs'):
-        return sha256
+        # // return sha256
+        return Attribute(label='comboid', value="")
     
     comboid_attrs = {}
     for attr in obj.has:
@@ -473,7 +475,12 @@ def _comboid_calc(obj):
             comboid_attrs[attr.label]=[attr.value]
             continue
         comboid_attrs[attr.label].append(attr.value)
-    
+
+    if not comboid_attrs:
+        # ! If the only thing you have is Meta Attributes then you'll get an
+        # ! empty hash. Therefore you should instead return None because you
+        # ! have an invalid object.
+        return Attribute(label='comboid', value="")
     # Sort lists of values
     list_sorted = {}
     for k, v in comboid_attrs.items():

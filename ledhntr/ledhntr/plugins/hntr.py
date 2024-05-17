@@ -1616,6 +1616,8 @@ class HNTRPlugin(BasePlugin, ABC):
             'multipath' to '$.data[*]' subsequent attributes will now be just
             '$.port'.
 
+            See 'network-service' entity below for an example.
+
         {
             'attributes':[
                 {'jsonpath': '$.ip_str', 'label': 'ip-address'},
@@ -1698,7 +1700,7 @@ class HNTRPlugin(BasePlugin, ABC):
                     comboid = ent.get_comboid()
                     ent.has.append(comboid)
                 if not ent.keyval:
-                    print(f"Missing {ent.keyattr} from {ent}. Skipping creation.")
+                    _log.warning(f"Missing {ent.keyattr} from {ent}. Skipping creation.")
                     continue
                 entities.append(ent)
             return entities
@@ -1731,7 +1733,7 @@ class HNTRPlugin(BasePlugin, ABC):
                             comboid = rel.get_comboid()
                             rel.has.append(comboid)
                         if rel.keyattr and not rel.keyval:
-                            print(f"Missing {rel.keyattr} from {rel}. Skipping creation.")
+                            _log.warning(f"Missing {rel.keyattr} from {rel}. Skipping creation.")
                             continue
                     else:
                         continue
