@@ -21,33 +21,14 @@ from typing import Dict, List, Optional, DefaultDict, Union
 
 import ledhntr.helpers as helpers
 
-"""
-NOTE - I'm not going to change this right now because it would be catastrophic
-to everything I've already written, but this might be a better way to handle
-Thing.has -> https://stackoverflow.com/questions/67349486/best-way-to-get-object-reference-in-object-list-based-on-attribute-value
-
-It suggests Thing.has should be a dict instead of a list because then you could
-do Thing.get('ip-address') and it would either return a list of IPs, or None if
-there is no 'ip-address' Attribute associated with the Entity/Relation.
-
-This effectively would remove all the stupid loops all over the place that
-currently do for attr in thing.has -> if attr.label=='blah' -> do thing.
-
-Here's the suggested code that would replace the current thing.has lists:
-
-    attr = Attribute(label='test', value='test0')
-    test_attrs = [attr, Attribute(label='test', value='test1'), Attribute(label='test', value='test2')]
-    thing.has = {attr.label : attr for attr in test_attrs}
-    # thing.get('test') returns [attr, Attribute(label='test', value='test1'), Attribute(label='test', value='test2')]
-    # thing.get('asdf') returns None
-"""
-
 def _meta_attrs():
     """
     Meta Attributes are attribute labels that are explicitly ignored when
     making a comparison between two Entity objects. Things like date-seen
     should not be taken into account when determining if two entities are
     equal.
+    # ! NOTE - In case you find yourself adding to this list, rest assured
+    # ! that this is the only place you need to add to it.
     """
     meta_attrs = [
         'confidence',
@@ -57,13 +38,20 @@ def _meta_attrs():
         'first-seen',
         'frequency',
         'hunt-active',
-        'hunt-name',
+        # ! https://github.com/TheDr1ver/ledhntr-suite-public/issues/2
+        # // 'hunt-name',
         'last-hunted',
         'last-seen',
         'ledid',
+        'ledsrc',
         'note',
-        'tag',
         'ref-link',
+        'tag',
+        # ! adding these... really hope this doesn't break stuff
+        # ! that I've since forgotten about...
+        'hunt-endpoint',
+        'hunt-string',
+        'hunt-service',
     ]
     return meta_attrs
 

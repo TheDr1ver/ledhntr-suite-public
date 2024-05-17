@@ -29,14 +29,30 @@ define
         owns ip-address,
         # meta attributes
         owns ledid, # required for all relations
+        owns ledsrc,
+        #@##################################################################### 
+        #@## ledsrc will be used to link nodes together
+        #@## The idea being, whatever Attribute connected you to the 
+        #@## entity or relation you found should have its value saved
+        #@## as a generic ledsrc type to link back to the original source.
+        #@##
+        #@## Eventually ledsrc I think will replace hunt-name being 
+        #@## thrown around everywhere. This lets it be fluid enough for
+        #@## any string value to connect relations and entities,
+        #@## so it can effectively be the glue that ties related entities and
+        #@## relations together.
+        #@##
+        #@## ssl found on an IP? ledsrc=ip-addy + ledsrc=shodan-<fqdn>
+        #@## fqdn PDNS found an IP? ledsrc=fqdn + ledsrc=zeta-<fqdn>
+        #@#####################################################################
         owns confidence,
         owns date-discovered,
         owns date-seen,
         owns first-seen,
         owns hunt-name,
         owns last-seen,
-        owns ref-link,
         owns note,
+        owns ref-link,
         owns tag;
 
     attachment sub hntr-relation,
@@ -85,6 +101,22 @@ define
         owns ip-address,
         # meta attributes
         owns ledid, # required for all entities
+        owns ledsrc,
+        #@##################################################################### 
+        #@## ledsrc will be used to link nodes together
+        #@## The idea being, whatever Attribute connected you to the 
+        #@## entity or relation you found should have its value saved
+        #@## as a generic ledsrc type to link back to the original source.
+        #@##
+        #@## Eventually ledsrc I think will replace hunt-name being 
+        #@## thrown around everywhere. This lets it be fluid enough for
+        #@## any string value to connect relations and entities,
+        #@## so it can effectively be the glue that ties related entities and
+        #@## relations together.
+        #@##
+        #@## ssl found on an IP? ledsrc=ip-addy + ledsrc=shodan-<fqdn>
+        #@## fqdn PDNS found an IP? ledsrc=fqdn + ledsrc=zeta-<fqdn>
+        #@#####################################################################
         owns confidence,
         owns date-discovered,
         owns date-seen,
@@ -236,6 +268,7 @@ define
         plays reference:referenced-by, # entity referenced-by entity
         plays reference:referenced, # entity referenced entity
         owns ledid, # required for all relations
+        owns ledsrc,
         owns confidence,
         owns date-discovered,
         owns date-seen,
@@ -489,6 +522,10 @@ define
 
     # NOTE ledid required for all schemas using LED-HNTR
     ledid sub attribute,
+        value string;
+
+    # ledsrc used to glue together all discovered entities and relations
+    ledsrc sub attribute,
         value string;
 
     account-service sub attribute,

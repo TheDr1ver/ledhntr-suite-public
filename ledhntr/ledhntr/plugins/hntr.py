@@ -10,6 +10,7 @@ from typing import Dict, Optional
 from abc import abstractmethod, ABC
 from configparser import ConfigParser
 from datetime import datetime, timezone
+from jsonpath_ng import jsonpath, parse
 from pprint import pformat
 from time import time, sleep
 
@@ -1594,6 +1595,192 @@ class HNTRPlugin(BasePlugin, ABC):
         dbc.attach_attribute(thing, note)
 
         return True
+
+    def process_parsing_rules(
+        self,
+        data: dict = {}, 
+        rules: dict = {}, 
+        single: Optional[bool] = False,
+    ):
+        """process parsing rulesets
+        This takes a dict like this and uses it to parse large JSON blobs into 
+        LEDHNTR objects.
+
+        * 'jsonpath' values follow the jsonpath-ng syntax
+
+        * the 'multipath' value is used when there is expected to be more than
+            one entity or relation generated from a single level in the JSON.
+            Keep in mind this will truncate jsonpaths for all sub-level attributes
+            within that entity label. Therefore what may have previously been
+            a bunch of attributes that looked like '$.data[*].port' if you set
+            'multipath' to '$.data[*]' subsequent attributes will now be just
+            '$.port'.
+
+        {
+            'attributes':[
+                {'jsonpath': '$.ip_str', 'label': 'ip-address'},
+                {'jsonpath': '$.last_update', 'label': 'last-update'},
+                {'jsonpath': '$.tags[*]', 'label': 'tag'}
+            ],
+            'entities': [
+                {'label': 'hostname', 'has': [
+                    {'jsonpath': '$.hostnames[*]', 'label': 'fqdn'},
+                    {'jsonpath': '$.ip_str', 'label': 'ip-address'}
+                ]},
+                {'label': 'network-service', 'multipath': '$.data[*]', 'has': [
+                    {'type': 'attribute', 'jsonpath': '$.port', 'label': 'port'},
+                    {'type': 'attribute', 'jsonpath': '$.product', 'label': 'product'},
+                    {'type': 'attribute', 'jsonpath': '$.version', 'label': 'version'},
+                ]},
+                {'label': 'domain', 'has': [
+                    {'jsonpath': '$.domains[*]', 'label': 'domain-name'},
+                    {'jsonpath': '$.ip_str', 'label': 'ip-address'}
+                ]},
+            ],
+            'relations': [
+                {'label': 'resolution', 'has': [
+                    {'jsonpath': '$.hostnames[*]', 'label': 'fqdn'},
+                    {'jsonpath': '$.ip_str', 'label': 'ip-address'}
+                ], 'players': {
+                    'query': [{'label': 'hostname', 'has': [
+                        {'jsonpath': '$.hostnames[*]', 'label': 'fqdn'},
+                        {'jsonpath': '$.ip_str', 'label': 'ip-address'}
+                    ]}],
+                    'answer': [{'label': 'ip', 'has': [
+                        {'jsonpath': '$.ip_str', 'label': 'ip-address'}
+                    ]}]
+                }}
+            ],
+        }
+
+        
+        ===OR===
+
+        If you're using the single=True flag, you may parse a single rule dict, but
+        it MUST contain the 'type' key identifying if it's an Attribute, Entity,
+        or Relation.
+
+
+        :param data: the json.load'ed blob to parse
+        :param rules: A rule dictionary formatted like one of the two examples above
+        :param single: If True, make sure you send a single dictionary with the 'type'
+            key indicating whether it's an Attribute, Entity, or Relation.
+
+        :returns: Either a dictionary of {'attributes':[], 'entities':[], 'relations':[]}
+            with each bucket containing properly parsed LEDHTNR Thing Objects,
+            
+            ===OR===
+
+            If you're using the single=True flag, it will return a single Thing Object.
+
+        """
+        _log = self.logger
+        def parse_attributes(data, rules):
+            attributes = []
+            for rule in rules:
+                jsonpath_expr = parse(rule['jsonpath'])
+                matches = [match.value for match in jsonpath_expr.find(data)]
+                for match in matches:
+                    attributes.append(Attribute(label=rule['label'], value=match))
+            return attributes
+
+        def generate_entity(data, rule, sub_data=None):
+            entities = []
+            sub_data_list = sub_data or [data]
+            for item in sub_data_list:
+                ent = Entity(label=rule['label'], has=[])
+                for sub_rule in rule.get('has', []):
+                    jsonpath_expr = parse(sub_rule['jsonpath'])
+                    matches = [match.value for match in jsonpath_expr.find(item)]
+                    for match in matches:
+                        ent.has.append(Attribute(label=sub_rule['label'], value=match))
+                if ent.keyattr == 'comboid':
+                    comboid = ent.get_comboid()
+                    ent.has.append(comboid)
+                if not ent.keyval:
+                    print(f"Missing {ent.keyattr} from {ent}. Skipping creation.")
+                    continue
+                entities.append(ent)
+            return entities
+
+        def parse_entities(data, rules):
+            all_entities = []
+            for rule in rules:
+                if 'multipath' in rule:
+                    jsonpath_expr = parse(rule['multipath'])
+                    sub_data_list = [match.value for match in jsonpath_expr.find(data)]
+                else:
+                    sub_data_list = [data]
+                newents = generate_entity(data, rule, sub_data_list)
+                if newents:
+                    all_entities += newents
+            return all_entities
+
+        def generate_relation(data, rule, sub_data=None):
+            relations = []
+            sub_data_list = sub_data or [data]
+            for item in sub_data_list:
+                rel = Relation(label=rule['label'], has=[])
+                for sub_rule in rule.get('has', []):
+                    jsonpath_expr = parse(sub_rule['jsonpath'])
+                    matches = [match.value for match in jsonpath_expr.find(item)]
+                    for match in matches:
+                        rel.has.append(Attribute(label=sub_rule['label'], value=match))
+                    if rel.has or rel.players:
+                        if rel.keyattr == 'comboid':
+                            comboid = rel.get_comboid()
+                            rel.has.append(comboid)
+                        if rel.keyattr and not rel.keyval:
+                            print(f"Missing {rel.keyattr} from {rel}. Skipping creation.")
+                            continue
+                    else:
+                        continue
+                relations.append(rel)
+            return relations
+
+        def parse_relations(data, rules):
+            all_relations = []
+            for rule in rules:
+                if 'multipath' in rule:
+                    jsonpath_expr = parse(rule['multipath'])
+                    sub_data_list = [match.value for match in jsonpath_expr.find(data)]
+                else:
+                    sub_data_list = [data]
+                newrels = generate_relation(data, rule, sub_data_list)
+                if not newrels:
+                    continue
+                for relation in newrels:
+                    players = rule.get('players', [])
+                    for player_type, player_rules in players.items():
+                        for player_rule in player_rules:
+                            player_entity = generate_entity(data, player_rule)
+                            if player_entity.has:
+                                if 'players' not in relation:
+                                    relation['players'] = {}
+                                if player_type not in relation['players']:
+                                    relation['players'][player_type] = []
+                                relation['players'][player_type].append(player_entity)
+                    all_relations.append(relation)
+
+            return all_relations
+
+        if not single:
+            parsed = {
+                'attributes': parse_attributes(data, rules.get('attributes', [])),
+                'entities': parse_entities(data, rules.get('entities', [])),
+                'relations': parse_relations(data, rules.get('relations', []))
+            }
+        else:
+            _log
+            parsed = []
+            ttype = rules.get('type', [])
+            if ttype == 'attribute':
+                parsed = parse_attributes(data, [rules])
+            elif ttype == 'entity':
+                parsed = parse_entities(data, [rules])
+            elif ttype == 'relation':
+                parsed = parse_relations(data, [rules])
+        return parsed
 
     def purge_empty_things(self, things: List[Thing] = []):
         """Gets rid of all None objects in a list of Things

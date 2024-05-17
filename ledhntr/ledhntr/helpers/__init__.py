@@ -191,21 +191,27 @@ def diff_entities(
     }
 
     # sensitive attributes should never be removed based on a diff
+    # If they are to change, they would need to be explicitly replaced by a
+    # call to replace_attribute()
+    # ! https://github.com/TheDr1ver/ledhntr-suite-public/issues/2
+    '''
     sensitive_attrs = [
         'confidence',
         'date-discovered',
         'date-seen',
         'first-seen',
-        'last-seen',
         'frequency',
-        'note',
-        'tag',
         'hunt-active',
         'hunt-endpoint',
         'hunt-string',
         'hunt-service',
+        'last-seen',
+        'note',
         'ref-link',
+        'tag',
     ]
+    '''
+    sensitive_attrs = old_entity.meta_attrs
 
     for old_attr in old_entity.has:
         if old_attr.label in sensitive_attrs:
