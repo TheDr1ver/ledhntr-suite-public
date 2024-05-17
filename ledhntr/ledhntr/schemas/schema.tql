@@ -23,10 +23,6 @@ define
         plays hntr-relation:related,
         plays reference:referenced-by, # entity referenced-by entity
         plays reference:referenced, # entity referenced entity
-        # common threads that can be used to tie things together
-        owns domain-name,
-        owns fqdn,
-        owns ip-address,
         # meta attributes
         owns ledid, # required for all relations
         owns ledsrc,
@@ -83,6 +79,9 @@ define
         relates query,
         owns dns-type,
         owns dns-value,
+        owns domain-name,
+        owns fqdn,
+        owns ip-address,
         owns name-server,
         owns comboid @key;
 
@@ -95,10 +94,6 @@ define
         plays hntr-relation:related,
         plays reference:referenced-by, # entity referenced-by entity
         plays reference:referenced, # entity referenced entity
-        # common threads that can be used to tie things together
-        owns domain-name,
-        owns fqdn,
-        owns ip-address,
         # meta attributes
         owns ledid, # required for all entities
         owns ledsrc,
@@ -151,6 +146,8 @@ define
 
     # I hate this entity. Planning to migrate it to the HOST relation
     cert-host sub hntr-entity,
+        owns fqdn,
+        owns ip-address,
         owns comboid @key;
 
     dns-record sub hntr-entity, # Trying to avoid this to consolidate Things
@@ -160,6 +157,8 @@ define
         owns dns-server-type,
         owns dns-type,
         owns dns-value,
+        owns fqdn,
+        owns ip-address,
         owns name-server,
         owns comboid @key;
 
@@ -232,7 +231,6 @@ define
         owns status-meaning;
 
     http sub hntr-entity,
-        owns comboid @key,
         owns http-header-pair,
         owns http-headers-hash,
         owns http-html,
@@ -243,8 +241,10 @@ define
         owns http-robots-hash,
         owns http-securitytxt-hash,
         owns http-sitemap-hash,
+        owns http-title,
+        owns ip-address,
         owns status-code,
-        owns http-title;
+        owns comboid @key;
 
     geoloc sub hntr-entity,
         owns comboid @key,
@@ -294,7 +294,7 @@ define
         owns filename,
         owns fingerprint,
         owns first-name,
-        owns fqdn,
+        owns fqdn, # used for storing SANs
         owns hash,
         owns http-favicon-hash,
         owns http-header-pair,
@@ -385,20 +385,24 @@ define
         owns jarm-tls-ext;
 
     misp-event sub hntr-entity,
-        owns misp-event-info @key,
+        owns actor-name,
+        owns alias,
+        owns date-published,
+        owns domain-name,
+        owns http-html,
+        owns ip-address,
         owns link,
         owns misp-org,
         owns misp-orgc,
-        owns actor-name,
-        owns alias,
-        owns http-html,
-        owns date-published,
-        owns summary;
+        owns summary,
+        owns misp-event-info @key;
 
     network-service sub hntr-entity,
         plays host:serves,
         owns cpe23,
+        owns domain-name,
         owns fingerprint,
+        owns fqdn,
         owns http-favicon-hash,
         owns http-header-pair,
         owns http-headers-hash,
@@ -407,6 +411,7 @@ define
         owns http-securitytxt-hash,
         owns http-sitemap-hash,
         owns http-title,
+        owns ip-address,
         owns issuer-c,
         owns issuer-cn,
         owns issuer-l,
@@ -487,6 +492,8 @@ define
     trusted-third-party sub hntr-entity;
 
     url sub hntr-entity,
+        owns domain-name,
+        owns fqdn,
         owns uri @key;
 
     vulns sub hntr-entity,
@@ -494,8 +501,8 @@ define
         owns comboid @key;
 
     website sub hntr-entity,
-        owns link @key,
-        owns account-service; # Gmail/Reddit/GitHub/Twitter
+        owns account-service,
+        owns link @key; # Gmail/Reddit/GitHub/Twitter
 
     whois sub hntr-entity,
         # ipwhois-specific fields
@@ -504,16 +511,18 @@ define
         owns country-code,
         owns isp,
         # normal whois fields
-        owns first-name,
-        owns last-name,
-        owns email-address,
-        owns phone-number,
-        owns fax-number,
-        owns org,
-        owns registrar,
         owns created-date,
+        owns domain-name,
+        owns email-address,
         owns expires-date,
+        owns fax-number,
+        owns first-name,
+        owns ip-address,
+        owns last-name,
         owns name-server,
+        owns org,
+        owns phone-number,
+        owns registrar,
         owns comboid @key;
 
     ############################
