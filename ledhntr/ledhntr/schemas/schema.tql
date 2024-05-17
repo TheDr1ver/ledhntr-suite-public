@@ -233,13 +233,16 @@ define
     http sub hntr-entity,
         owns http-header-pair,
         owns http-headers-hash,
+        owns http-host,
         owns http-html,
         owns http-html-hash,
         owns http-html-size,
+        owns http-location,
         owns http-protocol,
         owns http-favicon-hash,
         owns http-robots-hash,
         owns http-securitytxt-hash,
+        owns http-server,
         owns http-sitemap-hash,
         owns http-title,
         owns ip-address,
@@ -254,6 +257,8 @@ define
         owns city,
         owns postal-code,
         owns timezone,
+        owns latitude,
+        owns longitude,
         owns province,
         owns registered-country,
         owns registered-country-code;
@@ -711,10 +716,16 @@ define
     hash sub attribute,
         value string;
 
+    http-favicon-hash sub attribute,
+        value string;
+
     http-header-pair sub attribute,
         value string;
 
     http-headers-hash sub attribute,
+        value string;
+
+    http-host sub attribute,
         value string;
 
     http-html sub attribute,
@@ -726,7 +737,7 @@ define
     http-html-size sub attribute,
         value double;
 
-    http-favicon-hash sub attribute,
+    http-location sub attribute,
         value string;
 
     http-protocol sub attribute,
@@ -736,6 +747,9 @@ define
         value string;
 
     http-securitytxt-hash sub attribute,
+        value string;
+
+    http-server sub attribute,
         value string;
 
     http-sitemap-hash sub attribute,
@@ -822,7 +836,13 @@ define
     last-seen sub attribute,
         value datetime;
 
+    latitude sub attribute,
+        value string;
+
     link sub attribute,
+        value string;
+
+    longitude sub attribute,
         value string;
 
     mac-algorithm sub attribute,

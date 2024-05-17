@@ -301,12 +301,119 @@ class Shodan(HNTRPlugin):
         if 'total' not in raw:
             _log.error(f"Expected 'total' in response: {raw}")
             return all_things
+        parsing_rules = {
+            'attributes': [
+                {'jsonpath': '$.ip_str', 'label': 'ip-address'},
+                {'jsonpath': '$.last_update', 'label': 'last-update'},
+                {'jsonpath': '$.tags[*]', 'label': 'tag'}
+            ],
+            'entities': [
+                {'label': 'hostname', 'has': [
+                    {'jsonpath': '$.hostnames[*]', 'label': 'fqdn'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
+                ]},
+                {'label': 'domain', 'has': [
+                    {'jsonpath': '$.domains[*]', 'label': 'domain-name'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
+                ]},
+                {'label': 'geoloc', 'has': [
+                    {'jsonpath': '$.location.city', 'label': 'city'},
+                    {'jsonpath': '$.location.region_code', 'label': 'province'},
+                    {'jsonpath': '$.location.country_code', 'label': 'country-code'},
+                    {'jsonpath': '$.location.country_name', 'label': 'country'},
+                    {'jsonpath': '$.location.latitude', 'label': 'latitude'},
+                    {'jsonpath': '$.location.longitude', 'label': 'longitude'},
+                    {'jsonpath': '$.location.postal_code', 'label': 'postal-code'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
+                ]},
+                {'label': 'autonomous-system', 'has': [
+                    {'jsonpath': '$.asn', 'label': 'as-number'},
+                    {'jsonpath': '$.isp', 'label': 'isp'},
+                    {'jsonpath': '$.org', 'label': 'as-name'},
+                    {'jsonpath': '$.location.country_code', 'label': 'country-code'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
+                ]},
+                {'label': 'network-service', 'has': [
+                    {'jsonpath': '$.port', 'label': 'port'},
+                    {'jsonpath': '$.product', 'label': 'product'},
+                    {'jsonpath': '$.version', 'label': 'version'},
+                    {'jsonpath': '$.data', 'label': 'service-header'},
+                    {'jsonpath': '$.timestamp', 'label': 'date-seen'},
+                    {'jsonpath': '$.cpe23[*]', 'label': 'cpe23'},
+                    {'jsonpath': '$.hash', 'label': 'shodan-hash'},
+                    {'jsonpath': '$.hostnames[*]', 'label': 'fqdn'},
+                    {'jsonpath': '$.domains[*]', 'label': 'domain-name'},
+                    {'jsonpath': '$.ip_str', 'label': 'ip-address'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
+                ]},
+                {'label': 'ssh', 'has': [
+                    {'jsonpath': '$.ssh.cipher', 'label': 'cipher'},
+                    {'jsonpath': '$.ssh.fingerprint', 'label': 'fingerprint'},
+                    {'jsonpath': '$.ssh.kex.kex_algorithms[*]', 'label': 'kex-algorithm'},
+                    {'jsonpath': '$.ssh.kex.encryption_algorithms[*]', 'label': 'encryption-algorithm'},
+                    {'jsonpath': '$.ssh.kex.mac_algorithms[*]', 'label': 'mac-algorithm'},
+                    {'jsonpath': '$.ssh.kex.compression_algorithms[*]', 'label': 'compression-algorithm'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
+                ]},
+                {'label': 'http', 'has': [
+                    {'jsonpath': '$.http.server', 'label': 'http-server'},
+                    {'jsonpath': '$.http.host', 'label': 'http-host'},
+                    {'jsonpath': '$.http.location', 'label': 'http-location'},
+                    {'jsonpath': '$.http.title', 'label': 'http-title'},
+                    {'jsonpath': '$.http.headers_hash', 'label': 'http-headers-hash'},
+                    {'jsonpath': '$.http.html_hash', 'label': 'http-html-hash'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
+                ]},
+                {'label': 'ip', 'has': [
+                    {'jsonpath': '$.ip_str', 'label': 'ip-address'},
+                    {'jsonpath': '$.hostnames[*]', 'label': 'fqdn'},
+                    {'jsonpath': '$.domains[*]', 'label': 'domain-name'},
+                    {'jsonpath': '$.last_update', 'label': 'last-seen'},
+                    {'jsonpath': '$.tags[*]', 'label': 'tag'},
+                ]},
+                {'label': 'vulns', 'has': [
+                    {'jsonpath': '$.vulns[*]', 'label': 'cve'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
+                    {'jsonpath': '$.last_update', 'label': 'last-seen'},
+                ]},
+                {'label': 'ssl', 'has': [
+                    {'jsonpath': '$.ssl.jarm', 'label': 'jarm-fingerprint'},
+                    {'jsonpath': '$.ssl.ja3s', 'label': 'ja3s'},
+                    {'jsonpath': '$.ssl.cert.fingerprint.sha256', 'label': 'fingerprint'},
+                    {'jsonpath': '$.ssl.cert.subject.CN', 'label': 'subject-cn'},
+                    {'jsonpath': '$.ssl.cert.subject.L', 'label': 'subject-l'},
+                    {'jsonpath': '$.ssl.cert.subject.O', 'label': 'subject-o'},
+                    {'jsonpath': '$.ssl.cert.subject.C', 'label': 'subject-c'},
+                    {'jsonpath': '$.ssl.cert.subject.ST', 'label': 'subject-st'},
+                    {'jsonpath': '$.ssl.cert.subject.OU', 'label': 'subject-ou'},
+                    {'jsonpath': '$.ssl.cert.issuer.CN', 'label': 'issuer-cn'},
+                    {'jsonpath': '$.ssl.cert.issuer.L', 'label': 'issuer-l'},
+                    {'jsonpath': '$.ssl.cert.issuer.O', 'label': 'issuer-o'},
+                    {'jsonpath': '$.ssl.cert.issuer.C', 'label': 'issuer-c'},
+                    {'jsonpath': '$.ssl.cert.issuer.ST', 'label': 'issuer-st'},
+                    {'jsonpath': '$.ssl.cert.issuer.OU', 'label': 'issuer-ou'},
+                    {'jsonpath': '$.ssl.cipher.name', 'label': 'cipher-name'},
+                    {'jsonpath': '$.ssl.cipher.bits', 'label': 'cipher-bits'},
+                    {'jsonpath': '$.ssl.cipher.version', 'label': 'version'},
+                    {'jsonpath': '$.ssl.cert.pubkey.bits', 'label': 'pubkey-bits'},
+                    {'jsonpath': '$.ssl.cert.pubkey.type', 'label': 'pubkey-type'},
+                    {'jsonpath': '$.ssl.cert.sig_alg', 'label': 'sig-alg'},
+                    {'jsonpath': '$.ssl.cert.issued', 'label': 'issued-date'},
+                    {'jsonpath': '$.ssl.cert.expires', 'label': 'expires-date'},
+                    {'jsonpath': '$.ssl.versions[*]', 'label': 'version'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
+                ]}
+            ],
+            'relations': [],
+        }
+
         for match in raw['matches']:
-            dr_match = {'data': match}
-            things = self.new_parse_hosts(dr_match)
-            for thing in things:
-                if thing not in all_things:
-                    all_things.append(thing)
+            parsed_results = self.process_parsing_rules(match, parsing_rules)
+            for _, things in parsed_results.items():
+                # things = self.new_parse_hosts(dr_match)
+                for thing in things:
+                    if thing not in all_things:
+                        all_things.append(thing)
         return all_things
 
     def new_parse_hosts(
@@ -325,29 +432,29 @@ class Shodan(HNTRPlugin):
             ],
             'entities': [
                 {'label': 'hostname', 'has': [
-                    {'jsonpath': '$.hostnames[*] | $.data[*].hostnames[*]', 'label': 'fqdn'},
-                    {'jsonpath': '$.ip_str | $.data[*].ip_str', 'label': 'ledsrc'}
+                    {'jsonpath': '$.hostnames[*]', 'label': 'fqdn'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
                 ]},
                 {'label': 'domain', 'has': [
-                    {'jsonpath': '$.domains[*] | $.data[*].domains[*]', 'label': 'domain-name'},
-                    {'jsonpath': '$.ip_str | $.data[*].ip_str', 'label': 'ledsrc'}
+                    {'jsonpath': '$.domains[*]', 'label': 'domain-name'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
                 ]},
                 {'label': 'geoloc', 'has': [
-                    {'jsonpath': '$.location.city | $.data[*].location.city', 'label': 'city'},
-                    {'jsonpath': '$.location.region_code | $.data[*].location.region_code', 'label': 'province'},
-                    {'jsonpath': '$.location.country_code | $.data[*].location.country_code', 'label': 'country-code'},
-                    {'jsonpath': '$.location.country_name | $.data[*].location.country_name', 'label': 'country'},
-                    {'jsonpath': '$.location.latitude | $.data[*].location.latitude', 'label': 'latitude'},
-                    {'jsonpath': '$.location.longitude | $.data[*].location.longitude', 'label': 'longitude'},
-                    {'jsonpath': '$.location.postal_code | $.data[*].location.postal_code', 'label': 'postal-code'},
-                    {'jsonpath': '$.ip_str | $.data[*].ip_str', 'label': 'ledsrc'}
+                    {'jsonpath': '$.location.city', 'label': 'city'},
+                    {'jsonpath': '$.location.region_code', 'label': 'province'},
+                    {'jsonpath': '$.location.country_code', 'label': 'country-code'},
+                    {'jsonpath': '$.location.country_name', 'label': 'country'},
+                    {'jsonpath': '$.location.latitude', 'label': 'latitude'},
+                    {'jsonpath': '$.location.longitude', 'label': 'longitude'},
+                    {'jsonpath': '$.location.postal_code', 'label': 'postal-code'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                 ]},
                 {'label': 'autonomous-system', 'has': [
-                    {'jsonpath': '$.asn | $.data[*].asn', 'label': 'as-number'},
-                    {'jsonpath': '$.isp | $.data[*].isp', 'label': 'isp'},
-                    {'jsonpath': '$.org | $.data[*].org', 'label': 'as-name'},
-                    {'jsonpath': '$.location.country_code | $.data[*].location.country_code', 'label': 'country-code'},
-                    {'jsonpath': '$.ip_str | $.data[*].ip_str', 'label': 'ledsrc'}
+                    {'jsonpath': '$.asn', 'label': 'as-number'},
+                    {'jsonpath': '$.isp', 'label': 'isp'},
+                    {'jsonpath': '$.org', 'label': 'as-name'},
+                    {'jsonpath': '$.location.country_code', 'label': 'country-code'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                 ]},
                 {'label': 'network-service', 'multipath': '$.data[*]', 'has': [
                     {'jsonpath': '$.port', 'label': 'port'},
@@ -360,72 +467,73 @@ class Shodan(HNTRPlugin):
                     {'jsonpath': '$.hostnames[*]', 'label': 'fqdn'},
                     {'jsonpath': '$.domains[*]', 'label': 'domain-name'},
                     {'jsonpath': '$.ip_str', 'label': 'ip-address'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
+                ]},
+                {'label': 'ssh', 'multipath': '$.data[*]', 'has': [
+                    {'jsonpath': '$.ssh.cipher', 'label': 'cipher'},
+                    {'jsonpath': '$.ssh.fingerprint', 'label': 'fingerprint'},
+                    {'jsonpath': '$.ssh.kex.kex_algorithms[*]', 'label': 'kex-algorithm'},
+                    {'jsonpath': '$.ssh.kex.encryption_algorithms[*]', 'label': 'encryption-algorithm'},
+                    {'jsonpath': '$.ssh.kex.mac_algorithms[*]', 'label': 'mac-algorithm'},
+                    {'jsonpath': '$.ssh.kex.compression_algorithms[*]', 'label': 'compression-algorithm'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
                 ]},
-                {'label': 'ssh', 'has': [
-                    {'jsonpath': '$.data[*].ssh.cipher', 'label': 'cipher'},
-                    {'jsonpath': '$.data[*].ssh.fingerprint', 'label': 'fingerprint'},
-                    {'jsonpath': '$.data[*].ssh.kex.kex_algorithms[*]', 'label': 'kex-algorithm'},
-                    {'jsonpath': '$.data[*].ssh.kex.encryption_algorithms[*]', 'label': 'encryption-algorithm'},
-                    {'jsonpath': '$.data[*].ssh.kex.mac_algorithms[*]', 'label': 'mac-algorithm'},
-                    {'jsonpath': '$.data[*].ssh.kex.compression_algorithms[*]', 'label': 'compression-algorithm'},
-                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
-                ]},
-                {'label': 'http', 'has': [
-                    {'jsonpath': '$.data[*].http.server', 'label': 'http-server'},
-                    {'jsonpath': '$.data[*].http.host', 'label': 'http-host'},
-                    {'jsonpath': '$.data[*].http.location', 'label': 'http-location'},
-                    {'jsonpath': '$.data[*].http.title', 'label': 'http-title'},
-                    {'jsonpath': '$.data[*].http.headers_hash', 'label': 'http-headers-hash'},
-                    {'jsonpath': '$.data[*].http.html_hash', 'label': 'http-html-hash'},
+                {'label': 'http', 'multipath': '$.data[*]', 'has': [
+                    {'jsonpath': '$.http.server', 'label': 'http-server'},
+                    {'jsonpath': '$.http.host', 'label': 'http-host'},
+                    {'jsonpath': '$.http.location', 'label': 'http-location'},
+                    {'jsonpath': '$.http.title', 'label': 'http-title'},
+                    {'jsonpath': '$.http.headers_hash', 'label': 'http-headers-hash'},
+                    {'jsonpath': '$.http.html_hash', 'label': 'http-html-hash'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
                 ]},
                 {'label': 'ip', 'has': [
-                    {'jsonpath': '$.ip_str | $.data[*].ip_str', 'label': 'ip-address'},
-                    {'jsonpath': '$.hostnames[*] | $.data[*].hostnames[*]', 'label': 'fqdn'},
-                    {'jsonpath': '$.domains[*] | $.data[*].domains[*]', 'label': 'domain-name'},
+                    {'jsonpath': '$.ip_str', 'label': 'ip-address'},
+                    {'jsonpath': '$.hostnames[*]', 'label': 'fqdn'},
+                    {'jsonpath': '$.domains[*]', 'label': 'domain-name'},
                     {'jsonpath': '$.last_update', 'label': 'last-seen'},
-                    {'jsonpath': '$.tags[*]', 'label': 'tag'}
+                    {'jsonpath': '$.tags[*]', 'label': 'tag'},
                 ]},
                 {'label': 'vulns', 'has': [
                     {'jsonpath': '$.vulns[*]', 'label': 'cve'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
-                    {'jsonpath': '$.last_update', 'label': 'last-seen'}
+                    {'jsonpath': '$.last_update', 'label': 'last-seen'},
                 ]},
-                {'label': 'ssl', 'has': [
-                    {'jsonpath': '$.data[*].ssl.jarm', 'label': 'jarm-fingerprint'},
-                    {'jsonpath': '$.data[*].ssl.ja3s', 'label': 'ja3s'},
-                    {'jsonpath': '$.data[*].ssl.cert.fingerprint.sha256', 'label': 'fingerprint'},
-                    {'jsonpath': '$.data[*].ssl.cert.subject.CN', 'label': 'subject-cn'},
-                    {'jsonpath': '$.data[*].ssl.cert.subject.L', 'label': 'subject-l'},
-                    {'jsonpath': '$.data[*].ssl.cert.subject.O', 'label': 'subject-o'},
-                    {'jsonpath': '$.data[*].ssl.cert.subject.C', 'label': 'subject-c'},
-                    {'jsonpath': '$.data[*].ssl.cert.subject.ST', 'label': 'subject-st'},
-                    {'jsonpath': '$.data[*].ssl.cert.subject.OU', 'label': 'subject-ou'},
-                    {'jsonpath': '$.data[*].ssl.cert.issuer.CN', 'label': 'issuer-cn'},
-                    {'jsonpath': '$.data[*].ssl.cert.issuer.L', 'label': 'issuer-l'},
-                    {'jsonpath': '$.data[*].ssl.cert.issuer.O', 'label': 'issuer-o'},
-                    {'jsonpath': '$.data[*].ssl.cert.issuer.C', 'label': 'issuer-c'},
-                    {'jsonpath': '$.data[*].ssl.cert.issuer.ST', 'label': 'issuer-st'},
-                    {'jsonpath': '$.data[*].ssl.cert.issuer.OU', 'label': 'issuer-ou'},
-                    {'jsonpath': '$.data[*].ssl.cipher.name', 'label': 'cipher-name'},
-                    {'jsonpath': '$.data[*].ssl.cipher.bits', 'label': 'cipher-bits'},
-                    {'jsonpath': '$.data[*].ssl.cipher.version', 'label': 'version'},
-                    {'jsonpath': '$.data[*].ssl.cert.pubkey.bits', 'label': 'pubkey-bits'},
-                    {'jsonpath': '$.data[*].ssl.cert.pubkey.type', 'label': 'pubkey-type'},
-                    {'jsonpath': '$.data[*].ssl.cert.sig_alg', 'label': 'sig-alg'},
-                    {'jsonpath': '$.data[*].ssl.cert.issued', 'label': 'issued-date'},
-                    {'jsonpath': '$.data[*].ssl.cert.expires', 'label': 'expires-date'},
-                    {'jsonpath': '$.data[*].ssl.versions[*]', 'label': 'version'},
+                {'label': 'ssl', 'multipath': '$.data[*]', 'has': [
+                    {'jsonpath': '$.ssl.jarm', 'label': 'jarm-fingerprint'},
+                    {'jsonpath': '$.ssl.ja3s', 'label': 'ja3s'},
+                    {'jsonpath': '$.ssl.cert.fingerprint.sha256', 'label': 'fingerprint'},
+                    {'jsonpath': '$.ssl.cert.subject.CN', 'label': 'subject-cn'},
+                    {'jsonpath': '$.ssl.cert.subject.L', 'label': 'subject-l'},
+                    {'jsonpath': '$.ssl.cert.subject.O', 'label': 'subject-o'},
+                    {'jsonpath': '$.ssl.cert.subject.C', 'label': 'subject-c'},
+                    {'jsonpath': '$.ssl.cert.subject.ST', 'label': 'subject-st'},
+                    {'jsonpath': '$.ssl.cert.subject.OU', 'label': 'subject-ou'},
+                    {'jsonpath': '$.ssl.cert.issuer.CN', 'label': 'issuer-cn'},
+                    {'jsonpath': '$.ssl.cert.issuer.L', 'label': 'issuer-l'},
+                    {'jsonpath': '$.ssl.cert.issuer.O', 'label': 'issuer-o'},
+                    {'jsonpath': '$.ssl.cert.issuer.C', 'label': 'issuer-c'},
+                    {'jsonpath': '$.ssl.cert.issuer.ST', 'label': 'issuer-st'},
+                    {'jsonpath': '$.ssl.cert.issuer.OU', 'label': 'issuer-ou'},
+                    {'jsonpath': '$.ssl.cipher.name', 'label': 'cipher-name'},
+                    {'jsonpath': '$.ssl.cipher.bits', 'label': 'cipher-bits'},
+                    {'jsonpath': '$.ssl.cipher.version', 'label': 'version'},
+                    {'jsonpath': '$.ssl.cert.pubkey.bits', 'label': 'pubkey-bits'},
+                    {'jsonpath': '$.ssl.cert.pubkey.type', 'label': 'pubkey-type'},
+                    {'jsonpath': '$.ssl.cert.sig_alg', 'label': 'sig-alg'},
+                    {'jsonpath': '$.ssl.cert.issued', 'label': 'issued-date'},
+                    {'jsonpath': '$.ssl.cert.expires', 'label': 'expires-date'},
+                    {'jsonpath': '$.ssl.versions[*]', 'label': 'version'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
                 ]}
             ],
             'relations': [],
         }
 
+
         _log.debug(f"attr: {len(parsing_rules['attributes'])} ent: {len(parsing_rules['entities'])} rel: {len(parsing_rules['relations'])}")
         parsed_result = self.process_parsing_rules(raw, parsing_rules)
-        for ttype, things in parsed_result.items():
+        for _, things in parsed_result.items():
             for thing in things:
                 if thing not in all_things:
                     all_things.append(thing)

@@ -1700,7 +1700,7 @@ class HNTRPlugin(BasePlugin, ABC):
                     comboid = ent.get_comboid()
                     ent.has.append(comboid)
                 if not ent.keyval:
-                    _log.warning(f"Missing {ent.keyattr} from {ent}. Skipping creation.")
+                    _log.debug(f"Missing {ent.keyattr} from {ent}. Skipping creation.")
                     continue
                 entities.append(ent)
             return entities
@@ -1733,7 +1733,7 @@ class HNTRPlugin(BasePlugin, ABC):
                             comboid = rel.get_comboid()
                             rel.has.append(comboid)
                         if rel.keyattr and not rel.keyval:
-                            _log.warning(f"Missing {rel.keyattr} from {rel}. Skipping creation.")
+                            _log.debug(f"Missing {rel.keyattr} from {rel}. Skipping creation.")
                             continue
                     else:
                         continue

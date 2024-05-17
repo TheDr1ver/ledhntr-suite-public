@@ -1,6 +1,8 @@
 {
     "python.analysis.extraPaths": [
-        "./ledhntr"
+        "./ledhntr",
+        "./ledhntr-plugins",
+        "./"
     ],
     "telemetry.telemetryLevel": "off",
     "better-comments.tags": [
