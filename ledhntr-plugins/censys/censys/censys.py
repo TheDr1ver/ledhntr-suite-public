@@ -264,6 +264,133 @@ class Censys(HNTRPlugin):
     #################################################
     ### Data Parsing Functions
     #################################################
+    def new_parse_hosts(
+        self,
+        raw: Dict = {},
+        api_conf: Optional[APIConfig] = None,
+        check_dates: Optional[List]=[],
+    ):
+        """Use the new parsing method to generate things
+        """
+        new_parsing_rules = {
+        'attributes': [
+            {'jsonpath': '$.ip', 'label': 'ip-address'},
+            {'jsonpath': '$.services[*].observed_at', 'label': 'last-seen'},
+            {'jsonpath': '$.services[*].labels[*]', 'label': 'tag'}
+        ],
+        'entities': [
+            {'label': 'hostname', 'has': [
+                {'jsonpath': '$.services[*].source_ip', 'label': 'ledsrc'}
+            ]},
+            {'label': 'domain', 'has': [
+                {'jsonpath': '$.services[*].source_ip', 'label': 'ledsrc'}
+            ]},
+            {'label': 'geoloc', 'has': [
+                {'jsonpath': '$.latitude', 'label': 'latitude'},
+                {'jsonpath': '$.longitude', 'label': 'longitude'},
+                {'jsonpath': '$.region_code', 'label': 'province'},
+                {'jsonpath': '$.country_code', 'label': 'country-code'},
+                {'jsonpath': '$.country', 'label': 'country'},
+                {'jsonpath': '$.postal_code', 'label': 'postal-code'},
+                {'jsonpath': '$.ip', 'label': 'ledsrc'},
+            ]},
+            {'label': 'autonomous-system', 'has': [
+                {'jsonpath': '$.asn', 'label': 'as-number'},
+                {'jsonpath': '$.isp', 'label': 'isp'},
+                {'jsonpath': '$.org', 'label': 'as-name'},
+                {'jsonpath': '$.country_code', 'label': 'country-code'},
+                {'jsonpath': '$.ip', 'label': 'ledsrc'},
+            ]},
+            {'label': 'network-service', 'multipath': '$.services[*]', 'has': [
+                {'jsonpath': '$.port', 'label': 'port'},
+                {'jsonpath': '$.service_name', 'label': 'product'},
+                {'jsonpath': '$.extended_service_name', 'label': 'version'},
+                {'jsonpath': '$.banner', 'label': 'service-header'},
+                {'jsonpath': '$.observed_at', 'label': 'date-seen'},
+                {'jsonpath': '$.software[*].uniform_resource_identifier', 'label': 'cpe23'},
+                {'jsonpath': '$.source_ip', 'label': 'ip-address'},
+                {'jsonpath': '$.source_ip', 'label': 'ledsrc'},
+            ]},
+            {'label': 'ftp', 'multipath': '$.services[*]', 'has': [
+                {'jsonpath': '$.ftp.banner', 'label': 'ftp-banner'},
+                {'jsonpath': '$.ftp.auth_tls_response', 'label': 'ftp-auth-tls-response'},
+                {'jsonpath': '$.ftp.status_code', 'label': 'ftp-status-code'},
+                {'jsonpath': '$.ftp.status_meaning', 'label': 'ftp-status-meaning'},
+                {'jsonpath': '$.ip', 'label': 'ledsrc'}
+            ]},
+            {'label': 'ssh', 'multipath': '$.services[*]', 'has': [
+                {'jsonpath': '$.ssh.endpoint_id.raw', 'label': 'ssh-endpoint-id'},
+                {'jsonpath': '$.ssh.kex_init_message.kex_algorithms[*]', 'label': 'kex-algorithm'},
+                {'jsonpath': '$.ssh.kex_init_message.host_key_algorithms[*]', 'label': 'host-key-algorithm'},
+                {'jsonpath': '$.ssh.kex_init_message.client_to_server_ciphers[*]', 'label': 'client-to-server-cipher'},
+                {'jsonpath': '$.ssh.kex_init_message.server_to_client_ciphers[*]', 'label': 'server-to-client-cipher'},
+                {'jsonpath': '$.ssh.kex_init_message.client_to_server_macs[*]', 'label': 'client-to-server-mac'},
+                {'jsonpath': '$.ssh.kex_init_message.server_to_client_macs[*]', 'label': 'server-to-client-mac'},
+                {'jsonpath': '$.ssh.kex_init_message.client_to_server_compression[*]', 'label': 'client-to-server-compression'},
+                {'jsonpath': '$.ssh.kex_init_message.server_to_client_compression[*]', 'label': 'server-to-client-compression'},
+                {'jsonpath': '$.ssh.algorithm_selection.kex_algorithm', 'label': 'kex-algorithm'},
+                {'jsonpath': '$.ssh.algorithm_selection.host_key_algorithm', 'label': 'host-key-algorithm'},
+                {'jsonpath': '$.ssh.algorithm_selection.client_to_server_alg_group.cipher', 'label': 'client-to-server-cipher'},
+                {'jsonpath': '$.ssh.algorithm_selection.client_to_server_alg_group.mac', 'label': 'client-to-server-mac'},
+                {'jsonpath': '$.ssh.algorithm_selection.client_to_server_alg_group.compression', 'label': 'client-to-server-compression'},
+                {'jsonpath': '$.ssh.algorithm_selection.server_to_client_alg_group.cipher', 'label': 'server-to-client-cipher'},
+                {'jsonpath': '$.ssh.algorithm_selection.server_to_client_alg_group.mac', 'label': 'server-to-client-mac'},
+                {'jsonpath': '$.ssh.algorithm_selection.server_to_client_alg_group.compression', 'label': 'server-to-client-compression'},
+                {'jsonpath': '$.ssh.server_host_key.fingerprint_sha256', 'label': 'fingerprint'},
+                {'jsonpath': '$.ip', 'label': 'ledsrc'}
+            ]},
+            {'label': 'http', 'multipath': '$.services[*]', 'has': [
+                {'jsonpath': '$.http.response.protocol', 'label': 'http-protocol'},
+                {'jsonpath': '$.http.response.status_code', 'label': 'http-status-code'},
+                {'jsonpath': '$.http.response.status_reason', 'label': 'http-status-reason'},
+                {'jsonpath': '$.http.response.headers.Server[*]', 'label': 'http-server'},
+                {'jsonpath': '$.http.response.headers.Location[*]', 'label': 'http-location'},
+                {'jsonpath': '$.http.response.headers.Content_Length[*]', 'label': 'http-content-length'},
+                {'jsonpath': '$.http.response.headers.Date[*]', 'label': 'http-date'},
+                {'jsonpath': '$.http.response.headers.Connection[*]', 'label': 'http-connection'},
+                {'jsonpath': '$.http.response.headers.Content_Type[*]', 'label': 'http-content-type'},
+                {'jsonpath': '$.http.response.html_tags[*]', 'label': 'html-tags'},
+                {'jsonpath': '$.http.response.body_size', 'label': 'http-body-size'},
+                {'jsonpath': '$.http.response.body', 'label': 'http-body'},
+                {'jsonpath': '$.http.response.body_hash', 'label': 'http-body-hash'},
+                {'jsonpath': '$.http.response.html_title', 'label': 'html-title'},
+                {'jsonpath': '$.ip', 'label': 'ledsrc'}
+            ]},
+            {'label': 'ssl', 'multipath': '$.services[*]', 'has': [
+                {'jsonpath': '$.tls.certificates.leaf_fp_sha_256', 'label': 'fingerprint'},
+                {'jsonpath': '$.tls.certificates.leaf_data.subject_dn', 'label': 'subject-dn'},
+                {'jsonpath': '$.tls.certificates.leaf_data.issuer_dn', 'label': 'issuer-dn'},
+                {'jsonpath': '$.tls.certificates.leaf_data.pubkey_bit_size', 'label': 'pubkey-bits'},
+                {'jsonpath': '$.tls.certificates.leaf_data.pubkey_algorithm', 'label': 'pubkey-algorithm'},
+                {'jsonpath': '$.tls.certificates.leaf_data.tbs_fingerprint', 'label': 'tbs-fingerprint'},
+                {'jsonpath': '$.tls.certificates.leaf_data.fingerprint', 'label': 'fingerprint'},
+                {'jsonpath': '$.tls.certificates.leaf_data.issuer.common_name[*]', 'label': 'issuer-cn'},
+                {'jsonpath': '$.tls.certificates.leaf_data.issuer.organization[*]', 'label': 'issuer-o'},
+                {'jsonpath': '$.tls.certificates.leaf_data.issuer.country[*]', 'label': 'issuer-c'},
+                {'jsonpath': '$.tls.certificates.leaf_data.subject.common_name[*]', 'label': 'subject-cn'},
+                {'jsonpath': '$.tls.certificates.leaf_data.subject.organization[*]', 'label': 'subject-o'},
+                {'jsonpath': '$.tls.certificates.leaf_data.subject.country[*]', 'label': 'subject-c'},
+                {'jsonpath': '$.tls.certificates.leaf_data.public_key.key_algorithm', 'label': 'pubkey-algorithm'},
+                {'jsonpath': '$.tls.certificates.leaf_data.public_key.rsa.modulus', 'label': 'rsa-modulus'},
+                {'jsonpath': '$.tls.certificates.leaf_data.public_key.rsa.exponent', 'label': 'rsa-exponent'},
+                {'jsonpath': '$.tls.certificates.leaf_data.public_key.fingerprint', 'label': 'pubkey-fingerprint'},
+                {'jsonpath': '$.tls.certificates.leaf_data.signature.self_signed', 'label': 'self-signed'},
+                {'jsonpath': '$.tls.certificates.leaf_data.signature.signature_algorithm', 'label': 'sig-alg'},
+                {'jsonpath': '$.tls.server_key_exchange.ec_params.named_curve', 'label': 'named-curve'},
+                {'jsonpath': '$.tls.ja3s', 'label': 'ja3s'},
+                {'jsonpath': '$.tls.ja4s', 'label': 'ja4s'},
+                {'jsonpath': '$.tls.version_selected', 'label': 'tls-version'},
+                {'jsonpath': '$.tls.cipher_selected', 'label': 'cipher'},
+                {'jsonpath': '$.ip', 'label': 'ledsrc'}
+            ]}
+        ],
+        'relations': [],
+    }
+    # TODO - remember the check_dates function
+    # TODO - add metadata like date-seen
+    # TODO - add the actual parsing function
+    # TODO - verify new_parsing_rules
+
     def parse_hosts_search(
         self, 
         raw: Dict = {}, 
