@@ -27,6 +27,7 @@ from typedb.driver import (
     Iterator,
     ConceptMap,
     TypeDBException,
+    TypeDBDriverException,
     TypeDBDriverExceptionNative,
     # QueryFuture, # Not sure what this maps to yet
     
@@ -827,7 +828,11 @@ class TypeDBClient(ConnectorPlugin):
                 #   able to return all the added results. Just search for them after
                 #   the fact if that's what you want.
                 _log.debug(f"Running query: {myquery.pp()}")
-                self.db_query(myquery, tx, save_tx=False)
+                try:
+                    self.db_query(myquery, tx, save_tx=False)
+                except Exception as e:
+                    _log.error(f"Exception during query: \n{myquery.pp()}")
+                    raise e
                 thing_added_counter += 1
 
             try:
@@ -1714,9 +1719,20 @@ class TypeDBClient(ConnectorPlugin):
             query_options = TypeDBOptions()
             if options.explain:
                 query_options.explain=True
-            answers = action(tql, options=query_options)
+            try:
+                answers = action(tql, options=query_options)
+            except TypeDBDriverException as e:
+                _log.error(f"Error running tql: {e}")
+                _log.error(f"tql: \n{tql}")
+                _log.error(f"query_options: \n{query_options}")
+                raise e
         else:
-            answers = action(tql)
+            try:
+                answers = action(tql)
+            except TypeDBDriverException as e:
+                _log.error(f"Error running tql: {e}")
+                _log.error(f"tql: \n{tql}")
+                raise e
         return answers
 
     def delete_db(

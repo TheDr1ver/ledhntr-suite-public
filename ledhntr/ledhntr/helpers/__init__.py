@@ -20,6 +20,17 @@ class LEDConfigParser(ConfigParser):
     """
     Extends ConfigParser to simplfy handling of common configuration options
     """
+    def dumpall(self):
+        """Dump all configs
+        :returns: dict of all configs
+        """
+        res = {}
+        for section in self.sections():
+            if section not in res:
+                res[section] = {}
+            for k, v in self.items(section):
+                res[section][k]=v
+        return res
 
     def getlist(self, section, option, *args, **kwargs):
         """
@@ -517,10 +528,12 @@ def parse_schema_file(
     role_pattern = r"(?s)relates\s+([a-z0-9\-]+)\s*(,|$)"
     attr_pattern = r"(?s)owns\s+([a-z0-9\-]+)\s*(@|,|$)"
     keyattr_pattern = r"(?s)owns\s+([a-z0-9\-]+)\s*@key"
+    value_type_pattern = r"(?s)value\s+(string|datetime|double|long|boolean)"
 
     re_role = re.compile(role_pattern)
     re_attr = re.compile(attr_pattern)
     re_keyattr = re.compile(keyattr_pattern)
+    re_valtype = re.compile(value_type_pattern)
 
     counter = 1
     # . _log.debug(f"Attempting to parse schema {schema}...")
@@ -578,7 +591,11 @@ def parse_schema_file(
                         # Convert to Thing object
                         th = None
                         if parent_label == 'attribute':
-                            th = Attribute(label=label)
+                            value_type = re_valtype.search(thing)
+                            if value_type:
+                                th = Attribute(label=label, value_type=value_type[1])
+                            else:
+                                th = Attribute(label=label)
                         elif parent_label == 'entity':
                             th = Entity(label=label)
                         elif parent_label == 'relation':

@@ -55,6 +55,27 @@ def _meta_attrs():
     ]
     return meta_attrs
 
+def _convert_value_types(x, vt):
+    """
+    List of approved value types.
+    I never included integer logic, so I've omitted the 'long' value type
+    Keep in mind the RE patterns for value_type_pattern will also need to be
+    adjusted if this list changes. This pattern appears both in this file and
+    helpers init.
+    """
+    if x is None:
+        return None
+    value_types = {
+        "boolean": bool,
+        # "double": round(float(x),2),
+        "string": str,
+        "datetime": helpers.format_date,
+    }
+    if vt=='double':
+        return round(float(x), 2)
+    else:
+        return value_types[vt](x)
+
 def _ledid_explode(objdict: dict = {}):
     """Breaks out sub-objects such that the ledid value can be used as glue
 
@@ -155,6 +176,7 @@ def _load_default_schema():
     schema = resource_stream('ledhntr', 'schemas/schema.tql').name
 
     scheyattrs = {}
+    schema_val_types = {}
 
     thing_types = {
         'attribute': ['attribute'],
@@ -172,10 +194,12 @@ def _load_default_schema():
     role_pattern = r"(?s)relates\s+([a-z0-9\-]+)\s*(,|$)"
     attr_pattern = r"(?s)owns\s+([a-z0-9\-]+)\s*(@|,|$)"
     keyattr_pattern = r"(?s)owns\s+([a-z0-9\-]+)\s*@key"
+    value_type_pattern = r"(?s)value\s+(boolean|double|string|datetime)\s*"
 
     re_role = re.compile(role_pattern)
     re_attr = re.compile(attr_pattern)
     re_keyattr = re.compile(keyattr_pattern)
+    re_valtype = re.compile(value_type_pattern)
 
     counter = 1
     while type_parsing and counter < 5:
@@ -205,6 +229,12 @@ def _load_default_schema():
                             scheyattrs[label]=keyattr
 
                         type_parsing.remove(thing)
+                        # Get value type for attributes and sub-attributes
+                        vt_res = re_valtype.search(thing)
+                        if vt_res:
+                            value_type = vt_res[1]
+                            if label not in schema_val_types:
+                                schema_val_types[label]=value_type
 
         # . _log.debug(f"unparsed types left: {len(type_parsing)}")
         counter += 1
@@ -214,7 +244,7 @@ def _load_default_schema():
             # !     f" Check your schema layout and try that again..."
             # ! )
             break
-    return scheyattrs
+    return scheyattrs, schema_val_types
 
 def _to_dict(obj, classkey=None, ledid_glue:Optional[bool]=False):
     """Function used for all classes to convert them into dicts.
@@ -243,7 +273,8 @@ def _to_dict(obj, classkey=None, ledid_glue:Optional[bool]=False):
     else:
         return obj
 
-default_schema = _load_default_schema()
+default_schema, schema_value_types = _load_default_schema()
+
 
 class Thing(MutableMapping, metaclass=ABCMeta):
     def __init__(
@@ -372,6 +403,7 @@ class Attribute(Thing):
     def __init__(
         self,
         value: Union[str,datetime,float] = None,
+        value_type: str = "",
         **kwargs
     ) -> None:
         """
@@ -399,9 +431,25 @@ class Attribute(Thing):
         else:
             self._value = value
 
+        if not value_type and self._label in schema_value_types:
+            self._value_type=schema_value_types[self._label]
+        else:
+            self._value_type = value_type
+
+        if self._value_type:
+            try:
+                self._value = _convert_value_types(self._value, self._value_type)
+            except Exception as e:
+                print(f"label={self.label} value={self.value} vt={self._value_type}")
+                raise e
+
     @property
     def value(self):
         return self._value
+
+    @property
+    def value_type(self):
+        return self._value_type
 
     def to_dict(self, ledid_glue: Optional[bool]=False):
         """Convert Relation object to dictionary

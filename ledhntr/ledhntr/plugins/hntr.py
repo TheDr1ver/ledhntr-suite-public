@@ -1683,6 +1683,8 @@ class HNTRPlugin(BasePlugin, ABC):
                 jsonpath_expr = parse(rule['jsonpath'])
                 matches = [match.value for match in jsonpath_expr.find(data)]
                 for match in matches:
+                    if match == "" or match is None:
+                        continue
                     attributes.append(Attribute(label=rule['label'], value=match))
             return attributes
 
@@ -1695,6 +1697,8 @@ class HNTRPlugin(BasePlugin, ABC):
                     jsonpath_expr = parse(sub_rule['jsonpath'])
                     matches = [match.value for match in jsonpath_expr.find(item)]
                     for match in matches:
+                        if match == "" or match is None:
+                            continue
                         ent.has.append(Attribute(label=sub_rule['label'], value=match))
                 if ent.keyattr == 'comboid':
                     comboid = ent.get_comboid()
@@ -1727,6 +1731,8 @@ class HNTRPlugin(BasePlugin, ABC):
                     jsonpath_expr = parse(sub_rule['jsonpath'])
                     matches = [match.value for match in jsonpath_expr.find(item)]
                     for match in matches:
+                        if match == "" or match is None:
+                            continue
                         rel.has.append(Attribute(label=sub_rule['label'], value=match))
                     if rel.has or rel.players:
                         if rel.keyattr == 'comboid':

@@ -479,6 +479,7 @@ define
         owns issuer-o,
         owns issuer-ou,
         owns issuer-st,
+        owns jarm-fingerprint,
         owns ja3s,
         owns ja4s,
         owns pubkey-bits,
@@ -582,7 +583,7 @@ define
         value string;
 
     cipher-bits sub attribute,
-        value string;
+        value double;
 
     cipher-name sub attribute,
         value string;
@@ -942,7 +943,7 @@ define
         value string;
 
     shodan-hash sub attribute,
-        value string;
+        value double;
 
     sig-alg sub attribute,
         value string;

@@ -366,15 +366,14 @@ class Shodan(HNTRPlugin):
                 ]},
                 {'label': 'ip', 'has': [
                     {'jsonpath': '$.ip_str', 'label': 'ip-address'},
-                    {'jsonpath': '$.hostnames[*]', 'label': 'fqdn'},
-                    {'jsonpath': '$.domains[*]', 'label': 'domain-name'},
                     {'jsonpath': '$.last_update', 'label': 'last-seen'},
                     {'jsonpath': '$.tags[*]', 'label': 'tag'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                 ]},
                 {'label': 'vulns', 'has': [
                     {'jsonpath': '$.vulns[*]', 'label': 'cve'},
-                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                     {'jsonpath': '$.last_update', 'label': 'last-seen'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                 ]},
                 {'label': 'ssl', 'has': [
                     {'jsonpath': '$.ssl.jarm', 'label': 'jarm-fingerprint'},
@@ -489,10 +488,9 @@ class Shodan(HNTRPlugin):
                 ]},
                 {'label': 'ip', 'has': [
                     {'jsonpath': '$.ip_str', 'label': 'ip-address'},
-                    {'jsonpath': '$.hostnames[*]', 'label': 'fqdn'},
-                    {'jsonpath': '$.domains[*]', 'label': 'domain-name'},
                     {'jsonpath': '$.last_update', 'label': 'last-seen'},
                     {'jsonpath': '$.tags[*]', 'label': 'tag'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                 ]},
                 {'label': 'vulns', 'has': [
                     {'jsonpath': '$.vulns[*]', 'label': 'cve'},
