@@ -140,7 +140,8 @@ class Shodan(HNTRPlugin):
             },
             paginate = False,
             paginator = self.main_paginator,
-            parser = self.parse_hosts_search,
+            # ! parser = self.parse_hosts_search,
+            parser = self.new_parse_hosts_search,
             add_to_db = self.add_hunt, # This can probably be revisited
             simple_query_types = [],
             param_query_key=self.param_query_key,
@@ -166,7 +167,8 @@ class Shodan(HNTRPlugin):
                 "history": False,
                 "minify": False,
             },
-            parser = self.parse_hosts,
+            # ! parser = self.parse_hosts,
+            parser = self.new_parse_hosts,
             add_to_db = self.add_hunt, # This can probably be revisited
             simple_query_types = ['ip'],
             param_query_key=self.param_query_key,
