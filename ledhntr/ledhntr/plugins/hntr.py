@@ -1420,8 +1420,6 @@ class HNTRPlugin(BasePlugin, ABC):
 
         :returns: False if date is missing or date value if date exists
         """
-        if 'type' not in rule:
-            rule['type']='attribute'
         times = self.process_parsing_rules(raw, rules=rule, single=True)
         max_time = None
         for last_updated in times:
@@ -1429,7 +1427,7 @@ class HNTRPlugin(BasePlugin, ABC):
             if not max_time:
                 max_time = this_time
                 continue
-            if this_time.timestamp() > max_time:
+            if this_time.timestamp() > max_time.timestamp():
                 max_time = this_time
         if max_time:
             if max_time in check_dates:
@@ -1729,12 +1727,18 @@ class HNTRPlugin(BasePlugin, ABC):
         def parse_attributes(data, rules):
             attributes = []
             for rule in rules:
-                jsonpath_expr = parse(rule['jsonpath'])
-                matches = [match.value for match in jsonpath_expr.find(data)]
-                for match in matches:
-                    if match == "" or match is None:
-                        continue
-                    attributes.append(Attribute(label=rule['label'], value=match))
+                if 'multipath' in rule:
+                    jsonex = parse(rule['multipath'])
+                    sub_data_list = [match.value for match in jsonex.find(data)]
+                else:
+                    sub_data_list = [data]
+                for sdl in sub_data_list:
+                    jsonpath_expr = parse(rule['jsonpath'])
+                    matches = [match.value for match in jsonpath_expr.find(sdl)]
+                    for match in matches:
+                        if match == "" or match is None:
+                            continue
+                        attributes.append(Attribute(label=rule['label'], value=match))
             return attributes
 
         def generate_entity(data, rule, sub_data=None):
@@ -1830,7 +1834,7 @@ class HNTRPlugin(BasePlugin, ABC):
         else:
             _log
             parsed = []
-            ttype = rules.get('type', [])
+            ttype = rules.get('type', "")
             if not ttype:
                 for x, things in pretty_schema.items():
                     res = get_dict_from_list(things, 'label', rules.get('label', ""))

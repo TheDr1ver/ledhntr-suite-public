@@ -301,11 +301,12 @@ class Shodan(HNTRPlugin):
         _log = self.logger
 
         if check_dates:
-            _log.debug(
-                f"check_dates doesn't make sense for this parser,"
-                f" as it returns multiple values in a random list order."
-            )
-            return False
+            seen_rule = {
+                'jsonpath': '$.timestamp',
+                'multipath': '$.matches[*]',
+                'label': 'date-seen',
+            }
+            return self.check_dates_shortcut(check_dates, raw, seen_rule)
 
         _log.info(f"Running new parsers for /shodan/host/search/ results...")
         if 'total' not in raw:
