@@ -14,10 +14,22 @@ from jsonpath_ng import jsonpath, parse
 from pprint import pformat
 from time import time, sleep
 
-from ledhntr.data_classes import Attribute, Entity, Relation, Thing
+from ledhntr.data_classes import (
+    Attribute, 
+    Entity, 
+    Relation, 
+    Thing,
+    pretty_schema,
+)
 from ledhntr.plugins import BasePlugin
 from ledhntr.plugins.connector import ConnectorPlugin
-from ledhntr.helpers import LEDConfigParser, format_date, flatten_dict, parse_schema_file
+from ledhntr.helpers import (
+    LEDConfigParser, 
+    format_date, 
+    flatten_dict, 
+    parse_schema_file,
+    get_dict_from_list,
+)
 
 
 from typing import (
@@ -1820,7 +1832,14 @@ class HNTRPlugin(BasePlugin, ABC):
             parsed = []
             ttype = rules.get('type', [])
             if not ttype:
-                _log.error(f"single rule parsing requires 'type' (attribute|entity|relation)")
+                for x, things in pretty_schema.items():
+                    res = get_dict_from_list(things, 'label', rules.get('label', ""))
+                    if res:
+                        ttype = x
+                        break
+            if not ttype:
+                _log.error(f"Unable to find thing type for {rules}")
+                return parsed
             if ttype.lower() == 'attribute':
                 parsed = parse_attributes(data, [rules])
             elif ttype.lower() == 'entity':

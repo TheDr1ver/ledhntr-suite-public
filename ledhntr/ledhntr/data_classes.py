@@ -162,7 +162,7 @@ def _ledid_glue(objdict: dict = {}):
     
     return result
 
-def _load_default_schema():
+def _load_default_schema(schema:str=""):
     """Manually parses schema files and grabs keyvals
 
     This basically does the exact same thing as helpers.parse_schema_file, but 
@@ -173,7 +173,8 @@ def _load_default_schema():
     :returns: dict of Thing labels and their associated keyattr thing labels
     """
 
-    schema = resource_stream('ledhntr', 'schemas/schema.tql').name
+    if not schema:
+        schema = resource_stream('ledhntr', 'schemas/schema.tql').name
 
     scheyattrs = {}
     schema_val_types = {}
