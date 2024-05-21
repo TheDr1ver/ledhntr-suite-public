@@ -184,6 +184,12 @@ def _load_default_schema():
         'relation': ['relation'],
     }
 
+    pretty_schema = {
+        'attribute': [],
+        'entity': [],
+        'relation': [],
+    }
+
     with open(schema, 'r') as s:
         data = s.read()
 
@@ -216,8 +222,16 @@ def _load_default_schema():
                         # Get Label
                         label = res[1]
                         parent_label = res[2]
+                        info = None
                         if label not in thing_types[key]:
                             thing_types[key].append(label)
+                            info = {
+                                'label': label,
+                                'type': key,
+                                'keyattr': None,
+                                'owns': [],
+                                'value_type': None,
+                            }
 
                         # Get KeyAttr
                         found_keyattr = re_keyattr.search(thing)
@@ -227,14 +241,29 @@ def _load_default_schema():
 
                         if label not in scheyattrs and keyattr:
                             scheyattrs[label]=keyattr
+                            if info:
+                                info['keyattr']=keyattr
 
-                        type_parsing.remove(thing)
+                        # ; Get Owns
+                        if info:
+                            owns_res = re_attr.findall(thing)
+                            for ors in owns_res:
+                                if ors[0] not in info['owns']:
+                                    info['owns'].append(ors[0])
+
                         # Get value type for attributes and sub-attributes
                         vt_res = re_valtype.search(thing)
                         if vt_res:
                             value_type = vt_res[1]
                             if label not in schema_val_types:
                                 schema_val_types[label]=value_type
+                                if info:
+                                    info['value_type']=value_type
+
+                        if info:
+                            pretty_schema[key].append(info)
+
+                        type_parsing.remove(thing)
 
         # . _log.debug(f"unparsed types left: {len(type_parsing)}")
         counter += 1
@@ -244,7 +273,9 @@ def _load_default_schema():
             # !     f" Check your schema layout and try that again..."
             # ! )
             break
-    return scheyattrs, schema_val_types
+    # ! return scheyattrs, schema_val_types, thing_types
+    # return pretty_schema
+    return scheyattrs, schema_val_types, thing_types, pretty_schema
 
 def _to_dict(obj, classkey=None, ledid_glue:Optional[bool]=False):
     """Function used for all classes to convert them into dicts.
@@ -273,7 +304,9 @@ def _to_dict(obj, classkey=None, ledid_glue:Optional[bool]=False):
     else:
         return obj
 
-default_schema, schema_value_types = _load_default_schema()
+# default_schema, schema_value_types, thing_types = _load_default_schema()
+# pretty_schema = _load_default_schema()
+default_schema, schema_value_types, thing_types, pretty_schema = _load_default_schema()
 
 
 class Thing(MutableMapping, metaclass=ABCMeta):
@@ -1393,3 +1426,24 @@ class Query():
         else:
             s = f"<{self.__class__.__name__}(NotInitialized)"
         return s
+
+def build_schema():
+    """Builds a dictionary of all potential things from the default schema
+    :returns: dict of all schema metadata
+    """
+    # default_schema, schema_value_types, thing_types = _load_default_schema()
+    schema = {'attribute':[], 'entity':[], 'relation':[]}
+    for ttype, labels in thing_types.items():
+        for label in labels:
+            info = {
+                'label': label,
+                'type': ttype,
+                'keyattr': None,
+                'value_type': None,
+            }
+            if label in default_schema:
+                info['keyattr'] = default_schema[label]
+            if label in schema_value_types:
+                info['value_type'] = schema_value_types[label]
+            schema[ttype].append(info)
+    return schema

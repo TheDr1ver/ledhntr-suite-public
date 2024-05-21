@@ -151,6 +151,22 @@ def format_date(
 
     return dto
 
+def get_dict_from_list(
+    data:list = [],
+    key:str = "", 
+    value:str = "",
+)->dict:
+    """Get Dict from List of Dicts
+    :params data: list of dictionaries to search through
+    :params key: required key to search
+    :params value: required value to search within the designated key
+    :returns: dictionary pulled from list
+    """
+    found_dict = {}
+    found_dict = next((d for d in data if d[key] == value), {})
+    return found_dict
+
+
 def dumps(data, indent=4, compactly=False):
     """
     Wrapper for JSON encoding

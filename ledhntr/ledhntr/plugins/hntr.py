@@ -1391,6 +1391,42 @@ class HNTRPlugin(BasePlugin, ABC):
                 thing.has.append(now)
         return thing
 
+    def check_dates_shortcut(
+        self,
+        check_dates: List = [],
+        raw: Dict = {},
+        rule: Dict = {},
+    ):
+        """Checks to see if raw JSON has been parsed already by checking dates
+        If fed a rule that pulls out more than one date-seen, the latest date_seen
+        value will be used for comparison.
+
+        :param check_dates: list of dates to check against
+        :param raw: full JSON dictionary
+        :param rule: jsonpath, label, type (attribute) for location of the 
+            date to check
+
+        :returns: False if date is missing or date value if date exists
+        """
+        if 'type' not in rule:
+            rule['type']='attribute'
+        times = self.process_parsing_rules(raw, rules=rule, single=True)
+        max_time = None
+        for last_updated in times:
+            this_time = last_updated.value
+            if not max_time:
+                max_time = this_time
+                continue
+            if this_time.timestamp() > max_time:
+                max_time = this_time
+        if max_time:
+            if max_time in check_dates:
+                return max_time
+            else:
+                return False
+        return False
+
+
     def find_active_hunts(
         self,
         dbc: ConnectorPlugin = None,
@@ -1601,7 +1637,7 @@ class HNTRPlugin(BasePlugin, ABC):
         data: dict = {}, 
         rules: dict = {}, 
         single: Optional[bool] = False,
-    ):
+    )->List:
         """process parsing rulesets
         This takes a dict like this and uses it to parse large JSON blobs into 
         LEDHNTR objects.
@@ -1673,7 +1709,8 @@ class HNTRPlugin(BasePlugin, ABC):
             
             ===OR===
 
-            If you're using the single=True flag, it will return a single Thing Object.
+            If you're using the single=True flag, it will return a list of all 
+            resulting single Thing Objects.
 
         """
         _log = self.logger
@@ -1782,11 +1819,13 @@ class HNTRPlugin(BasePlugin, ABC):
             _log
             parsed = []
             ttype = rules.get('type', [])
-            if ttype == 'attribute':
+            if not ttype:
+                _log.error(f"single rule parsing requires 'type' (attribute|entity|relation)")
+            if ttype.lower() == 'attribute':
                 parsed = parse_attributes(data, [rules])
-            elif ttype == 'entity':
+            elif ttype.lower() == 'entity':
                 parsed = parse_entities(data, [rules])
-            elif ttype == 'relation':
+            elif ttype.lower() == 'relation':
                 parsed = parse_relations(data, [rules])
         return parsed
 

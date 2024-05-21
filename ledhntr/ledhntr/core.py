@@ -15,6 +15,7 @@ _UNSET = object()
 
 import ledhntr.helpers as helpers
 from ledhntr.plugin_loader import PluginLoader
+from ledhntr.data_classes import pretty_schema
 
 
 class LEDHNTR(PluginLoader):
@@ -84,7 +85,7 @@ class LEDHNTR(PluginLoader):
         self.plugins = plugins
 
         # Additional Vars
-        self.schema = []
+        self.schema = pretty_schema
 
         # Load all active plugins
         if not self.plugins:

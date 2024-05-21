@@ -299,6 +299,14 @@ class Shodan(HNTRPlugin):
     ):
         all_things = []
         _log = self.logger
+
+        if check_dates:
+            _log.debug(
+                f"check_dates doesn't make sense for this parser,"
+                f" as it returns multiple values in a random list order."
+            )
+            return False
+
         _log.info(f"Running new parsers for /shodan/host/search/ results...")
         if 'total' not in raw:
             _log.error(f"Expected 'total' in response: {raw}")
@@ -312,10 +320,12 @@ class Shodan(HNTRPlugin):
             'entities': [
                 {'label': 'hostname', 'has': [
                     {'jsonpath': '$.hostnames[*]', 'label': 'fqdn'},
-                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
+                    {'jsonpath': '$.timestamp', 'label': 'date-seen'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                 ]},
                 {'label': 'domain', 'has': [
                     {'jsonpath': '$.domains[*]', 'label': 'domain-name'},
+                    {'jsonpath': '$.timestamp', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
                 ]},
                 {'label': 'geoloc', 'has': [
@@ -326,6 +336,7 @@ class Shodan(HNTRPlugin):
                     {'jsonpath': '$.location.latitude', 'label': 'latitude'},
                     {'jsonpath': '$.location.longitude', 'label': 'longitude'},
                     {'jsonpath': '$.location.postal_code', 'label': 'postal-code'},
+                    {'jsonpath': '$.timestamp', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                 ]},
                 {'label': 'autonomous-system', 'has': [
@@ -333,6 +344,7 @@ class Shodan(HNTRPlugin):
                     {'jsonpath': '$.isp', 'label': 'isp'},
                     {'jsonpath': '$.org', 'label': 'as-name'},
                     {'jsonpath': '$.location.country_code', 'label': 'country-code'},
+                    {'jsonpath': '$.timestamp', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                 ]},
                 {'label': 'network-service', 'has': [
@@ -346,6 +358,7 @@ class Shodan(HNTRPlugin):
                     {'jsonpath': '$.hostnames[*]', 'label': 'fqdn'},
                     {'jsonpath': '$.domains[*]', 'label': 'domain-name'},
                     {'jsonpath': '$.ip_str', 'label': 'ip-address'},
+                    {'jsonpath': '$.timestamp', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                 ]},
                 {'label': 'ssh', 'has': [
@@ -355,6 +368,7 @@ class Shodan(HNTRPlugin):
                     {'jsonpath': '$.ssh.kex.encryption_algorithms[*]', 'label': 'encryption-algorithm'},
                     {'jsonpath': '$.ssh.kex.mac_algorithms[*]', 'label': 'mac-algorithm'},
                     {'jsonpath': '$.ssh.kex.compression_algorithms[*]', 'label': 'compression-algorithm'},
+                    {'jsonpath': '$.timestamp', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
                 ]},
                 {'label': 'http', 'has': [
@@ -364,17 +378,20 @@ class Shodan(HNTRPlugin):
                     {'jsonpath': '$.http.title', 'label': 'http-title'},
                     {'jsonpath': '$.http.headers_hash', 'label': 'http-headers-hash'},
                     {'jsonpath': '$.http.html_hash', 'label': 'http-html-hash'},
+                    {'jsonpath': '$.timestamp', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
                 ]},
                 {'label': 'ip', 'has': [
                     {'jsonpath': '$.ip_str', 'label': 'ip-address'},
                     {'jsonpath': '$.last_update', 'label': 'last-seen'},
                     {'jsonpath': '$.tags[*]', 'label': 'tag'},
+                    {'jsonpath': '$.timestamp', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                 ]},
                 {'label': 'vulns', 'has': [
                     {'jsonpath': '$.vulns[*]', 'label': 'cve'},
                     {'jsonpath': '$.last_update', 'label': 'last-seen'},
+                    {'jsonpath': '$.timestamp', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                 ]},
                 {'label': 'ssl', 'has': [
@@ -402,6 +419,7 @@ class Shodan(HNTRPlugin):
                     {'jsonpath': '$.ssl.cert.issued', 'label': 'issued-date'},
                     {'jsonpath': '$.ssl.cert.expires', 'label': 'expires-date'},
                     {'jsonpath': '$.ssl.versions[*]', 'label': 'version'},
+                    {'jsonpath': '$.timestamp', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
                 ]}
             ],
@@ -429,11 +447,16 @@ class Shodan(HNTRPlugin):
                 all_things.append(new_attr)
 
         # @ Add Metadata
+        '''
         now = datetime.now()
         now = self._format_date(now)
         for thing in all_things:
             nowattr = Attribute(label='date-seen', value=now)
             thing.has.append(nowattr)
+        '''
+
+        while None in all_things:
+            all_things.remove(None)
 
         return all_things
 
@@ -445,19 +468,27 @@ class Shodan(HNTRPlugin):
     ):
         _log = self.logger
         all_things = []
+
+        # @ check_dates logic
+        if check_dates:
+            seen_rule = {'jsonpath': '$.last_update', 'label': 'date-seen', 'type':'attribute'}
+            return self.check_dates_shortcut(check_dates, raw, seen_rule)
+
         parsing_rules = {
             'attributes': [
                 {'jsonpath': '$.ip_str', 'label': 'ip-address'},
-                {'jsonpath': '$.last_update', 'label': 'last-update'},
+                {'jsonpath': '$.last_update', 'label': 'date-seen'},
                 {'jsonpath': '$.tags[*]', 'label': 'tag'}
             ],
             'entities': [
                 {'label': 'hostname', 'has': [
                     {'jsonpath': '$.hostnames[*]', 'label': 'fqdn'},
-                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
+                    {'jsonpath': '$.last_update', 'label': 'date-seen'},
+                    {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                 ]},
                 {'label': 'domain', 'has': [
                     {'jsonpath': '$.domains[*]', 'label': 'domain-name'},
+                    {'jsonpath': '$.last_update', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
                 ]},
                 {'label': 'geoloc', 'has': [
@@ -468,6 +499,7 @@ class Shodan(HNTRPlugin):
                     {'jsonpath': '$.location.latitude', 'label': 'latitude'},
                     {'jsonpath': '$.location.longitude', 'label': 'longitude'},
                     {'jsonpath': '$.location.postal_code', 'label': 'postal-code'},
+                    {'jsonpath': '$.last_update', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                 ]},
                 {'label': 'autonomous-system', 'has': [
@@ -475,6 +507,7 @@ class Shodan(HNTRPlugin):
                     {'jsonpath': '$.isp', 'label': 'isp'},
                     {'jsonpath': '$.org', 'label': 'as-name'},
                     {'jsonpath': '$.location.country_code', 'label': 'country-code'},
+                    {'jsonpath': '$.last_update', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                 ]},
                 {'label': 'network-service', 'multipath': '$.data[*]', 'has': [
@@ -488,6 +521,7 @@ class Shodan(HNTRPlugin):
                     {'jsonpath': '$.hostnames[*]', 'label': 'fqdn'},
                     {'jsonpath': '$.domains[*]', 'label': 'domain-name'},
                     {'jsonpath': '$.ip_str', 'label': 'ip-address'},
+                    {'jsonpath': '$.last_update', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                 ]},
                 {'label': 'ssh', 'multipath': '$.data[*]', 'has': [
@@ -497,6 +531,7 @@ class Shodan(HNTRPlugin):
                     {'jsonpath': '$.ssh.kex.encryption_algorithms[*]', 'label': 'encryption-algorithm'},
                     {'jsonpath': '$.ssh.kex.mac_algorithms[*]', 'label': 'mac-algorithm'},
                     {'jsonpath': '$.ssh.kex.compression_algorithms[*]', 'label': 'compression-algorithm'},
+                    {'jsonpath': '$.last_update', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
                 ]},
                 {'label': 'http', 'multipath': '$.data[*]', 'has': [
@@ -506,18 +541,20 @@ class Shodan(HNTRPlugin):
                     {'jsonpath': '$.http.title', 'label': 'http-title'},
                     {'jsonpath': '$.http.headers_hash', 'label': 'http-headers-hash'},
                     {'jsonpath': '$.http.html_hash', 'label': 'http-html-hash'},
+                    {'jsonpath': '$.last_update', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
                 ]},
                 {'label': 'ip', 'has': [
                     {'jsonpath': '$.ip_str', 'label': 'ip-address'},
                     {'jsonpath': '$.last_update', 'label': 'last-seen'},
                     {'jsonpath': '$.tags[*]', 'label': 'tag'},
+                    {'jsonpath': '$.last_update', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
                 ]},
                 {'label': 'vulns', 'has': [
                     {'jsonpath': '$.vulns[*]', 'label': 'cve'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'},
-                    {'jsonpath': '$.last_update', 'label': 'last-seen'},
+                    {'jsonpath': '$.last_update', 'label': 'date-seen'},
                 ]},
                 {'label': 'ssl', 'multipath': '$.data[*]', 'has': [
                     {'jsonpath': '$.ssl.jarm', 'label': 'jarm-fingerprint'},
@@ -544,6 +581,7 @@ class Shodan(HNTRPlugin):
                     {'jsonpath': '$.ssl.cert.issued', 'label': 'issued-date'},
                     {'jsonpath': '$.ssl.cert.expires', 'label': 'expires-date'},
                     {'jsonpath': '$.ssl.versions[*]', 'label': 'version'},
+                    {'jsonpath': '$.last_update', 'label': 'date-seen'},
                     {'jsonpath': '$.ip_str', 'label': 'ledsrc'}
                 ]}
             ],
@@ -571,11 +609,13 @@ class Shodan(HNTRPlugin):
                 all_things.append(new_attr)
 
         # @ Add Metadata
+        '''
         now = datetime.now()
         now = self._format_date(now)
         for thing in all_things:
             nowattr = Attribute(label='date-seen', value=now)
             thing.has.append(nowattr)
+        '''
 
         while None in all_things:
             all_things.remove(None)
