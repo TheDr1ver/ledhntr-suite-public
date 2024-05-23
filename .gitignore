@@ -161,3 +161,6 @@ cython_debug/
 
 # Scratchpad
 scratchpad/
+
+# Example Data
+examples/notebooks/data/
