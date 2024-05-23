@@ -1664,6 +1664,11 @@ class HNTRPlugin(BasePlugin, ABC):
 
             See 'network-service' entity below for an example.
 
+        * if 'key'==True in the rule, function will extract 
+
+        * if 'keyval'==True in the rule, function will extract both key and value
+            and put it in the format of key:value
+
         {
             'attributes':[
                 {'jsonpath': '$.ip_str', 'label': 'ip-address'},
@@ -1734,7 +1739,23 @@ class HNTRPlugin(BasePlugin, ABC):
                     sub_data_list = [data]
                 for sdl in sub_data_list:
                     jsonpath_expr = parse(rule['jsonpath'])
-                    matches = [match.value for match in jsonpath_expr.find(sdl)]
+                    if rule.get('key'):
+                        matches = [match.path.fields[0] for match in jsonpath_expr.find(sdl)]
+                    elif rule.get('keyval'):
+                        matches = []
+                        sub_matches = [(key, value) for match in jsonpath_expr.find(sdl) for key, value in match.value.items()]
+                        for sm in sub_matches:
+                            if isinstance(sm[1], list):
+                                for val in sm[1]:
+                                    s = f"{sm[0]}: {val}"
+                                    if s not in matches:
+                                        matches.append(s)
+                            else:
+                                s = f"{sm[0]}: {sm[1]}"
+                                if s not in matches:
+                                    matches.append(s)
+                    else:
+                        matches = [match.value for match in jsonpath_expr.find(sdl)]
                     for match in matches:
                         if match == "" or match is None:
                             continue
@@ -1747,8 +1768,28 @@ class HNTRPlugin(BasePlugin, ABC):
             for item in sub_data_list:
                 ent = Entity(label=rule['label'], has=[])
                 for sub_rule in rule.get('has', []):
+                    # make it so you can add already-parsed Attributes
+                    if isinstance(sub_rule, Attribute):
+                        ent.has.append(sub_rule)
+                        continue
                     jsonpath_expr = parse(sub_rule['jsonpath'])
-                    matches = [match.value for match in jsonpath_expr.find(item)]
+                    if sub_rule.get('key'):
+                        matches = [match.path.fields[0] for match in jsonpath_expr.find(item)]
+                    elif sub_rule.get('keyval'):
+                        matches = []
+                        sub_matches = [(key, value) for match in jsonpath_expr.find(item) for key, value in match.value.items()]
+                        for sm in sub_matches:
+                            if isinstance(sm[1], list):
+                                for val in sm[1]:
+                                    s = f"{sm[0]}: {val}"
+                                    if s not in matches:
+                                        matches.append(s)
+                            else:
+                                s = f"{sm[0]}: {sm[1]}"
+                                if s not in matches:
+                                    matches.append(s)
+                    else:
+                        matches = [match.value for match in jsonpath_expr.find(item)]
                     for match in matches:
                         if match == "" or match is None:
                             continue
@@ -1781,8 +1822,29 @@ class HNTRPlugin(BasePlugin, ABC):
             for item in sub_data_list:
                 rel = Relation(label=rule['label'], has=[])
                 for sub_rule in rule.get('has', []):
+                    # make it so you can add already-parsed Attributes
+                    if isinstance(sub_rule, Attribute):
+                        rel.has.append(sub_rule)
+                        continue
                     jsonpath_expr = parse(sub_rule['jsonpath'])
-                    matches = [match.value for match in jsonpath_expr.find(item)]
+                    # if key=True we want the key not the value of the JSON
+                    if sub_rule.get('key'):
+                        matches = [match.path.fields[0] for match in jsonpath_expr.find(item)]
+                    elif sub_rule.get('keyval'):
+                        matches = []
+                        sub_matches = [(key, value) for match in jsonpath_expr.find(item) for key, value in match.value.items()]
+                        for sm in sub_matches:
+                            if isinstance(sm[1], list):
+                                for val in sm[1]:
+                                    s = f"{sm[0]}: {val}"
+                                    if s not in matches:
+                                        matches.append(s)
+                            else:
+                                s = f"{sm[0]}: {sm[1]}"
+                                if s not in matches:
+                                    matches.append(s)
+                    else:
+                        matches = [match.value for match in jsonpath_expr.find(item)]
                     for match in matches:
                         if match == "" or match is None:
                             continue

@@ -352,7 +352,7 @@ class Shodan(HNTRPlugin):
                     {'jsonpath': '$.port', 'label': 'port'},
                     {'jsonpath': '$.product', 'label': 'product'},
                     {'jsonpath': '$.version', 'label': 'version'},
-                    {'jsonpath': '$.data', 'label': 'service-header'},
+                    {'jsonpath': '$.data', 'label': 'banner'},
                     {'jsonpath': '$.timestamp', 'label': 'date-seen'},
                     {'jsonpath': '$.cpe23[*]', 'label': 'cpe23'},
                     {'jsonpath': '$.hash', 'label': 'shodan-hash'},
@@ -446,6 +446,20 @@ class Shodan(HNTRPlugin):
                 )
                 all_things.remove(thing)
                 all_things.append(new_attr)
+            elif thing.get_attributes('as-number'):
+                safe_copy = copy.deepcopy(thing)
+                for asn in safe_copy.get_attributes('as-number'):
+                    if asn.value.startswith("AS"):
+                        all_things.remove(thing)
+                        new_attr = Attribute(
+                            label='as-number',
+                            value=thing.value.lstrip('AS')
+                        )
+                        thing.has.remove(asn)
+                        thing.has.append(new_attr)
+                        all_things.append(thing)
+
+
 
         # @ Add Metadata
         '''
@@ -515,7 +529,7 @@ class Shodan(HNTRPlugin):
                     {'jsonpath': '$.port', 'label': 'port'},
                     {'jsonpath': '$.product', 'label': 'product'},
                     {'jsonpath': '$.version', 'label': 'version'},
-                    {'jsonpath': '$.data', 'label': 'service-header'},
+                    {'jsonpath': '$.data', 'label': 'banner'},
                     {'jsonpath': '$.timestamp', 'label': 'date-seen'},
                     {'jsonpath': '$.cpe23[*]', 'label': 'cpe23'},
                     {'jsonpath': '$.hash', 'label': 'shodan-hash'},
@@ -608,6 +622,18 @@ class Shodan(HNTRPlugin):
                 )
                 all_things.remove(thing)
                 all_things.append(new_attr)
+            elif thing.get_attributes('as-number'):
+                safe_copy = copy.deepcopy(thing)
+                for asn in safe_copy.get_attributes('as-number'):
+                    if asn.value.startswith("AS"):
+                        all_things.remove(thing)
+                        new_attr = Attribute(
+                            label='as-number',
+                            value=thing.value.lstrip('AS')
+                        )
+                        thing.has.remove(asn)
+                        thing.has.append(new_attr)
+                        all_things.append(thing)
 
         # @ Add Metadata
         '''
@@ -620,9 +646,6 @@ class Shodan(HNTRPlugin):
 
         while None in all_things:
             all_things.remove(None)
-
-        # TODO - do I need to add check_dates in from before?
-        # TODO - I feel like check_dates and api_conf had a purpose that I'm forgetting
 
         return all_things
 

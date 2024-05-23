@@ -291,6 +291,8 @@ define
         owns as-number,
         owns auth-ssl-response,
         owns auth-tls-response,
+        owns banner,
+        owns banner-hash,
         owns cipher-bits,
         owns cipher-name,
         owns city,
@@ -346,7 +348,6 @@ define
         owns pubkey-bits,
         owns pubkey-type,
         owns registrar,
-        owns service-header,
         owns service-name,
         owns service-provider,
         owns service-body,
@@ -416,6 +417,8 @@ define
 
     network-service sub hntr-entity,
         plays host:serves,
+        owns banner,
+        owns banner-hash,
         owns cpe23,
         owns domain-name,
         owns fingerprint,
@@ -442,7 +445,6 @@ define
         owns port,
         owns product,
         owns registrar,
-        owns service-header,
         owns service-name,
         owns service-provider,
         owns service-body,
@@ -577,6 +579,12 @@ define
         value string;
 
     summary sub attribute,
+        value string;
+
+    banner sub attribute,
+        value string;
+
+    banner-hash sub attribute,
         value string;
 
     bytes-transferred sub attribute,
@@ -934,9 +942,6 @@ define
         value string;
 
     service-body sub attribute,
-        value string;
-
-    service-header sub attribute,
         value string;
 
     service-name sub attribute,
