@@ -1,5 +1,6 @@
 import copy
 import dateutil.parser
+import jmespath
 import json
 import logging
 import os
@@ -10,7 +11,6 @@ from typing import Dict, Optional
 from abc import abstractmethod, ABC
 from configparser import ConfigParser
 from datetime import datetime, timezone
-from jsonpath_ng import jsonpath, parse
 from pprint import pformat
 from time import time, sleep
 
@@ -1733,17 +1733,26 @@ class HNTRPlugin(BasePlugin, ABC):
             attributes = []
             for rule in rules:
                 if 'multipath' in rule:
-                    jsonex = parse(rule['multipath'])
-                    sub_data_list = [match.value for match in jsonex.find(data)]
+                    #! jsonex = parse(rule['multipath'])
+                    #! sub_data_list = [match.value for match in jsonex.find(data)]
+                    sub_data_list = jmespath.search(rule['multipath'], data)
                 else:
                     sub_data_list = [data]
                 for sdl in sub_data_list:
-                    jsonpath_expr = parse(rule['jsonpath'])
+                    #! jsonpath_expr = parse(rule['jsonpath'])
                     if rule.get('key'):
-                        matches = [match.path.fields[0] for match in jsonpath_expr.find(sdl)]
+                        #! matches = [match.path.fields[0] for match in jsonpath_expr.find(sdl)]
+                        if rule['jsonpath']:
+                            matches = jmespath.search(f"{rule['jsonpath']}.keys(@)", sdl)
+                        else:
+                            matches = jmespath.search(f"keys(@)", sdl)
                     elif rule.get('keyval'):
                         matches = []
-                        sub_matches = [(key, value) for match in jsonpath_expr.find(sdl) for key, value in match.value.items()]
+                        #! sub_matches = [(key, value) for match in jsonpath_expr.find(sdl) for key, value in match.value.items()]
+                        sub_hits = jmespath.search(rule['jsonpath'], sdl)
+                        if not sub_hits:
+                            continue
+                        sub_matches = [(key, value) for key, values in sub_hits.items() for value in values if not key.startswith('_')]
                         for sm in sub_matches:
                             if isinstance(sm[1], list):
                                 for val in sm[1]:
@@ -1755,7 +1764,10 @@ class HNTRPlugin(BasePlugin, ABC):
                                 if s not in matches:
                                     matches.append(s)
                     else:
-                        matches = [match.value for match in jsonpath_expr.find(sdl)]
+                        #! matches = [match.value for match in jsonpath_expr.find(sdl)]
+                        matches = jmespath.search(rule['jsonpath'], sdl)
+                    if not isinstance(matches, list):
+                        matches = [matches]
                     for match in matches:
                         if match == "" or match is None:
                             continue
@@ -1772,12 +1784,23 @@ class HNTRPlugin(BasePlugin, ABC):
                     if isinstance(sub_rule, Attribute):
                         ent.has.append(sub_rule)
                         continue
-                    jsonpath_expr = parse(sub_rule['jsonpath'])
+                    #! jsonpath_expr = parse(sub_rule['jsonpath'])
                     if sub_rule.get('key'):
-                        matches = [match.path.fields[0] for match in jsonpath_expr.find(item)]
+                        #! matches = [match.path.fields[0] for match in jsonpath_expr.find(item)]
+                        if sub_rule['jsonpath']:
+                            matches = jmespath.search(f"{sub_rule['jsonpath']}.keys(@)", item)
+                        else:
+                            matches = jmespath.search(f"keys(@)", item)
                     elif sub_rule.get('keyval'):
                         matches = []
-                        sub_matches = [(key, value) for match in jsonpath_expr.find(item) for key, value in match.value.items()]
+                        #! sub_matches = [(key, value) for match in jsonpath_expr.find(item) for key, value in match.value.items()]
+                        sub_hits = jmespath.search(sub_rule['jsonpath'], item)
+                        print(sub_hits)
+                        if not sub_hits:
+                            continue
+                        #! sub_matches = [(key, value) for sub_hit in sub_hits for key, value in sub_hit.items()]
+                        #! sub_matches = [(key, value) for match in sub_hits for key, value in match.items()]
+                        sub_matches = [(key, value) for key, values in sub_hits.items() for value in values if not key.startswith('_')]
                         for sm in sub_matches:
                             if isinstance(sm[1], list):
                                 for val in sm[1]:
@@ -1789,7 +1812,10 @@ class HNTRPlugin(BasePlugin, ABC):
                                 if s not in matches:
                                     matches.append(s)
                     else:
-                        matches = [match.value for match in jsonpath_expr.find(item)]
+                        #! matches = [match.value for match in jsonpath_expr.find(item)]
+                        matches = jmespath.search(sub_rule['jsonpath'], item)
+                    if not isinstance(matches, list):
+                        matches = [matches]
                     for match in matches:
                         if match == "" or match is None:
                             continue
@@ -1826,13 +1852,22 @@ class HNTRPlugin(BasePlugin, ABC):
                     if isinstance(sub_rule, Attribute):
                         rel.has.append(sub_rule)
                         continue
-                    jsonpath_expr = parse(sub_rule['jsonpath'])
+                    #! jsonpath_expr = parse(sub_rule['jsonpath'])
                     # if key=True we want the key not the value of the JSON
                     if sub_rule.get('key'):
-                        matches = [match.path.fields[0] for match in jsonpath_expr.find(item)]
+                        #! matches = [match.path.fields[0] for match in jsonpath_expr.find(item)]
+                        if sub_rule['jsonpath']:
+                            matches = jmespath.search(f"{sub_rule['jsonpath']}.keys(@)", item)
+                        else:
+                            matches = jmespath.search(f"keys(@)", item)
                     elif sub_rule.get('keyval'):
                         matches = []
-                        sub_matches = [(key, value) for match in jsonpath_expr.find(item) for key, value in match.value.items()]
+                        #! sub_matches = [(key, value) for match in jsonpath_expr.find(item) for key, value in match.value.items()]
+                        sub_hits = jmespath.search(sub_rule['jsonpath'], item)
+                        #! sub_matches = [(key, value) for sh in sub_hits for key, value in sub_hits.items()]
+                        # print(sub_hits)
+                        #! sub_matches = [(key, value) for match in sub_hits for key, value in match.items()]
+                        sub_matches = [(key, value) for key, values in sub_hits.items() for value in values if not key.startswith('_')]
                         for sm in sub_matches:
                             if isinstance(sm[1], list):
                                 for val in sm[1]:
@@ -1844,7 +1879,10 @@ class HNTRPlugin(BasePlugin, ABC):
                                 if s not in matches:
                                     matches.append(s)
                     else:
-                        matches = [match.value for match in jsonpath_expr.find(item)]
+                        #! matches = [match.value for match in jsonpath_expr.find(item)]
+                        matches = jmespath.search(sub_rule['jsonpath'], item)
+                    if not isinstance(matches, list):
+                        matches = [matches]
                     for match in matches:
                         if match == "" or match is None:
                             continue
@@ -1913,6 +1951,7 @@ class HNTRPlugin(BasePlugin, ABC):
             elif ttype.lower() == 'relation':
                 parsed = parse_relations(data, [rules])
         return parsed
+
 
     def purge_empty_things(self, things: List[Thing] = []):
         """Gets rid of all None objects in a list of Things
