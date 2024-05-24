@@ -278,137 +278,338 @@ class Censys(HNTRPlugin):
 
         :returns: list of Things normally, or date or False if check_dates=True
         """
+        _log = self.logger
+        all_things = []
+
+        # @ check_dates logic
+        if check_dates:
+            seen_rule = {'jsonpath': 'last_updated_at', 'label': 'date-seen'}
+            return self.check_dates_shortcut(check_dates, raw['result'], seen_rule)
+
         # @ Top Level Metadata
         ipaddy = self.process_parsing_rules(
             raw, 
-            {'jsonpath': '$.ip', 'label': 'ip-address'}, 
+            {'jsonpath': 'ip', 'label': 'ip-address'}, 
             single=True
         )[0]
         ledsrc = self.process_parsing_rules(
             raw, 
-            {'jsonpath': '$.ip', 'label': 'ledsrc'}, 
+            {'jsonpath': 'ip', 'label': 'ledsrc'}, 
             single=True
         )[0]
-        lastseen = self.process_parsing_rules(
+        last_updated = self.process_parsing_rules(
             raw, 
-            {'jsonpath': '$.last_updated_at', 'label': 'last-seen'}, 
+            {'jsonpath': 'last_updated_at', 'label': 'date-seen'}, 
             single=True
         )[0]
         tags = self.process_parsing_rules(
             raw, 
-            {'jsonpath': '$.labels[*]', 'label': 'tag'}, 
+            {'jsonpath': 'labels[*]', 'label': 'tag'}, 
             single=True
         )
 
 
         parsing_rules = {
             'attributes': [
-                {'jsonpath': '$.ip', 'label': 'ip-address'},
-                {'jsonpath': '$.last_updated_at', 'label': 'last-seen'},
-                {'jsonpath': '$.labels[*]', 'label': 'tag'}
+                {'jsonpath': 'ip', 'label': 'ip-address'},
+                {'jsonpath': 'last_updated_at', 'label': 'last-seen'},
+                {'jsonpath': 'labels[*]', 'label': 'tag'}
             ],
             'entities': [
                 {'label': 'autonomous-system', 'has': [
-                    {'jsonpath': '$.autonomous_system.asn', 'label': 'as-number'},
-                    {'jsonpath': '$.autonomous_system.name', 'label': 'as-name'},
-                    {'jsonpath': '$.autonomous_system.bgp_prefix', 'label': 'cidr-range'},
-                    {'jsonpath': '$.autonomous_system.country_code', 'label': 'country-code'},
-                    {'jsonpath': '$.autonomous_system_updated_at', 'label': 'date-seen'},
+                    {'jsonpath': 'autonomous_system.asn', 'label': 'as-number'},
+                    {'jsonpath': 'autonomous_system.name', 'label': 'as-name'},
+                    {'jsonpath': 'autonomous_system.bgp_prefix', 'label': 'cidr-range'},
+                    {'jsonpath': 'autonomous_system.country_code', 'label': 'country-code'},
+                    {'jsonpath': 'autonomous_system_updated_at', 'label': 'date-seen'},
                     ledsrc,
                 ]},
-                {'label': 'dns-record', 'multipath': "$.dns.records", 'has': [
-                    {'jsonpath': '$.*', 'key':True, 'label':'fqdn'},
-                    {'jsonpath': '$..record_type', 'label': 'dns-type'},
-                    {'jsonpath': '$..resolved_at', 'label': 'date-seen'},
+                {'label': 'dns-record', 'multipath': "dns.records", 'has': [
+                    {'jsonpath': '', 'key':True, 'label':'fqdn'},
+                    {'jsonpath': '*.record_type', 'label': 'dns-type'},
+                    {'jsonpath': '*.resolved_at', 'label': 'date-seen'},
                     Attribute(label="dns-value", value=ipaddy.value),
                     ledsrc,
                 ]},
-                {'label': 'dns-record', 'multipath': "$.dns.reverse_dns", 'has': [
-                    {'jsonpath': '$.names[*]', 'label':'fqdn'},
+                {'label': 'dns-record', 'multipath': "dns.reverse_dns", 'has': [
+                    {'jsonpath': 'names[*]', 'label':'fqdn'},
                     Attribute(label='dns-type', value="PTR"),
-                    {'jsonpath': '$.resolved_at', 'label': 'date-seen'},
+                    {'jsonpath': 'resolved_at', 'label': 'date-seen'},
                     Attribute(label="dns-value", value=ipaddy.value),
                     ledsrc,
                 ]},
                 {'label': 'geoloc', 'has': [
-                    {'jsonpath': '$.location.coordinates.latitude', 'label': 'latitude'},
-                    {'jsonpath': '$.location.cooredinates.longitude', 'label': 'longitude'},
-                    {'jsonpath': '$.location.city', 'label': 'city'},
-                    {'jsonpath': '$.location.country_code', 'label': 'country-code'},
-                    {'jsonpath': '$.location.country', 'label': 'country'},
-                    {'jsonpath': '$.location.postal_code', 'label': 'postal-code'},
-                    {'jsonpath': '$.location.province', 'label': 'province'},
-                    {'jsonpath': '$.location.timezone', 'label': 'timezone'},
-                    {'jsonpath': '$.location_updated_at', 'label': 'date-seen'},
+                    {'jsonpath': 'location.coordinates.latitude', 'label': 'latitude'},
+                    {'jsonpath': 'location.cooredinates.longitude', 'label': 'longitude'},
+                    {'jsonpath': 'location.city', 'label': 'city'},
+                    {'jsonpath': 'location.country_code', 'label': 'country-code'},
+                    {'jsonpath': 'location.country', 'label': 'country'},
+                    {'jsonpath': 'location.postal_code', 'label': 'postal-code'},
+                    {'jsonpath': 'location.province', 'label': 'province'},
+                    {'jsonpath': 'location.timezone', 'label': 'timezone'},
+                    {'jsonpath': 'location_updated_at', 'label': 'date-seen'},
                     ledsrc,
                 ]},
-                {'label': 'network-service', 'multipath': "$.services", 'has': [
-                    {'jsonpath': '$.banner', 'label': 'banner'},
-                    {'jsonpath': '$.banner_hashes[*]', 'label': 'banner-hash'},
-                    {'jsonpath': '$.certificate', 'label': 'fingerprint'},
-                    {'jsonpath': '$.extended_service_name', 'label': 'service-name'},
-                    {'jsonpath': '$.observed_at', 'label': 'date-seen'},
-                    {'jsonpath': '$.port', 'label': 'port'},
+                {'label': 'ip', 'has': [
+                    {'jsonpath': 'autonomous_system.asn', 'label': 'as-number'},
+                    {'jsonpath': 'autonomous_system.name', 'label': 'as-name'},
+                    {'jsonpath': 'autonomous_system.bgp_prefix', 'label': 'cidr-range'},
+                    {'jsonpath': 'autonomous_system.country_code', 'label': 'country-code'},
+                    {'jsonpath': 'location.city', 'label': 'city'},
+                    {'jsonpath': 'location.country_code', 'label': 'country-code'},
+                    {'jsonpath': 'location.country', 'label': 'country'},
+                    {'jsonpath': 'location.postal_code', 'label': 'postal-code'},
+                    {'jsonpath': 'location.province', 'label': 'province'},
+                    {'jsonpath': 'location.timezone', 'label': 'timezone'},
+                    {'jsonpath': 'services[*].banner', 'label': 'banner'},
+                    {'jsonpath': 'services[*].banner_hashes[*]', 'label': 'banner-hash'},
+                    {'jsonpath': 'services[*].port', 'label': 'port'},
+                    {'jsonpath': 'services[*].extended_service_name', 'label': 'service-name'},
+                    ipaddy, #@key
+                    *tags,
+                    last_updated,
+                    ledsrc,
+                ]},
+                {'label': 'os', 'has': [
+                    {'jsonpath': 'operating_system.uniform_resource_identifier', 'label': 'uniform-resource-identifier'},
+                    {'jsonpath': 'product', 'label': 'product'},
+                    {'jsonpath': 'part', 'label': 'part'},
+                    {'jsonpath': 'vendor', 'label': 'vendor'},
+                    {'jsonpath': 'version', 'label': 'version'},
+                    {'jsonpath': 'last_updated_at', 'label': 'date-seen'},
+                    ledsrc,
+                ]},
+                {'label': 'network-service', 'multipath': "services[*]", 'has': [
+                    #. top-level
+                    {'jsonpath': 'banner', 'label': 'banner'},
+                    {'jsonpath': 'banner_hashes[*]', 'label': 'banner-hash'},
+                    {'jsonpath': 'certificate', 'label': 'fingerprint'},
+                    {'jsonpath': 'extended_service_name', 'label': 'service-name'},
+                    {'jsonpath': 'labels[*]', 'label': 'tag'},
+                    {'jsonpath': 'observed_at', 'label': 'date-seen'},
+                    ipaddy,
+                    {'jsonpath': 'port', 'label': 'port'},
+                    #. dns
+                    {'jsonpath': 'dns.version', 'label': 'version'},
+                    {'jsonpath': 'dns.server_type', 'label': 'dns-server-type'},
+                    {'jsonpath': 'dns.answers[*].type', 'label': 'dns-type'},
+                    {'jsonpath': 'dns.authorities[*].response', 'label': 'dns-authority'},
+                    {'jsonpath': 'dns.questions[*].name', 'label': 'dns-query'},
+                    {'jsonpath': 'dns.questions[*].response', 'label': 'dns-response'},
+                    {'jsonpath': 'dns.r_code', 'label': 'dns-rcode'},
+                    {'jsonpath': 'dns.resolves_correctly', 'label': 'dns-resolves-correctly'},
+                    #. ftp
+                    {'jsonpath': 'ftp.auth_ssl_response', 'label': 'auth-ssl-response'},
+                    {'jsonpath': 'ftp.auth_tls_response', 'label': 'auth-tls-response'},
+                    {'jsonpath': 'ftp.banner', 'label': 'banner'},
+                    {'jsonpath': 'ftp.status_code', 'label': 'status-code'},
+                    {'jsonpath': 'ftp.status_meaning', 'label': 'status-meaning'},
                     #. http
-                    {'jsonpath': '$.http.response.headers', 'keyval':True, 'label': 'http-header-pair'},
-                    {'jsonpath': '$.http.response.status_code', 'label': 'status-code'},
-                    {'jsonpath': '$.http.response.body_size', 'label': 'http-html-size'},
-                    {'jsonpath': '$.http.response.body', 'label': 'http-html'},
-                    {'jsonpath': '$.http.response.favicons[*].hashes[*]', 'label': 'http-favicon-hash'},
-                    {'jsonpath': '$.http.response.body_hashes[*]', 'label': 'http-html-hash'},
-                    {'jsonpath': '$.http.response.html_title', 'label': 'http-html-title'},
+                    {'jsonpath': 'http.response.headers', 'keyval':True, 'label': 'http-header-pair'},
+                    {'jsonpath': 'http.response.status_code', 'label': 'status-code'},
+                    {'jsonpath': 'http.response.body_size', 'label': 'http-html-size'},
+                    {'jsonpath': 'http.response.body', 'label': 'http-html'},
+                    {'jsonpath': 'http.response.favicons[*].hashes[*]', 'label': 'http-favicon-hash'},
+                    {'jsonpath': 'http.response.body_hashes[*]', 'label': 'http-html-hash'},
+                    {'jsonpath': 'http.response.html_title', 'label': 'http-html-title'},
+                    #. imap
+                    {'jsonpath': 'imap.banner', 'label': 'banner'},
+                    {'jsonpath': 'imap.start_tls', 'label': 'start-tls'},
                     #. jarm
-                    {'jsonpath': '$.jarm.fingerprint', 'label': 'jarm-fingerprint'},
-                    {'jsonpath': '$.jarm.cipher_and_version_fingerprint', 'label': 'jarm-cipher'},
-                    {'jsonpath': '$.jarm.tls_extensions_sha256', 'label': 'jarm-tls-ext'},
+                    {'jsonpath': 'jarm.fingerprint', 'label': 'jarm-fingerprint'},
+                    {'jsonpath': 'jarm.cipher_and_version_fingerprint', 'label': 'jarm-cipher'},
+                    {'jsonpath': 'jarm.tls_extensions_sha256', 'label': 'jarm-tls-ext'},
+                    #. pop3
+                    {'jsonpath': 'pop3.banner', 'label': 'banner'},
+                    {'jsonpath': 'pop3.start_tls', 'label': 'start-tls'},
+                    #. smtp
+                    {'jsonpath': 'smtp.banner', 'label': 'banner'},
+                    {'jsonpath': 'smtp.ehlo', 'label': 'ehlo'},
+                    {'jsonpath': 'smtp.start_tls', 'label': 'start-tls'},
                     #. software
-                    {'jsonpath': '$.software[*].uniform_resource_identifier', 'label': 'uniform-resource-identifier'},
-                    {'jsonpath': '$.software[*].product', 'label': 'product'},
-                    {'jsonpath': '$.software[*].part', 'label': 'part'},
-                    {'jsonpath': '$.software[*].vendor', 'label': 'vendor'},
-                    {'jsonpath': '$.software[*].version', 'label': 'version'},
+                    {'jsonpath': 'software[*].uniform_resource_identifier', 'label': 'uniform-resource-identifier'},
+                    {'jsonpath': 'software[*].product', 'label': 'product'},
+                    {'jsonpath': 'software[*].part', 'label': 'part'},
+                    {'jsonpath': 'software[*].vendor', 'label': 'vendor'},
+                    {'jsonpath': 'software[*].version', 'label': 'version'},
+                    #.ssh
+                    {'jsonpath': 'ssh.endpoint_id.raw', 'label': 'banner'},
+                    {'jsonpath': 'ssh.kex_init_message.kex_algorithms[*]', 'label': 'kex-algorithm'},
+                    {'jsonpath': 'ssh.kex_init_message.host_key_algorithms[*]', 'label': 'host-key-algorithm'},
+                    {'jsonpath': 'ssh.kex_init_message.client_to_server_ciphers[*]', 'label': 'client-cipher'},
+                    {'jsonpath': 'ssh.kex_init_message.server_to_client_ciphers[*]', 'label': 'server-cipher'},
+                    {'jsonpath': 'ssh.kex_init_message.client_to_server_macs[*]', 'label': 'client-mac-algorithm'},
+                    {'jsonpath': 'ssh.kex_init_message.server_to_client_macs[*]', 'label': 'server-mac-algorithm'},
+                    {'jsonpath': 'ssh.kex_init_message.client_to_server_compression[*]', 'label': 'client-compression-algorithm'},
+                    {'jsonpath': 'ssh.kex_init_message.server_to_client_compression[*]', 'label': 'server-compression-algorithm'},
+                    {'jsonpath': 'ssh.server_host_key.fingerprint_sha256', 'label': 'fingerprint'},
+                    {'jsonpath': 'ssh.server_host_key.rsa_public_key.length', 'label': 'pubkey-bits'},
+                    {'jsonpath': 'ssh.hassh_fingerprint', 'label': 'hassh-fingerprint'},
                     #. ssl
-                    ipaddy,
+                    {'jsonpath': 'tls.cipher_selected', 'label': 'cipher-name'},
+                    {'jsonpath': 'tls.certificates.leaf_data.names[*]', 'label': 'fqdn'},
+                    {'jsonpath': 'tls.certificates.leaf_data.pubkey_bit_size', 'label': 'pubkey-bits'},
+                    {'jsonpath': 'tls.certificates.leaf_data.pubkey_algorithm', 'label': 'pubkey-type'},
+                    {'jsonpath': 'tls.certificates.leaf_data.fingerprint', 'label': 'fingerprint'},
+                    {'jsonpath': 'tls.certificates.leaf_data.issuer.common_name[*]', 'label': 'issuer-cn'},
+                    {'jsonpath': 'tls.certificates.leaf_data.issuer.organization[*]', 'label': 'issuer-o'},
+                    {'jsonpath': 'tls.certificates.leaf_data.issuer.country[*]', 'label': 'issuer-c'},
+                    {'jsonpath': 'tls.certificates.leaf_data.issuer.locality[*]', 'label': 'issuer-l'},
+                    {'jsonpath': 'tls.certificates.leaf_data.issuer.organizational_unit[*]', 'label': 'issuer-ou'},
+                    {'jsonpath': 'tls.certificates.leaf_data.issuer.province[*]', 'label': 'issuer-st'},
+                    {'jsonpath': 'tls.certificates.leaf_data.subject.common_name[*]', 'label': 'subject-cn'},
+                    {'jsonpath': 'tls.certificates.leaf_data.subject.organization[*]', 'label': 'subject-o'},
+                    {'jsonpath': 'tls.certificates.leaf_data.subject.country[*]', 'label': 'subject-c'},
+                    {'jsonpath': 'tls.certificates.leaf_data.subject.locality[*]', 'label': 'subject-l'},
+                    {'jsonpath': 'tls.certificates.leaf_data.subject.organizational_unit[*]', 'label': 'subject-ou'},
+                    {'jsonpath': 'tls.certificates.leaf_data.subject.province[*]', 'label': 'subject-st'},
+                    {'jsonpath': 'tls.certificates.leaf_data.signature.signature_algorithm', 'label': 'sig-alg'},
+                    {'jsonpath': 'tls.certificates.leaf_data.chain[*].fingerprint', 'label': 'chain-fingerprint'},
+                    {'jsonpath': 'tls.ja3s', 'label': 'ja3s'},
+                    {'jsonpath': 'tls.ja4s', 'label': 'ja4s'},
+                    {'jsonpath': 'tls.versions[*].tls_version', 'label': 'version'},
+                    #. meta
                     ledsrc,
                 ]},
-                {'label':'http', 'multipath':'$.services', 'has':[
-                    {'jsonpath': '$.banner', 'label': 'banner'},
-                    {'jsonpath': '$.banner_hashes[*]', 'label': 'banner-hash'},
-                    {'jsonpath': '$.certificate', 'label': 'fingerprint'},
-                    {'jsonpath': '$.http.response.headers', 'keyval':True, 'label': 'http-header-pair'},
-                    {'jsonpath': '$.http.response.status_code', 'label': 'status-code'},
-                    {'jsonpath': '$.http.response.body_size', 'label': 'http-html-size'},
-                    {'jsonpath': '$.http.response.body', 'label': 'http-html'},
-                    {'jsonpath': '$.http.response.favicons[*].hashes[*]', 'label': 'http-favicon-hash'},
-                    {'jsonpath': '$.http.response.body_hashes[*]', 'label': 'http-html-hash'},
-                    {'jsonpath': '$.http.response.html_title', 'label': 'http-html-title'},
-                    {'jsonpath': '$.observed_at', 'label': 'date-seen'},
-                    ipaddy,
+                #@ Specific Service Entities
+                {'label':'dns-service', 'multipath':'services[*]', 'has':[
+                    {'jsonpath': 'dns.version', 'label': 'version'},
+                    {'jsonpath': 'dns.server_type', 'label': 'dns-server-type'},
+                    {'jsonpath': 'dns.answers[*].type', 'label': 'dns-type'},
+                    {'jsonpath': 'dns.authorities[*].response', 'label': 'dns-authority'},
+                    {'jsonpath': 'dns.questions[*].name', 'label': 'dns-query'},
+                    {'jsonpath': 'dns.questions[*].response', 'label': 'dns-response'},
+                    {'jsonpath': 'dns.r_code', 'label': 'dns-rcode'},
+                    {'jsonpath': 'dns.resolves_correctly', 'label': 'dns-resolves-correctly'},
+                    # ! Required Glue
+                    {'jsonpath': 'observed_at', 'label': 'date-seen'},
                     ledsrc,
                 ]},
-                {'label':'jarm', 'multipath':'$.services', 'has':[
-                    {'jsonpath': '$.banner', 'label': 'banner'},
-                    {'jsonpath': '$.banner_hashes[*]', 'label': 'banner-hash'},
-                    {'jsonpath': '$.jarm.fingerprint', 'label': 'fingerprint'},
-                    {'jsonpath': '$.jarm.fingerprint', 'label': 'jarm-fingerprint'},
-                    {'jsonpath': '$.jarm.cipher_and_version_fingerprint', 'label': 'jarm-cipher'},
-                    {'jsonpath': '$.jarm.tls_extensions_sha256', 'label': 'jarm-tls-ext'},
-                    {'jsonpath': '$.jarm.observed_at', 'label': 'date-seen'},
-                    ipaddy,
+                {'label':'ftp', 'multipath':'services[*]', 'has':[
+                    {'jsonpath': 'ftp.auth_ssl_response', 'label': 'auth-ssl-response'},
+                    {'jsonpath': 'ftp.auth_tls_response', 'label': 'auth-tls-response'},
+                    {'jsonpath': 'ftp.banner', 'label': 'banner'},
+                    {'jsonpath': 'ftp.status_code', 'label': 'status-code'},
+                    {'jsonpath': 'ftp.status_meaning', 'label': 'status-meaning'},
+                    # ! Required Glue
+                    {'jsonpath': 'observed_at', 'label': 'date-seen'},
                     ledsrc,
                 ]},
-                {'label':'software', 'multipath':'$.services[*].software[*]', 'has':[
-                    {'jsonpath': '$.uniform_resource_identifier', 'label': 'uniform-resource-identifier'},
-                    {'jsonpath': '$.product', 'label': 'product'},
-                    {'jsonpath': '$.part', 'label': 'part'},
-                    {'jsonpath': '$.vendor', 'label': 'vendor'},
-                    {'jsonpath': '$.version', 'label': 'version'},
-                    ipaddy,
+                {'label':'http', 'multipath':'services[*]', 'has':[
+                    {'jsonpath': 'http.response.headers', 'keyval':True, 'label': 'http-header-pair'},
+                    {'jsonpath': 'http.response.status_code', 'label': 'status-code'},
+                    {'jsonpath': 'http.response.body_size', 'label': 'http-html-size'},
+                    {'jsonpath': 'http.response.body', 'label': 'http-html'},
+                    {'jsonpath': 'http.response.favicons[*].hashes[*]', 'label': 'http-favicon-hash'},
+                    {'jsonpath': 'http.response.body_hashes[*]', 'label': 'http-html-hash'},
+                    {'jsonpath': 'http.response.html_title', 'label': 'http-html-title'},
+                    # ! Required Glue
+                    {'jsonpath': 'observed_at', 'label': 'date-seen'},
+                    ledsrc,
+                ]},
+                {'label':'imap', 'multipath':'services[*]', 'has':[
+                    {'jsonpath': 'imap.banner', 'label': 'banner'},
+                    {'jsonpath': 'imap.start_tls', 'label': 'start-tls'},
+                    # ! Required Glue
+                    {'jsonpath': 'observed_at', 'label': 'date-seen'},
+                    ledsrc,
+                ]},
+                {'label':'jarm', 'multipath':'services[*]', 'has':[
+                    {'jsonpath': 'jarm.fingerprint', 'label': 'fingerprint'}, #@key
+                    {'jsonpath': 'jarm.fingerprint', 'label': 'jarm-fingerprint'},
+                    {'jsonpath': 'jarm.cipher_and_version_fingerprint', 'label': 'jarm-cipher'},
+                    {'jsonpath': 'jarm.tls_extensions_sha256', 'label': 'jarm-tls-ext'},
+                    {'jsonpath': 'jarm.observed_at', 'label': 'date-seen'},
+                    # ! Required Glue
+                    {'jsonpath': 'observed_at', 'label': 'date-seen'},
+                    ledsrc,
+                ]},
+                {'label':'pop3', 'multipath':'services[*]', 'has':[
+                    {'jsonpath': 'pop3.banner', 'label': 'banner'},
+                    {'jsonpath': 'pop3.start_tls', 'label': 'start-tls'},
+                    # ! Required Glue
+                    {'jsonpath': 'observed_at', 'label': 'date-seen'},
+                    ledsrc,
+                ]},
+                {'label':'smtp', 'multipath':'services[*]', 'has':[
+                    {'jsonpath': 'smtp.banner', 'label': 'banner'},
+                    {'jsonpath': 'smtp.ehlo', 'label': 'ehlo'},
+                    {'jsonpath': 'smtp.start_tls', 'label': 'start-tls'},
+                    # ! Required Glue
+                    {'jsonpath': 'observed_at', 'label': 'date-seen'},
+                    ledsrc,
+                ]},
+                {'label':'software', 'multipath':'services[*]', 'has':[
+                    {'jsonpath': 'software[*].uniform_resource_identifier', 'label': 'uniform-resource-identifier'},
+                    {'jsonpath': 'software[*].product', 'label': 'product'},
+                    {'jsonpath': 'software[*].part', 'label': 'part'},
+                    {'jsonpath': 'software[*].vendor', 'label': 'vendor'},
+                    {'jsonpath': 'software[*].version', 'label': 'version'},
+                    # ! Required Glue
+                    {'jsonpath': 'observed_at', 'label': 'date-seen'},
+                    ledsrc,
+                ]},
+                {'label':'ssh', 'multipath':'services[*]', 'has':[
+                    {'jsonpath': 'ssh.endpoint_id.raw', 'label': 'banner'},
+                    {'jsonpath': 'ssh.kex_init_message.kex_algorithms[*]', 'label': 'kex-algorithm'},
+                    {'jsonpath': 'ssh.kex_init_message.host_key_algorithms[*]', 'label': 'host-key-algorithm'},
+                    {'jsonpath': 'ssh.kex_init_message.client_to_server_ciphers[*]', 'label': 'client-cipher'},
+                    {'jsonpath': 'ssh.kex_init_message.server_to_client_ciphers[*]', 'label': 'server-cipher'},
+                    {'jsonpath': 'ssh.kex_init_message.client_to_server_macs[*]', 'label': 'client-mac-algorithm'},
+                    {'jsonpath': 'ssh.kex_init_message.server_to_client_macs[*]', 'label': 'server-mac-algorithm'},
+                    {'jsonpath': 'ssh.kex_init_message.client_to_server_compression[*]', 'label': 'client-compression-algorithm'},
+                    {'jsonpath': 'ssh.kex_init_message.server_to_client_compression[*]', 'label': 'server-compression-algorithm'},
+                    {'jsonpath': 'ssh.server_host_key.fingerprint_sha256', 'label': 'fingerprint'}, #@key
+                    {'jsonpath': 'ssh.server_host_key.rsa_public_key.length', 'label': 'pubkey-bits'},
+                    {'jsonpath': 'ssh.hassh_fingerprint', 'label': 'hassh-fingerprint'},
+                    # ! Required Glue
+                    {'jsonpath': 'observed_at', 'label': 'date-seen'},
+                    ledsrc,
+                ]},
+                {'label':'ssl', 'multipath':'services[*]', 'has':[
+                    {'jsonpath': 'tls.cipher_selected', 'label': 'cipher-name'},
+                    {'jsonpath': 'tls.certificates.leaf_data.names[*]', 'label': 'fqdn'},
+                    {'jsonpath': 'tls.certificates.leaf_data.pubkey_bit_size', 'label': 'pubkey-bits'},
+                    {'jsonpath': 'tls.certificates.leaf_data.pubkey_algorithm', 'label': 'pubkey-type'},
+                    {'jsonpath': 'tls.certificates.leaf_data.fingerprint', 'label': 'fingerprint'}, #@key
+                    {'jsonpath': 'tls.certificates.leaf_data.issuer.common_name[*]', 'label': 'issuer-cn'},
+                    {'jsonpath': 'tls.certificates.leaf_data.issuer.organization[*]', 'label': 'issuer-o'},
+                    {'jsonpath': 'tls.certificates.leaf_data.issuer.country[*]', 'label': 'issuer-c'},
+                    {'jsonpath': 'tls.certificates.leaf_data.issuer.locality[*]', 'label': 'issuer-l'},
+                    {'jsonpath': 'tls.certificates.leaf_data.issuer.organizational_unit[*]', 'label': 'issuer-ou'},
+                    {'jsonpath': 'tls.certificates.leaf_data.issuer.province[*]', 'label': 'issuer-st'},
+                    {'jsonpath': 'tls.certificates.leaf_data.subject.common_name[*]', 'label': 'subject-cn'},
+                    {'jsonpath': 'tls.certificates.leaf_data.subject.organization[*]', 'label': 'subject-o'},
+                    {'jsonpath': 'tls.certificates.leaf_data.subject.country[*]', 'label': 'subject-c'},
+                    {'jsonpath': 'tls.certificates.leaf_data.subject.locality[*]', 'label': 'subject-l'},
+                    {'jsonpath': 'tls.certificates.leaf_data.subject.organizational_unit[*]', 'label': 'subject-ou'},
+                    {'jsonpath': 'tls.certificates.leaf_data.subject.province[*]', 'label': 'subject-st'},
+                    {'jsonpath': 'tls.certificates.leaf_data.signature.signature_algorithm', 'label': 'sig-alg'},
+                    {'jsonpath': 'tls.certificates.leaf_data.chain[*].fingerprint', 'label': 'chain-fingerprint'},
+                    {'jsonpath': 'tls.ja3s', 'label': 'ja3s'},
+                    {'jsonpath': 'tls.ja4s', 'label': 'ja4s'},
+                    {'jsonpath': 'tls.versions[*].tls_version', 'label': 'version'},
+                    # ! Required Glue
+                    {'jsonpath': 'observed_at', 'label': 'date-seen'},
                     ledsrc,
                 ]},
             ],
             'relations':[],
         }
+
+        data = raw['result']
+        _log.debug(f"attr: {len(parsing_rules['attributes'])} ent: {len(parsing_rules['entities'])} rel: {len(parsing_rules['relations'])}")
+        parsed_result = self.process_parsing_rules(data, parsing_rules)
+        for _, things in parsed_result.items():
+            for thing in things:
+                if thing not in all_things:
+                    all_things.append(thing)
+
+        while None in all_things:
+            all_things.remove(None)
+
+        return all_things
+
         # TODO - remember the check_dates function
         # TODO - add metadata like date-seen
         # TODO - add the actual parsing function
