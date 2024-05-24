@@ -246,7 +246,7 @@ class Censys(HNTRPlugin):
             params = {
                 "at_time": None, # RFC3339 Timestamp
             },
-            parser = self.parse_hosts,
+            parser = self.new_parse_hosts,
             add_to_db = self.add_hunt, # This can probably be revisited
             simple_query_types = ['ip'],
             param_query_key=self.param_query_key,
@@ -280,6 +280,7 @@ class Censys(HNTRPlugin):
         """
         _log = self.logger
         all_things = []
+        data = raw['result']
 
         # @ check_dates logic
         if check_dates:
@@ -287,24 +288,30 @@ class Censys(HNTRPlugin):
             return self.check_dates_shortcut(check_dates, raw['result'], seen_rule)
 
         # @ Top Level Metadata
+        test = self.process_parsing_rules(
+            data,
+            {'jsonpath': 'ip', 'label': 'ip-address'},
+            single=True
+        )
+        #// _log.info(test)
         ipaddy = self.process_parsing_rules(
-            raw, 
-            {'jsonpath': 'ip', 'label': 'ip-address'}, 
+            data,
+            {'jsonpath': 'ip', 'label': 'ip-address'},
             single=True
         )[0]
         ledsrc = self.process_parsing_rules(
-            raw, 
-            {'jsonpath': 'ip', 'label': 'ledsrc'}, 
+            data,
+            {'jsonpath': 'ip', 'label': 'ledsrc'},
             single=True
         )[0]
         last_updated = self.process_parsing_rules(
-            raw, 
-            {'jsonpath': 'last_updated_at', 'label': 'date-seen'}, 
+            data,
+            {'jsonpath': 'last_updated_at', 'label': 'date-seen'},
             single=True
         )[0]
         tags = self.process_parsing_rules(
-            raw, 
-            {'jsonpath': 'labels[*]', 'label': 'tag'}, 
+            data,
+            {'jsonpath': 'labels[*]', 'label': 'tag'},
             single=True
         )
 
@@ -597,7 +604,6 @@ class Censys(HNTRPlugin):
             'relations':[],
         }
 
-        data = raw['result']
         _log.debug(f"attr: {len(parsing_rules['attributes'])} ent: {len(parsing_rules['entities'])} rel: {len(parsing_rules['relations'])}")
         parsed_result = self.process_parsing_rules(data, parsing_rules)
         for _, things in parsed_result.items():
@@ -616,8 +622,8 @@ class Censys(HNTRPlugin):
         # TODO - verify new_parsing_rules
 
     def parse_hosts_search(
-        self, 
-        raw: Dict = {}, 
+        self,
+        raw: Dict = {},
         api_conf: Optional[APIConfig] = None,
         check_dates: Optional[List]=[],
     ):
@@ -761,8 +767,8 @@ class Censys(HNTRPlugin):
         return things
 
     def parse_certificates_hosts(
-        self, 
-        raw: Dict = {}, 
+        self,
+        raw: Dict = {},
         api_conf: Optional[APIConfig] = None,
         check_dates: Optional[List]=[],
     ):

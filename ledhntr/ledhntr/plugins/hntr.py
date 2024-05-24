@@ -1790,6 +1790,7 @@ class HNTRPlugin(BasePlugin, ABC):
                         if sub_rule['jsonpath']:
                             matches = jmespath.search(f"{sub_rule['jsonpath']}.keys(@)", item)
                         else:
+                            _log.info(f"item: {item}")
                             matches = jmespath.search(f"keys(@)", item)
                     elif sub_rule.get('keyval'):
                         matches = []
@@ -1838,6 +1839,10 @@ class HNTRPlugin(BasePlugin, ABC):
                     sub_data_list = jmespath.search(rule['multipath'], data)
                 else:
                     sub_data_list = [data]
+                if not isinstance(sub_data_list, list):
+                    #// baby_blob = jmespath.search(f"{rule['multipath']} | to_entries(@)", data)
+                    #// sub_data_list = [{entry['key']: entry['value']} for entry in baby_blob]
+                    sub_data_list = [{key: value} for key, value in jmespath.search(rule['multipath'], data).items()]
                 newents = generate_entity(data, rule, sub_data_list)
                 if newents:
                     all_entities += newents
@@ -1909,6 +1914,10 @@ class HNTRPlugin(BasePlugin, ABC):
                     sub_data_list = jmespath.search(rule['multipath'], data)
                 else:
                     sub_data_list = [data]
+                if not isinstance(sub_data_list, list):
+                    #// baby_blob = jmespath.search(f"{rule['multipath']} | to_entries(@)", data)
+                    #// sub_data_list = [{entry['key']: entry['value']} for entry in baby_blob]
+                    sub_data_list = [{key: value} for key, value in jmespath.search(rule['multipath'], data).items()]
                 newrels = generate_relation(data, rule, sub_data_list)
                 if not newrels:
                     continue
@@ -1934,8 +1943,8 @@ class HNTRPlugin(BasePlugin, ABC):
                 'relations': parse_relations(data, rules.get('relations', []))
             }
         else:
-            _log
             parsed = []
+            #// _log.info(f"rules: {rules}")
             ttype = rules.get('type', "")
             if not ttype:
                 for x, things in pretty_schema.items():
