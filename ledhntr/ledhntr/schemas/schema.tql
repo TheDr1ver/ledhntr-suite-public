@@ -162,6 +162,19 @@ define
         owns name-server,
         owns comboid @key;
 
+    dns-service sub hntr-entity, # for a DNS service usually on :53
+        owns dns-authority,
+        owns dns-query,
+        owns dns-rcode,
+        owns dns-resolves-correctly,
+        owns dns-response,
+        owns dns-server-type,
+        owns dns-type,
+        owns
+        owns version,
+        owns comboid @key;
+
+
     domain sub hntr-entity,
         # // plays registration:registered,
         plays resolution:answer,  # domain resolved-to ip
@@ -224,6 +237,7 @@ define
         owns mime-type;
 
     ftp sub hntr-entity,
+        owns banner,
         owns comboid @key,
         owns auth-ssl-response,
         owns auth-tls-response,
@@ -237,6 +251,7 @@ define
         owns http-html,
         owns http-html-hash,
         owns http-html-size,
+        owns http-html-title,
         owns http-location,
         owns http-protocol,
         owns http-favicon-hash,
@@ -293,15 +308,28 @@ define
         owns auth-tls-response,
         owns banner,
         owns banner-hash,
+        owns chain-fingerprint,
         owns cipher-bits,
         owns cipher-name,
         owns city,
+        owns client-cipher,
+        owns client-compression-algorithm,
+        owns client-mac-algorithm,
         owns country,
         owns country-code,
         owns cpe23,
+        owns dns-authority,
+        owns dns-query,
+        owns dns-rcode,
+        owns dns-resolves-correctly,
+        owns dns-response,
+        owns dns-server-type,
+        owns dns-type,
         owns domain-name,
-        owns expires-date,
+        owns ehlo,
         owns email-address,
+        owns encryption-algorithm,
+        owns expires-date,
         owns family,
         owns fax-number,
         owns filename,
@@ -309,11 +337,16 @@ define
         owns first-name,
         owns fqdn, # used for storing SANs
         owns hash,
+        owns hassh-fingerprint,
+        owns host-key-algorithm,
         owns http-favicon-hash,
         owns http-header-pair,
         owns http-headers-hash,
         owns http-host,
+        owns http-html,
         owns http-html-hash,
+        owns http-html-size,
+        owns http-html-title,
         owns http-location,
         owns http-robots-hash,
         owns http-securitytxt-hash,
@@ -331,7 +364,10 @@ define
         owns issuer-st,
         owns ja3s,
         owns ja4s,
+        owns jarm-cipher,
         owns jarm-fingerprint,
+        owns jarm-tls-ext,
+        owns kex-algorithm,
         owns last-name,
         owns latitude,
         owns link,
@@ -340,6 +376,7 @@ define
         owns mime-type,
         owns name-server,
         owns org,
+        owns part,
         owns password,
         owns phone-number,
         owns port,
@@ -348,6 +385,9 @@ define
         owns pubkey-bits,
         owns pubkey-type,
         owns registrar,
+        owns server-cipher,
+        owns server-compression-algorithm,
+        owns server-mac-algorithm,
         owns service-name,
         owns service-provider,
         owns service-body,
@@ -357,14 +397,19 @@ define
         owns shodan-hash,
         owns sig-alg,
         owns ssdeep,
+        owns start-tls,
+        owns status-code,
+        owns status-meaning,
         owns subject-c,
         owns subject-cn,
         owns subject-l,
         owns subject-o,
         owns subject-ou,
         owns subject-st,
+        owns uniform-resource-identifier,
         owns uri,
         owns user,
+        owns vendor,
         owns version,
 
         # The rest is hunt-specific
@@ -377,6 +422,11 @@ define
         owns last-hunted,
         owns frequency;
 
+    imap sub hntr-entity,
+        owns banner,
+        owns start-tls,
+        owns comboid @key;
+
     ip sub hntr-entity,
         plays resolution:query,
         plays resolution:answer, # resolution resolved-to ip
@@ -384,11 +434,14 @@ define
         plays host:hosted-on,
         owns as-name,
         owns as-number,
+        owns banner,
+        owns banner-hash,
         owns cidr-range,
         owns continent,
         owns country,
         owns country-code,
         owns city,
+        owns port,
         owns postal-code,
         owns timezone,
         owns province,
@@ -417,16 +470,37 @@ define
 
     network-service sub hntr-entity,
         plays host:serves,
+        owns auth-ssl-response,
+        owns auth-tls-response,
         owns banner,
         owns banner-hash,
+        owns chain-fingerprint,
+        owns cipher-name,
+        owns client-cipher,
+        owns client-compression-algorithm,
+        owns client-mac-algorithm,
         owns cpe23,
+        owns dns-authority,
+        owns dns-query,
+        owns dns-rcode,
+        owns dns-resolves-correctly,
+        owns dns-response,
+        owns dns-server-type,
+        owns dns-type,
         owns domain-name,
+        owns ehlo,
+        owns encryption-algorithm,
         owns fingerprint,
         owns fqdn,
+        owns hassh-fingerprint,
+        owns host-key-algorithm,
         owns http-favicon-hash,
         owns http-header-pair,
         owns http-headers-hash,
+        owns http-html,
         owns http-html-hash,
+        owns http-html-size,
+        owns http-html-title,
         owns http-robots-hash,
         owns http-securitytxt-hash,
         owns http-sitemap-hash,
@@ -440,31 +514,58 @@ define
         owns issuer-st,
         owns ja3s,
         owns ja4s,
+        owns jarm-cipher,
         owns jarm-fingerprint,
+        owns jarm-tls-ext,
+        owns kex-algorithm,
         owns name-server,
+        owns part,
         owns port,
         owns product,
+        owns pubkey-bits,
+        owns pubkey-type,
         owns registrar,
+        owns server-cipher,
+        owns server-compression-algorithm,
+        owns server-mac-algorithm,
         owns service-name,
         owns service-provider,
         owns service-body,
         owns shodan-hash,
+        owns sig-alg,
+        owns start-tls,
+        owns status-code,
+        owns status-meaning,
         owns subject-c,
         owns subject-cn,
         owns subject-l,
         owns subject-o,
         owns subject-ou,
         owns subject-st,
+        owns uniform-resource-identifier,
         owns uri,
+        owns vendor,
+        owns version,
         owns comboid @key;
 
     os sub hntr-entity,
-        owns comboid @key,
-        owns uniform-resource-identifier,
         owns part,
-        owns vendor,
         owns product,
-        owns version;
+        owns uniform-resource-identifier,
+        owns vendor,
+        owns version,
+        owns comboid @key;
+
+    pop3 sub hntr-entity,
+        owns banner,
+        owns start-tls,
+        owns comboid @key;
+
+    smtp sub hntr-entity,
+        owns banner,
+        owns ehlo,
+        owns start-tls,
+        owns comboid @key;
 
     software sub hntr-entity,
         owns comboid @key,
@@ -475,17 +576,26 @@ define
         owns version;
 
     ssh sub hntr-entity,
-        owns cipher,
-        owns kex-algorithm,
+        owns banner,
+        owns client-cipher,
+        owns client-compression-algorithm,
+        owns client-mac-algorithm,
         owns encryption-algorithm,
-        owns mac-algorithm,
-        owns compression-algorithm,
+        owns hassh-fingerprint,
+        owns host-key-algorithm,
+        owns kex-algorithm,
+        owns pubkey-bits,
+        owns server-cipher,
+        owns server-compression-algorithm,
+        owns server-mac-algorithm,
         owns fingerprint @key;
 
     ssl sub hntr-entity,
+        owns chain-fingerprint,
         owns cipher-bits,
         owns cipher-name,
         owns expires-date,
+        owns fqdn, # used for storing SANs
         owns issuer-c,
         owns issuer-cn,
         owns issued-date,
@@ -578,9 +688,6 @@ define
     auth-tls-response sub attribute,
         value string;
 
-    summary sub attribute,
-        value string;
-
     banner sub attribute,
         value string;
 
@@ -596,10 +703,10 @@ define
     cert-tls-version sub attribute,
         value double;
 
-    cidr-range sub attribute,
+    chain-fingerprint sub attribute,
         value string;
 
-    cipher sub attribute,
+    cidr-range sub attribute,
         value string;
 
     cipher-bits sub attribute,
@@ -609,6 +716,15 @@ define
         value string;
 
     city sub attribute,
+        value string;
+
+    client-cipher sub attribute,
+        value string;
+
+    client-compression-algorithm sub attribute,
+        value string;
+
+    client-mac-algorithm sub attribute,
         value string;
 
     comboid sub attribute,
@@ -637,7 +753,7 @@ define
 
     created-date sub attribute,
         value datetime;
-    
+
     cve sub attribute,
         value string;
 
@@ -662,7 +778,22 @@ define
     diff-removed sub attribute,
         value string;
 
+    dns-authority sub attribute,
+        value string;
+
+    dns-query sub attribute,
+        value string;
+
+    dns-rcode sub attribute,
+        value string;
+
+    dns-resolves-correctly sub attribute,
+        value boolean;
+
     dns-server-type sub attribute,
+        value string;
+
+    dns-response sub attribute,
         value string;
 
     dns-type sub attribute,
@@ -672,6 +803,9 @@ define
         value string;
 
     domain-name sub attribute,
+        value string;
+
+    ehlo sub attribute,
         value string;
 
     email-address sub attribute,
@@ -735,6 +869,12 @@ define
         value double;
 
     hash sub attribute,
+        value string;
+
+    hassh-fingerprint sub attribute,
+        value string;
+
+    host-key-algorithm sub attribute,
         value string;
 
     http-favicon-hash sub attribute,
@@ -941,6 +1081,15 @@ define
     screenshot-blob sub attribute,
         value string;
 
+    server-cipher sub attribute,
+        value string;
+
+    server-compression-algorithm sub attribute,
+        value string;
+
+    server-mac-algorithm sub attribute,
+        value string;
+
     service-body sub attribute,
         value string;
 
@@ -971,6 +1120,9 @@ define
     ssdeep sub attribute,
         value string;
 
+    start-tls sub attribute,
+        value string;
+
     status-code sub attribute,
         value double;
 
@@ -993,6 +1145,9 @@ define
         value string;
 
     subject-ou sub attribute,
+        value string;
+
+    summary sub attribute,
         value string;
 
     tag sub attribute,
