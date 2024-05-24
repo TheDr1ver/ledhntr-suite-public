@@ -1795,7 +1795,7 @@ class HNTRPlugin(BasePlugin, ABC):
                         matches = []
                         #! sub_matches = [(key, value) for match in jsonpath_expr.find(item) for key, value in match.value.items()]
                         sub_hits = jmespath.search(sub_rule['jsonpath'], item)
-                        print(sub_hits)
+                        #// print(sub_hits)
                         if not sub_hits:
                             continue
                         #! sub_matches = [(key, value) for sub_hit in sub_hits for key, value in sub_hit.items()]
@@ -1866,7 +1866,7 @@ class HNTRPlugin(BasePlugin, ABC):
                         #! sub_matches = [(key, value) for match in jsonpath_expr.find(item) for key, value in match.value.items()]
                         sub_hits = jmespath.search(sub_rule['jsonpath'], item)
                         #! sub_matches = [(key, value) for sh in sub_hits for key, value in sub_hits.items()]
-                        # print(sub_hits)
+                        #// print(sub_hits)
                         #! sub_matches = [(key, value) for match in sub_hits for key, value in match.items()]
                         sub_matches = [(key, value) for key, values in sub_hits.items() for value in values if not key.startswith('_')]
                         for sm in sub_matches:
