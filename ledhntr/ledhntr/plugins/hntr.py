@@ -1833,8 +1833,9 @@ class HNTRPlugin(BasePlugin, ABC):
             all_entities = []
             for rule in rules:
                 if 'multipath' in rule:
-                    jsonpath_expr = parse(rule['multipath'])
-                    sub_data_list = [match.value for match in jsonpath_expr.find(data)]
+                    #! jsonpath_expr = parse(rule['multipath'])
+                    #! sub_data_list = [match.value for match in jsonpath_expr.find(data)]
+                    sub_data_list = jmespath.search(rule['multipath'], data)
                 else:
                     sub_data_list = [data]
                 newents = generate_entity(data, rule, sub_data_list)
@@ -1903,8 +1904,9 @@ class HNTRPlugin(BasePlugin, ABC):
             all_relations = []
             for rule in rules:
                 if 'multipath' in rule:
-                    jsonpath_expr = parse(rule['multipath'])
-                    sub_data_list = [match.value for match in jsonpath_expr.find(data)]
+                    #! jsonpath_expr = parse(rule['multipath'])
+                    #! sub_data_list = [match.value for match in jsonpath_expr.find(data)]
+                    sub_data_list = jmespath.search(rule['multipath'], data)
                 else:
                     sub_data_list = [data]
                 newrels = generate_relation(data, rule, sub_data_list)
