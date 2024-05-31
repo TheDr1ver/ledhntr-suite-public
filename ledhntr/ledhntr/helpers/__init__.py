@@ -20,6 +20,17 @@ class LEDConfigParser(ConfigParser):
     """
     Extends ConfigParser to simplfy handling of common configuration options
     """
+    def dumpall(self):
+        """Dump all configs
+        :returns: dict of all configs
+        """
+        res = {}
+        for section in self.sections():
+            if section not in res:
+                res[section] = {}
+            for k, v in self.items(section):
+                res[section][k]=v
+        return res
 
     def getlist(self, section, option, *args, **kwargs):
         """
@@ -140,6 +151,22 @@ def format_date(
 
     return dto
 
+def get_dict_from_list(
+    data:list = [],
+    key:str = "", 
+    value:str = "",
+)->dict:
+    """Get Dict from List of Dicts
+    :params data: list of dictionaries to search through
+    :params key: required key to search
+    :params value: required value to search within the designated key
+    :returns: dictionary pulled from list
+    """
+    found_dict = {}
+    found_dict = next((d for d in data if d[key] == value), {})
+    return found_dict
+
+
 def dumps(data, indent=4, compactly=False):
     """
     Wrapper for JSON encoding
@@ -191,21 +218,27 @@ def diff_entities(
     }
 
     # sensitive attributes should never be removed based on a diff
+    # If they are to change, they would need to be explicitly replaced by a
+    # call to replace_attribute()
+    # ! https://github.com/TheDr1ver/ledhntr-suite-public/issues/2
+    '''
     sensitive_attrs = [
         'confidence',
         'date-discovered',
         'date-seen',
         'first-seen',
-        'last-seen',
         'frequency',
-        'note',
-        'tag',
         'hunt-active',
         'hunt-endpoint',
         'hunt-string',
         'hunt-service',
+        'last-seen',
+        'note',
         'ref-link',
+        'tag',
     ]
+    '''
+    sensitive_attrs = old_entity.meta_attrs
 
     for old_attr in old_entity.has:
         if old_attr.label in sensitive_attrs:
@@ -511,10 +544,12 @@ def parse_schema_file(
     role_pattern = r"(?s)relates\s+([a-z0-9\-]+)\s*(,|$)"
     attr_pattern = r"(?s)owns\s+([a-z0-9\-]+)\s*(@|,|$)"
     keyattr_pattern = r"(?s)owns\s+([a-z0-9\-]+)\s*@key"
+    value_type_pattern = r"(?s)value\s+(string|datetime|double|long|boolean)"
 
     re_role = re.compile(role_pattern)
     re_attr = re.compile(attr_pattern)
     re_keyattr = re.compile(keyattr_pattern)
+    re_valtype = re.compile(value_type_pattern)
 
     counter = 1
     # . _log.debug(f"Attempting to parse schema {schema}...")
@@ -572,7 +607,11 @@ def parse_schema_file(
                         # Convert to Thing object
                         th = None
                         if parent_label == 'attribute':
-                            th = Attribute(label=label)
+                            value_type = re_valtype.search(thing)
+                            if value_type:
+                                th = Attribute(label=label, value_type=value_type[1])
+                            else:
+                                th = Attribute(label=label)
                         elif parent_label == 'entity':
                             th = Entity(label=label)
                         elif parent_label == 'relation':

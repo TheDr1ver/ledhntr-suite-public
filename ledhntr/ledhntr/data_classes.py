@@ -21,33 +21,14 @@ from typing import Dict, List, Optional, DefaultDict, Union
 
 import ledhntr.helpers as helpers
 
-"""
-NOTE - I'm not going to change this right now because it would be catastrophic
-to everything I've already written, but this might be a better way to handle
-Thing.has -> https://stackoverflow.com/questions/67349486/best-way-to-get-object-reference-in-object-list-based-on-attribute-value
-
-It suggests Thing.has should be a dict instead of a list because then you could
-do Thing.get('ip-address') and it would either return a list of IPs, or None if
-there is no 'ip-address' Attribute associated with the Entity/Relation.
-
-This effectively would remove all the stupid loops all over the place that
-currently do for attr in thing.has -> if attr.label=='blah' -> do thing.
-
-Here's the suggested code that would replace the current thing.has lists:
-
-    attr = Attribute(label='test', value='test0')
-    test_attrs = [attr, Attribute(label='test', value='test1'), Attribute(label='test', value='test2')]
-    thing.has = {attr.label : attr for attr in test_attrs}
-    # thing.get('test') returns [attr, Attribute(label='test', value='test1'), Attribute(label='test', value='test2')]
-    # thing.get('asdf') returns None
-"""
-
 def _meta_attrs():
     """
     Meta Attributes are attribute labels that are explicitly ignored when
     making a comparison between two Entity objects. Things like date-seen
     should not be taken into account when determining if two entities are
     equal.
+    # ! NOTE - In case you find yourself adding to this list, rest assured
+    # ! that this is the only place you need to add to it.
     """
     meta_attrs = [
         'confidence',
@@ -57,15 +38,43 @@ def _meta_attrs():
         'first-seen',
         'frequency',
         'hunt-active',
-        'hunt-name',
+        # ! https://github.com/TheDr1ver/ledhntr-suite-public/issues/2
+        # // 'hunt-name',
         'last-hunted',
         'last-seen',
         'ledid',
+        'ledsrc',
         'note',
-        'tag',
         'ref-link',
+        'tag',
+        # ! adding these... really hope this doesn't break stuff
+        # ! that I've since forgotten about...
+        'hunt-endpoint',
+        'hunt-string',
+        'hunt-service',
     ]
     return meta_attrs
+
+def _convert_value_types(x, vt):
+    """
+    List of approved value types.
+    I never included integer logic, so I've omitted the 'long' value type
+    Keep in mind the RE patterns for value_type_pattern will also need to be
+    adjusted if this list changes. This pattern appears both in this file and
+    helpers init.
+    """
+    if x is None:
+        return None
+    value_types = {
+        "boolean": bool,
+        # "double": round(float(x),2),
+        "string": str,
+        "datetime": helpers.format_date,
+    }
+    if vt=='double':
+        return round(float(x), 2)
+    else:
+        return value_types[vt](x)
 
 def _ledid_explode(objdict: dict = {}):
     """Breaks out sub-objects such that the ledid value can be used as glue
@@ -153,7 +162,7 @@ def _ledid_glue(objdict: dict = {}):
     
     return result
 
-def _load_default_schema():
+def _load_default_schema(schema:str=""):
     """Manually parses schema files and grabs keyvals
 
     This basically does the exact same thing as helpers.parse_schema_file, but 
@@ -164,14 +173,22 @@ def _load_default_schema():
     :returns: dict of Thing labels and their associated keyattr thing labels
     """
 
-    schema = resource_stream('ledhntr', 'schemas/schema.tql').name
+    if not schema:
+        schema = resource_stream('ledhntr', 'schemas/schema.tql').name
 
     scheyattrs = {}
+    schema_val_types = {}
 
     thing_types = {
         'attribute': ['attribute'],
         'entity': ['entity'],
         'relation': ['relation'],
+    }
+
+    pretty_schema = {
+        'attribute': [],
+        'entity': [],
+        'relation': [],
     }
 
     with open(schema, 'r') as s:
@@ -184,10 +201,12 @@ def _load_default_schema():
     role_pattern = r"(?s)relates\s+([a-z0-9\-]+)\s*(,|$)"
     attr_pattern = r"(?s)owns\s+([a-z0-9\-]+)\s*(@|,|$)"
     keyattr_pattern = r"(?s)owns\s+([a-z0-9\-]+)\s*@key"
+    value_type_pattern = r"(?s)value\s+(boolean|double|string|datetime)\s*"
 
     re_role = re.compile(role_pattern)
     re_attr = re.compile(attr_pattern)
     re_keyattr = re.compile(keyattr_pattern)
+    re_valtype = re.compile(value_type_pattern)
 
     counter = 1
     while type_parsing and counter < 5:
@@ -204,8 +223,16 @@ def _load_default_schema():
                         # Get Label
                         label = res[1]
                         parent_label = res[2]
+                        info = None
                         if label not in thing_types[key]:
                             thing_types[key].append(label)
+                            info = {
+                                'label': label,
+                                'type': key,
+                                'keyattr': None,
+                                'owns': [],
+                                'value_type': None,
+                            }
 
                         # Get KeyAttr
                         found_keyattr = re_keyattr.search(thing)
@@ -215,6 +242,27 @@ def _load_default_schema():
 
                         if label not in scheyattrs and keyattr:
                             scheyattrs[label]=keyattr
+                            if info:
+                                info['keyattr']=keyattr
+
+                        # ; Get Owns
+                        if info:
+                            owns_res = re_attr.findall(thing)
+                            for ors in owns_res:
+                                if ors[0] not in info['owns']:
+                                    info['owns'].append(ors[0])
+
+                        # Get value type for attributes and sub-attributes
+                        vt_res = re_valtype.search(thing)
+                        if vt_res:
+                            value_type = vt_res[1]
+                            if label not in schema_val_types:
+                                schema_val_types[label]=value_type
+                                if info:
+                                    info['value_type']=value_type
+
+                        if info:
+                            pretty_schema[key].append(info)
 
                         type_parsing.remove(thing)
 
@@ -226,7 +274,9 @@ def _load_default_schema():
             # !     f" Check your schema layout and try that again..."
             # ! )
             break
-    return scheyattrs
+    # ! return scheyattrs, schema_val_types, thing_types
+    # return pretty_schema
+    return scheyattrs, schema_val_types, thing_types, pretty_schema
 
 def _to_dict(obj, classkey=None, ledid_glue:Optional[bool]=False):
     """Function used for all classes to convert them into dicts.
@@ -255,7 +305,10 @@ def _to_dict(obj, classkey=None, ledid_glue:Optional[bool]=False):
     else:
         return obj
 
-default_schema = _load_default_schema()
+# default_schema, schema_value_types, thing_types = _load_default_schema()
+# pretty_schema = _load_default_schema()
+default_schema, schema_value_types, thing_types, pretty_schema = _load_default_schema()
+
 
 class Thing(MutableMapping, metaclass=ABCMeta):
     def __init__(
@@ -384,6 +437,7 @@ class Attribute(Thing):
     def __init__(
         self,
         value: Union[str,datetime,float] = None,
+        value_type: str = "",
         **kwargs
     ) -> None:
         """
@@ -411,9 +465,25 @@ class Attribute(Thing):
         else:
             self._value = value
 
+        if not value_type and self._label in schema_value_types:
+            self._value_type=schema_value_types[self._label]
+        else:
+            self._value_type = value_type
+
+        if self._value_type:
+            try:
+                self._value = _convert_value_types(self._value, self._value_type)
+            except Exception as e:
+                print(f"label={self.label} value={self.value} vt={self._value_type}")
+                raise e
+
     @property
     def value(self):
         return self._value
+
+    @property
+    def value_type(self):
+        return self._value_type
 
     def to_dict(self, ledid_glue: Optional[bool]=False):
         """Convert Relation object to dictionary
@@ -473,9 +543,11 @@ def _comboid_calc(obj):
     sha256 = None
 
     if not hasattr(obj, 'has'):
-        return sha256
+        # // return sha256
+        return Attribute(label='comboid', value="")
     if not hasattr(obj, 'meta_attrs'):
-        return sha256
+        # // return sha256
+        return Attribute(label='comboid', value="")
     
     comboid_attrs = {}
     for attr in obj.has:
@@ -485,7 +557,12 @@ def _comboid_calc(obj):
             comboid_attrs[attr.label]=[attr.value]
             continue
         comboid_attrs[attr.label].append(attr.value)
-    
+
+    if not comboid_attrs:
+        # ! If the only thing you have is Meta Attributes then you'll get an
+        # ! empty hash. Therefore you should instead return None because you
+        # ! have an invalid object.
+        return Attribute(label='comboid', value="")
     # Sort lists of values
     list_sorted = {}
     for k, v in comboid_attrs.items():
@@ -1350,3 +1427,24 @@ class Query():
         else:
             s = f"<{self.__class__.__name__}(NotInitialized)"
         return s
+
+def build_schema():
+    """Builds a dictionary of all potential things from the default schema
+    :returns: dict of all schema metadata
+    """
+    # default_schema, schema_value_types, thing_types = _load_default_schema()
+    schema = {'attribute':[], 'entity':[], 'relation':[]}
+    for ttype, labels in thing_types.items():
+        for label in labels:
+            info = {
+                'label': label,
+                'type': ttype,
+                'keyattr': None,
+                'value_type': None,
+            }
+            if label in default_schema:
+                info['keyattr'] = default_schema[label]
+            if label in schema_value_types:
+                info['value_type'] = schema_value_types[label]
+            schema[ttype].append(info)
+    return schema

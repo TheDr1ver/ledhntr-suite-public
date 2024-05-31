@@ -26,7 +26,9 @@ from typedb.driver import (
     TransactionType,
     Iterator,
     ConceptMap,
+    TypeDBCredential,
     TypeDBException,
+    TypeDBDriverException,
     TypeDBDriverExceptionNative,
     # QueryFuture, # Not sure what this maps to yet
     
@@ -70,6 +72,24 @@ class TypeDBClient(ConnectorPlugin):
             self.logger: logging.Logger = logging.getLogger('ledhntr')
         _log = self.logger
         self.config = config
+        self.cloud_user = config.get(
+            'options',
+            'user',
+            fallback = 'admin',
+        )
+
+        self.cloud_pass = config.get(
+            'options',
+            'password',
+            fallback = 'password',
+        )
+
+        self.cloud_tls = bool(config.get(
+            'options',
+            'tls',
+            fallback = True,
+        ))
+
         self.db_server = config.get(
             'options',
             'db_server',
@@ -827,7 +847,11 @@ class TypeDBClient(ConnectorPlugin):
                 #   able to return all the added results. Just search for them after
                 #   the fact if that's what you want.
                 _log.debug(f"Running query: {myquery.pp()}")
-                self.db_query(myquery, tx, save_tx=False)
+                try:
+                    self.db_query(myquery, tx, save_tx=False)
+                except Exception as e:
+                    _log.error(f"Exception during query: \n{myquery.pp()}")
+                    raise e
                 thing_added_counter += 1
 
             try:
@@ -1566,13 +1590,28 @@ class TypeDBClient(ConnectorPlugin):
         # ! threads: Optional[str] = '',
         save_client: Optional[bool] = True,
         name: Optional[str] = '',
+        cloud_user: Optional[str]= "",
+        cloud_pass: Optional[str] = "",
+        cloud_tls: Optional[bool] = True,
     ):
         _log = self.logger
         db_server = db_server or self.db_server
         # ! threads = threads or self.parallelisation
         gcc = self.generic_client_counter
         _log.info(f"Opening client for {db_server}")
-        client = TypeDB.core_driver(db_server)
+        if 'typedb.com:1729' in db_server:
+            if not cloud_user:
+                cloud_user = self.cloud_user
+            if not cloud_pass:
+                cloud_pass = self.cloud_pass
+            if not cloud_user and cloud_pass:
+                _log.error(f"valid cloud_user and cloud_pass required to access cloud instance")
+                return None
+            # // _log.info(f"Setting credential: {cloud_user}:{cloud_pass}")
+            creds = TypeDBCredential(cloud_user, cloud_pass, tls_enabled=cloud_tls)
+            client = TypeDB.cloud_driver(db_server, creds)
+        else:
+            client = TypeDB.core_driver(db_server)
         generic_client_name = f"drone_{gcc}"
         client_name = name or generic_client_name
         client.name = client_name
@@ -1714,9 +1753,20 @@ class TypeDBClient(ConnectorPlugin):
             query_options = TypeDBOptions()
             if options.explain:
                 query_options.explain=True
-            answers = action(tql, options=query_options)
+            try:
+                answers = action(tql, options=query_options)
+            except TypeDBDriverException as e:
+                _log.error(f"Error running tql: {e}")
+                _log.error(f"tql: \n{tql}")
+                _log.error(f"query_options: \n{query_options}")
+                raise e
         else:
-            answers = action(tql)
+            try:
+                answers = action(tql)
+            except TypeDBDriverException as e:
+                _log.error(f"Error running tql: {e}")
+                _log.error(f"tql: \n{tql}")
+                raise e
         return answers
 
     def delete_db(
@@ -2050,8 +2100,9 @@ class TypeDBClient(ConnectorPlugin):
                 # Get valid thing.labels
                 tx = self.check_tx()
                 concepts = tx.concepts
-                valid_labels = []
+                valid_labels = ['thing']
                 # ! thing_type = concepts.get_thing_type(thing.label)
+                thing_type = None
                 if isinstance(thing, Attribute):
                     thing_type = concepts.get_attribute_type(thing.label).resolve()
                     if not thing_type:
@@ -2095,7 +2146,7 @@ class TypeDBClient(ConnectorPlugin):
                             thing_type = concepts.get_attribute_type(thing.label).resolve()
                             if not thing_type:
                                 _log.warning(
-                                    f"Unable to determine proper type of {thing.label}. Skipping!"
+                                    f"Unable to determine proper type of label {thing.label}. Skipping!"
                                 )
                                 continue
                             else:
@@ -2103,14 +2154,16 @@ class TypeDBClient(ConnectorPlugin):
                         else:
                             _log.warning(f"{thing.label} is an Entity!")
 
-                thing_type_subs = thing_type.get_subtypes(tx)
-                for tts in thing_type_subs:
-                    valid_labels.append(tts.get_label().name)
+                # ; if no thing_type then this might be a generic object retrieved by iid
+                if thing_type:
+                    thing_type_subs = thing_type.get_subtypes(tx)
+                    for tts in thing_type_subs:
+                        valid_labels.append(tts.get_label().name)
+                    resp_copy = copy.deepcopy(response_query)
+                    for rc in resp_copy.answers:
+                        if not rc.label in valid_labels:
+                            response_query.answers.remove(rc)
 
-                resp_copy = copy.deepcopy(response_query)
-                for rc in resp_copy.answers:
-                    if not rc.label in valid_labels:
-                        response_query.answers.remove(rc)
             if not final_query:
                 final_query = response_query
             else:
@@ -2623,7 +2676,7 @@ class TypeDBClient(ConnectorPlugin):
             tql += ";"
             if hasattr(thing, 'value') and thing.value is not None:
                 fmt_val = self.format_value_query(thing.value)
-                tql += f' ${thing.label}_{thing.counter}={fmt_val};'
+                tql += f' ${thing.label}_{thing.counter}={fmt_val}; get;'
             return tql
         if len(thing.has) > 0:
             first = True
@@ -3524,6 +3577,7 @@ class TypeDBClient(ConnectorPlugin):
 
         _log = self.logger
         blank_thing = copy.deepcopy(Thing())
+        # // blank_thing = copy.deepcopy(Relation(label='relation'))
 
         # Make sure we get the full details of the existing thing before comparing
         # NOTE - This doesn't work with no_backtrace, so don't bother trying
@@ -3646,12 +3700,17 @@ class TypeDBClient(ConnectorPlugin):
             return old_thing
 
         # Get final updated thing
-        newest_thing = self.find_things(
-            blank_thing,
-            search_mode='no_backtrace',
-            limit_get=True
-        )[0]
-        _log.debug(f"updated_thing: {newest_thing}")
+        try:
+            newest_thing = self.find_things(
+                blank_thing,
+                search_mode='no_backtrace',
+                limit_get=True
+            )[0]
+            _log.debug(f"updated_thing: {newest_thing}")
+        except IndexError:
+            _log.error(f"Nothing found - something went horribly wrong!")
+            _log.error(f"search_thing: {blank_thing}")
+            raise
 
         # Scrub empty entities used for creating base-line relations
         if hasattr(newest_thing, 'players'):
