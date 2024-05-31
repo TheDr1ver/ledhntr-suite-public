@@ -5,4 +5,4 @@ urllib3
 pytz
 pyyaml
 bs4
-jsonpath-ng
+jmespath
