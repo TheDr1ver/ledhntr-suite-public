@@ -26,6 +26,7 @@ from typedb.driver import (
     TransactionType,
     Iterator,
     ConceptMap,
+    TypeDBCredential,
     TypeDBException,
     TypeDBDriverException,
     TypeDBDriverExceptionNative,
@@ -71,6 +72,24 @@ class TypeDBClient(ConnectorPlugin):
             self.logger: logging.Logger = logging.getLogger('ledhntr')
         _log = self.logger
         self.config = config
+        self.cloud_user = config.get(
+            'options',
+            'user',
+            fallback = 'admin',
+        )
+
+        self.cloud_pass = config.get(
+            'options',
+            'password',
+            fallback = 'password',
+        )
+
+        self.cloud_tls = bool(config.get(
+            'options',
+            'tls',
+            fallback = True,
+        ))
+
         self.db_server = config.get(
             'options',
             'db_server',
@@ -1571,13 +1590,28 @@ class TypeDBClient(ConnectorPlugin):
         # ! threads: Optional[str] = '',
         save_client: Optional[bool] = True,
         name: Optional[str] = '',
+        cloud_user: Optional[str]= "",
+        cloud_pass: Optional[str] = "",
+        cloud_tls: Optional[bool] = True,
     ):
         _log = self.logger
         db_server = db_server or self.db_server
         # ! threads = threads or self.parallelisation
         gcc = self.generic_client_counter
         _log.info(f"Opening client for {db_server}")
-        client = TypeDB.core_driver(db_server)
+        if 'typedb.com:1729' in db_server:
+            if not cloud_user:
+                cloud_user = self.cloud_user
+            if not cloud_pass:
+                cloud_pass = self.cloud_pass
+            if not cloud_user and cloud_pass:
+                _log.error(f"valid cloud_user and cloud_pass required to access cloud instance")
+                return None
+            # // _log.info(f"Setting credential: {cloud_user}:{cloud_pass}")
+            creds = TypeDBCredential(cloud_user, cloud_pass, tls_enabled=cloud_tls)
+            client = TypeDB.cloud_driver(db_server, creds)
+        else:
+            client = TypeDB.core_driver(db_server)
         generic_client_name = f"drone_{gcc}"
         client_name = name or generic_client_name
         client.name = client_name
