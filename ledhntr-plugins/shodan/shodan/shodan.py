@@ -439,25 +439,27 @@ class Shodan(HNTRPlugin):
         # ; ASNs remove leading "AS"
         atc = copy.deepcopy(all_things)
         for thing in atc:
-            if thing.label == "as-number" and thing.value.startswith("AS"):
-                new_attr = Attribute(
-                    label='as-number',
-                    value=thing.value.lstrip('AS')
-                )
-                all_things.remove(thing)
-                all_things.append(new_attr)
-            elif thing.get_attributes('as-number'):
-                safe_copy = copy.deepcopy(thing)
-                for asn in safe_copy.get_attributes('as-number'):
-                    if asn.value.startswith("AS"):
-                        all_things.remove(thing)
-                        new_attr = Attribute(
-                            label='as-number',
-                            value=thing.value.lstrip('AS')
-                        )
-                        thing.has.remove(asn)
-                        thing.has.append(new_attr)
-                        all_things.append(thing)
+            if isinstance(thing, Attribute):
+                if thing.label == "as-number" and thing.value.startswith("AS"):
+                    new_attr = Attribute(
+                        label='as-number',
+                        value=thing.value.lstrip('AS')
+                    )
+                    all_things.remove(thing)
+                    all_things.append(new_attr)
+            else:
+                if thing.get_attributes('as-number'):
+                    safe_copy = copy.deepcopy(thing)
+                    for asn in safe_copy.get_attributes('as-number'):
+                        if asn.value.startswith("AS"):
+                            all_things.remove(thing)
+                            new_attr = Attribute(
+                                label='as-number',
+                                value=asn.value.lstrip('AS')
+                            )
+                            thing.has.remove(asn)
+                            thing.has.append(new_attr)
+                            all_things.append(thing)
 
 
 
@@ -615,25 +617,27 @@ class Shodan(HNTRPlugin):
         # ; ASNs remove leading "AS"
         atc = copy.deepcopy(all_things)
         for thing in atc:
-            if thing.label == "as-number" and thing.value.startswith("AS"):
-                new_attr = Attribute(
-                    label='as-number',
-                    value=thing.value.lstrip('AS')
-                )
-                all_things.remove(thing)
-                all_things.append(new_attr)
-            elif thing.get_attributes('as-number'):
-                safe_copy = copy.deepcopy(thing)
-                for asn in safe_copy.get_attributes('as-number'):
-                    if asn.value.startswith("AS"):
-                        all_things.remove(thing)
-                        new_attr = Attribute(
-                            label='as-number',
-                            value=thing.value.lstrip('AS')
-                        )
-                        thing.has.remove(asn)
-                        thing.has.append(new_attr)
-                        all_things.append(thing)
+            if isinstance(thing, Attribute):
+                if thing.label == "as-number" and thing.value.startswith("AS"):
+                    new_attr = Attribute(
+                        label='as-number',
+                        value=thing.value.lstrip('AS')
+                    )
+                    all_things.remove(thing)
+                    all_things.append(new_attr)
+            else:
+                if thing.get_attributes('as-number'):
+                    safe_copy = copy.deepcopy(thing)
+                    for asn in safe_copy.get_attributes('as-number'):
+                        if asn.value.startswith("AS"):
+                            all_things.remove(thing)
+                            new_attr = Attribute(
+                                label='as-number',
+                                value=asn.value.lstrip('AS')
+                            )
+                            thing.has.remove(asn)
+                            thing.has.append(new_attr)
+                            all_things.append(thing)
 
         # @ Add Metadata
         '''
