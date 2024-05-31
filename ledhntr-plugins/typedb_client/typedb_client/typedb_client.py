@@ -2673,7 +2673,7 @@ class TypeDBClient(ConnectorPlugin):
         else:
             tql = f' ${thing.label}_{thing.counter} isa {thing.label}'
         if not hasattr(thing, 'has'):
-            tql += ";"
+            tql += "; get;"
             if hasattr(thing, 'value') and thing.value is not None:
                 fmt_val = self.format_value_query(thing.value)
                 tql += f' ${thing.label}_{thing.counter}={fmt_val}; get;'
