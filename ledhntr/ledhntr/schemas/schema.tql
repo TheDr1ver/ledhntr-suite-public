@@ -170,7 +170,6 @@ define
         owns dns-response,
         owns dns-server-type,
         owns dns-type,
-        owns
         owns version,
         owns comboid @key;
 
@@ -897,6 +896,9 @@ define
 
     http-html-size sub attribute,
         value double;
+
+    http-html-title sub attribute,
+        value string;
 
     http-location sub attribute,
         value string;
