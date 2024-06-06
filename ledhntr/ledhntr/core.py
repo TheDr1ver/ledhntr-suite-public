@@ -32,6 +32,7 @@ class LEDHNTR(PluginLoader):
         plugin_opts: Optional[Dict[str, Dict]] = {},
         plugins: Optional[Dict[str, object]] = {},
         schema_load: Optional[bool] = False,
+        all_plugins: Optional[bool] = False,
     ):
 
         # Read Configs
@@ -88,8 +89,8 @@ class LEDHNTR(PluginLoader):
         self.schema = pretty_schema
 
         # Load all active plugins
-        if not self.plugins:
-            self._reload_all_plugins()
+        if all_plugins:
+            self.reload_all_plugins()
 
         _log.info(f"Successfully loaded configs!")
 
@@ -148,7 +149,7 @@ class LEDHNTR(PluginLoader):
             self.logger.addHandler(file_handler)
             self.logger.debug(f"Writing logs to {log_path}...")
 
-    def _reload_all_plugins(self):
+    def reload_all_plugins(self):
         """
         Reloads all plugins
 
