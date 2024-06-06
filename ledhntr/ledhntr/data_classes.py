@@ -159,13 +159,13 @@ def _ledid_glue(objdict: dict = {}):
     dictionary, with all Thing Objects heirarchied where they belong.
     """
     result = {}
-    
+
     return result
 
 def _load_default_schema(schema:str=""):
     """Manually parses schema files and grabs keyvals
 
-    This basically does the exact same thing as helpers.parse_schema_file, but 
+    This basically does the exact same thing as helpers.parse_schema_file, but
     if I want to use it in defining the data classes, I can't have it return the
     data classes themselves.
 
@@ -280,10 +280,10 @@ def _load_default_schema(schema:str=""):
 
 def _to_dict(obj, classkey=None, ledid_glue:Optional[bool]=False):
     """Function used for all classes to convert them into dicts.
-    :param classkey: TBH, IDK how to use this properly. I pulled this code off 
+    :param classkey: TBH, IDK how to use this properly. I pulled this code off
         StackOverflow and it works...
     :param ledid_glue: #TODO# When set to True, instead of returning a regular
-        dict representation of the object, it should 
+        dict representation of the object, it should
     """
     if isinstance(obj, dict):
         data = {}
@@ -535,7 +535,7 @@ def _comboid_calc(obj):
 
     Generally speaking, this would only be used for entity or relation types
     that don't have a natural value to key off of (think geoloc or whois records)
-    
+
     :param obj: any Thing object
     :returns: Attribute of 'comboid' type with sha256 string value or None if
         invalid object was fed
@@ -548,7 +548,7 @@ def _comboid_calc(obj):
     if not hasattr(obj, 'meta_attrs'):
         # // return sha256
         return Attribute(label='comboid', value="")
-    
+
     comboid_attrs = {}
     for attr in obj.has:
         if attr.label in obj.meta_attrs:
@@ -602,11 +602,11 @@ def _gen_ledid(
 class Entity(Thing):
     def __init__(
         self,
-        has: Optional[Union[List[Attribute],List[Dict],Dict,List]] = [],
+        has: Optional[Union[List[Attribute],List[Dict],Dict,List]] = None,
         keyattr: Optional[str] = '',
-        owns:  Optional[List[str]] = [],
-        relations: Optional[Union[List[object],List[Dict]]] = [],
-        plays: Optional[List[Dict]] = [],
+        owns:  Optional[List[str]] = None,
+        relations: Optional[Union[List[object],List[Dict]]] = None,
+        plays: Optional[List[Dict]] = None,
         **kwargs
     ) -> None:
         """
@@ -625,7 +625,9 @@ class Entity(Thing):
         super().__init__(**kwargs)
         self.thingtype = 'entity'
         # super()__init__(**kwargs)
-        self.has = has or []
+        if has is None:
+            has = []
+        self.has = has
         if not isinstance(self.has, list):
             self.has = [self.has]
 
@@ -646,9 +648,18 @@ class Entity(Thing):
             self.keyattr = keyattr
         else:
             self.keyattr = self._get_keyattr()
-        self.owns = owns or []
-        self.relations = relations or []
-        self.plays = plays or []
+
+        if owns is None:
+            owns = []
+        self.owns = owns
+
+        if relations is None:
+            relations = []
+        self.relations = relations
+
+        if plays is None:
+            plays = []
+        self.plays = plays
 
     def _get_keyattr(self):
         keyattr = ''
@@ -765,7 +776,7 @@ class Entity(Thing):
 
         for attr in safe_copy_new_has:
             if attr not in safe_copy_self_has:
-                # We don't want duplicates of any of these attribute types
+                # We don't want more than one of any of these attribute types
                 if attr.label == "first-seen":
                     continue
                 if attr.label == "last-seen":
@@ -925,13 +936,13 @@ class Role(Thing):
 class Relation(Thing):
     def __init__(
         self,
-        has: Optional[Union[List[Attribute],List[Dict],Dict,Attribute]] = [],
-        entities: Optional[Union[List[Entity],List[Dict]]] = [],
+        has: Optional[Union[List[Attribute],List[Dict],Dict,Attribute]] = None,
+        # ! entities: Optional[Union[List[Entity],List[Dict]]] = None,
         keyattr: Optional[str] = '',
-        owns:  Optional[List[str]] = [],
-        relations: Optional[Union[List[object],List[Dict]]] = [],
-        roles: Optional[Union[List[Role],List[str]]] = [],
-        players: Optional[Union[Dict[Role,List[Entity]],Dict[str,List[Entity]], Dict[str,Entity]]] = {},
+        owns:  Optional[List[str]] = None,
+        relations: Optional[Union[List[object],List[Dict]]] = None,
+        roles: Optional[Union[List[Role],List[str]]] = None,
+        players: Optional[Union[Dict[Role,List[Entity]],Dict[str,List[Entity]], Dict[str,Entity]]] = None,
         **kwargs
     ) -> None:
         """
@@ -961,7 +972,11 @@ class Relation(Thing):
 
         super().__init__(**kwargs)
         self.thingtype = 'relation'
-        self.has = has or []
+
+        if has is None:
+            has = []
+        self.has = has
+
         if not isinstance(self.has, list):
             self.has = [self.has]
 
@@ -975,16 +990,36 @@ class Relation(Thing):
                 self._ledid = _gen_ledid(self._label)
                 self.has.append(self._ledid)
 
-        self.entities = entities or {}
+        # // self.entities = entities or {}
+        # ! self.entities = entities
+        # ! if self.entities is None:
+        # !     self.entities = []
         # self.keyattr = keyattr
         if keyattr:
             self.keyattr = keyattr
         else:
             self.keyattr = self._get_keyattr()
-        self.owns = owns or []
-        self.relations = relations or []
-        self.roles = roles or []
-        self.players = players or {}
+        # // self.owns = owns or []
+
+        if owns is None:
+            owns = []
+        self.owns = owns
+        # // self.relations = relations or []
+
+        if relations is None:
+            relations = []
+        self.relations = relations
+        # // self.roles = roles or []
+
+        if roles is None:
+            roles = []
+        self.roles = roles
+        # // self.players = players or {}
+
+        if players is None:
+            players = {}
+        self.players = players
+
         for k, v in self.players.items():
             if not isinstance(v, list):
                 self.players[k]=[v]

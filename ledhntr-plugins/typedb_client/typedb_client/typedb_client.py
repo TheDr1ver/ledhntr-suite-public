@@ -2591,11 +2591,17 @@ class TypeDBClient(ConnectorPlugin):
                         if attr.label == thing.keyattr:
                             # returns an explicit thing based on keyattr value
                             fmt_val = self.format_value_query(attr.value)
-                            tql = (
-                                f' ${thing.label}_{thing.counter} isa {thing.label},'
-                                f' has {attr.label} ${attr.label}_{thing.counter};'
-                                f' ${attr.label}_{thing.counter} = {fmt_val};'
-                            )
+                            if fmt_val:
+                                tql = (
+                                    f' ${thing.label}_{thing.counter} isa {thing.label},'
+                                    f' has {attr.label} ${attr.label}_{thing.counter};'
+                                    f' ${attr.label}_{thing.counter} = {fmt_val};'
+                                )
+                            else:
+                                tql = (
+                                    f' ${thing.label}_{thing.counter} isa {thing.label},'
+                                    f' has {attr.label} ${attr.label}_{thing.counter};'
+                                )
                             if limit_get:
                                 tql += f" get ${thing.label}_{thing.counter};"
             if not tql:

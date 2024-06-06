@@ -46,14 +46,14 @@ class APIConfig():
         self,
         endpoint: str = "",
         uri: str = "",
-        params: Dict = {},
+        params: Dict = None,
         parser: Any = None,
         add_to_db: Any = None,
-        simple_query_types: Optional[Union[List, str]] = [],
+        simple_query_types: Optional[Union[List, str]] = None,
         param_query_key: Optional[str] = "",
         frequency: Optional[int] = None,
         auth: Optional[str] = None,
-        headers: Optional[Dict] = {},
+        headers: Optional[Dict] = None,
         http_method: Optional[Any] = requests.get,
         hunt_active: Optional[bool] = True,
         hunt_name: Optional[str] = "",
@@ -134,13 +134,19 @@ class APIConfig():
         """
         self.add_to_db = add_to_db
         self.endpoint = endpoint
+        if params is None:
+            params = {}
         self.params = params
         self.parser = parser
         self.uri = uri
         self.param_query_key = param_query_key
+        if simple_query_types is None:
+            simple_query_types = []
         self.simple_query_types = simple_query_types
         self.frequency = frequency
         self.auth = auth
+        if headers is None:
+            headers = {}
         self.headers = headers
         self.http_method = http_method
         self.hunt_active = hunt_active
@@ -1664,7 +1670,8 @@ class HNTRPlugin(BasePlugin, ABC):
 
             See 'network-service' entity below for an example.
 
-        * if 'key'==True in the rule, function will extract 
+        * if 'key'==True in the rule, function will extract the key of the provided
+            JSON rather than the values.
 
         * if 'keyval'==True in the rule, function will extract both key and value
             and put it in the format of key:value
@@ -1828,7 +1835,24 @@ class HNTRPlugin(BasePlugin, ABC):
                     _log.debug(f"Missing {ent.keyattr} from {ent}. Skipping creation.")
                     continue
                 entities.append(ent)
-            return entities
+            #@ If we end up with multiple keyvals for a single Entity
+            #@ we need to break that up into multiple Entities
+            final_ents = []
+            for ent in entities:
+                uniq_keys = ent.get_attributes(ent.keyattr)
+                if len(uniq_keys) < 2:
+                    final_ents.append(ent)
+                    continue
+                # ; scrub the old LEDID
+                del ent.ledid
+                # ; get all non-key-attributes
+                other_attrs = [attr for attr in ent.has if attr not in uniq_keys]
+                # ; create a new Entity for each unique key-attribute.
+                for uk in uniq_keys:
+                    new_ent = Entity(label=ent.label, has=other_attrs.copy())
+                    new_ent.has.append(uk)
+                    final_ents.append(new_ent)
+            return final_ents
 
         def parse_entities(data, rules):
             all_entities = []
@@ -1903,7 +1927,25 @@ class HNTRPlugin(BasePlugin, ABC):
                     else:
                         continue
                 relations.append(rel)
-            return relations
+            #@ If we end up with multiple keyvals for a single Relation
+            #@ we need to break that up into multiple Relations
+            final_rels = []
+            for rel in relations:
+                uniq_keys = rel.get_attributes(rel.keyattr)
+                if len(uniq_keys) < 2:
+                    final_rels.append(rel)
+                    continue
+                del rel.ledid
+                other_attrs = [attr for attr in rel.has if attr not in uniq_keys]
+                for uk in uniq_keys:
+                    newrel = Relation(
+                        label=rel.label, 
+                        has=other_attrs.copy(),
+                        players=rel.players.copy(),
+                    )
+                    newrel.has.append(uk)
+                    final_rels.append(newrel)
+            return final_rels
 
         def parse_relations(data, rules):
             all_relations = []
