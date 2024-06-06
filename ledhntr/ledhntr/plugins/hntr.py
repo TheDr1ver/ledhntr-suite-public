@@ -46,14 +46,14 @@ class APIConfig():
         self,
         endpoint: str = "",
         uri: str = "",
-        params: Dict = {},
+        params: Dict = None,
         parser: Any = None,
         add_to_db: Any = None,
-        simple_query_types: Optional[Union[List, str]] = [],
+        simple_query_types: Optional[Union[List, str]] = None,
         param_query_key: Optional[str] = "",
         frequency: Optional[int] = None,
         auth: Optional[str] = None,
-        headers: Optional[Dict] = {},
+        headers: Optional[Dict] = None,
         http_method: Optional[Any] = requests.get,
         hunt_active: Optional[bool] = True,
         hunt_name: Optional[str] = "",
@@ -134,13 +134,19 @@ class APIConfig():
         """
         self.add_to_db = add_to_db
         self.endpoint = endpoint
+        if params is None:
+            params = {}
         self.params = params
         self.parser = parser
         self.uri = uri
         self.param_query_key = param_query_key
+        if simple_query_types is None:
+            simple_query_types = []
         self.simple_query_types = simple_query_types
         self.frequency = frequency
         self.auth = auth
+        if headers is None:
+            headers = {}
         self.headers = headers
         self.http_method = http_method
         self.hunt_active = hunt_active
