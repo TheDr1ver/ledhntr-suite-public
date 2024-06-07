@@ -737,6 +737,7 @@ class Censys(HNTRPlugin):
                     # if asn_rel not in things:
                     #     things.append(asn_rel)
                     # Add CIDR
+                    '''
                     datakey_attrlbls = {
                         'bgp_prefix': 'cidr-range',
                     }
@@ -759,6 +760,7 @@ class Censys(HNTRPlugin):
                     # cidr_rel = self.check_dateseen(cidr_rel, last_updated)
                     if cidr_rel not in things:
                         things.append(cidr_rel)
+                    '''
             if last_updated and last_updated.value is not None:
                 things.append(last_updated)
         while None in things:
@@ -958,6 +960,7 @@ class Censys(HNTRPlugin):
                 players = {'linked': [ent_ip]}
             )
             # Add CIDR
+            '''
             datakey_attrlbls = {
                 'bgp_prefix': 'cidr-range',
             }
@@ -977,6 +980,7 @@ class Censys(HNTRPlugin):
                     break
             if cidr_rel not in things:
                 things.append(cidr_rel)
+            '''
 
         if 'operating_system' in result:
             data = result['operating_system']
