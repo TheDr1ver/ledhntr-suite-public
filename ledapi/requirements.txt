@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-dateutil
+requests
+typedb-driver==2.28.0
+urllib3
+pytz
+pyyaml
+bs4
+jmespath
