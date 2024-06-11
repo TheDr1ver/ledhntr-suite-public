@@ -1,5 +1,7 @@
 fastapi
 uvicorn[standard]
+databases[sqlite]
+sqlalchemy
 python-dateutil
 requests
 typedb-driver==2.28.0

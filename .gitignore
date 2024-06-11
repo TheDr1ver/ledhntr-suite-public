@@ -164,3 +164,9 @@ scratchpad/
 
 # Example Data
 examples/notebooks/data/
+
+# Logs
+logs/
+
+# Databases
+*.db
