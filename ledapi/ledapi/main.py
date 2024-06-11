@@ -19,6 +19,26 @@ logging.basicConfig(level=logging.DEBUG)
 led = LEDHNTR()
 tdb = led.load_plugin('typedb_client')
 
+# Organize Schema so we don't have to do it again
+led.all_labels = {
+    'all_labels': [],
+    'things': [],
+    'attributes': [],
+    'entities': [],
+    'relations': [],
+}
+for ttype in led.schema.keys():
+    for thing in led.schema[ttype]:
+        if thing.label not in led.all_labels:
+            led.all_labels['all_labels'].append(thing.label)
+        if isinstance(thing, Attribute):
+            led.all_labels['attributes'].append(thing.label)
+        elif isinstance(thing, Entity):
+            led.all_labels['entities'].append(thing.label)
+        elif isinstance(thing, Relation):
+            led.all_labels['relations'].append(thing.label)
+
+
 # Load FastAPI
 app = FastAPI()
 
@@ -52,12 +72,7 @@ class SearchObject(BaseModel):
     @classmethod
     def check_label(cls, values):
         label = values.get('label')
-        all_labels = []
-        for ttype in led.schema.keys():
-            for thing in led.schema[ttype]:
-                if thing.label not in all_labels:
-                    all_labels.append(thing.label)
-        if label not in all_labels:
+        if label not in led.all_labels['all_labels']:
             raise ValueError(f"Label type {label} is not a valid label for this schema.")
         return values
 
@@ -75,12 +90,20 @@ async def search(
     everyone_api_key: str = Depends(auth.dep_check_role(auth.role_everyone))
 ):
     results = []
-    # & NEED TO THINK THIS OUT - BASED ON THE LABEL THAT'S SENT, THE SEARCH
-    # & OBJECTS WILL BE DIFFERENT
+    
     if search_obj.ttype == 'entity':
-        if search_obj.label:
-            # so = Entity(label='entity', has=)
-            so = None
+        if search_obj.label in led.all_labels['entities']:
+            so = Entity(label=search_obj.label)
+        elif search_obj.label in led.all_labels['attributes']:
+            if search_obj.value:
+                attr = Attribute(label=search_obj.label, value=search_obj.value)
+            else:
+                attr = Attribute(label=search_obj.label)
+            so = Entity(label='entity', has=[attr])
+    elif search_obj.ttype == 'relation':
+        # ! TODO 
+        so = None
+    results = tdb.find_things(so)
     return results
 
 #@##############################################################################
