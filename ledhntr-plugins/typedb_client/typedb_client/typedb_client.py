@@ -2266,7 +2266,8 @@ class TypeDBClient(ConnectorPlugin):
         if readable:
             res = []
             for db in dbs:
-                res.append(db.name())
+                # res.append(db.name())
+                res.append(str(db))
             dbs = res
         return dbs
 

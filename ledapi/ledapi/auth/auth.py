@@ -4,7 +4,7 @@ import secrets
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security.api_key import APIKeyHeader
 
-from enum import Enum
+
 from pydantic import BaseModel, ValidationError, model_validator
 from typing import Optional, Dict, List
 
@@ -12,6 +12,11 @@ from databases import Database
 from sqlalchemy import create_engine, MetaData, Table, Column, String
 from sqlalchemy.sql import select
 
+# from ledapi.ledapi.models import ( 
+# from models import (
+from ledapi.models import ( 
+    RoleEnum,
+)
 
 # Set Logger
 logging.basicConfig(level=logging.DEBUG)
@@ -20,7 +25,7 @@ logging.basicConfig(level=logging.DEBUG)
 #@### Load the APIKey Database
 #@##############################################################################
 
-DATABASE_URL = "sqlite:///./api_keys.db"
+DATABASE_URL = "sqlite:///./ledapi/auth/api_keys.db"
 database = Database(DATABASE_URL)
 metadata = MetaData()
 api_keys_table = Table(
@@ -156,59 +161,4 @@ def dep_check_role(roles: List=[]):
         return await check_role(api_key_header, roles)
     return _dep_check_role
 
-#@##############################################################################
-#@### Pydantic API models
-#@##############################################################################
 
-class RoleEnum(str, Enum):
-    read_only = "read-only" # Read-only access to the DB
-    conman = "conman" # Allowed to post confidence levels
-    hunter = "hunter" # Allowed to create/enable/disable hunts
-    dbadmin = "dbadmin" # Allowed to create new databases
-    admin = "admin" # handles generating/revoking auth
-
-role_everyone = [
-    RoleEnum.read_only,
-    RoleEnum.conman,
-    RoleEnum.hunter,
-    RoleEnum.dbadmin,
-    RoleEnum.admin,
-]
-
-role_conman = [
-    RoleEnum.conman,
-    RoleEnum.hunter,
-    RoleEnum.dbadmin,
-    RoleEnum.admin,
-]
-
-role_hunter = [
-    RoleEnum.hunter,
-    RoleEnum.dbadmin,
-    RoleEnum.admin,
-]
-
-role_dbadmin = [
-    RoleEnum.dbadmin,
-    RoleEnum.admin,
-]
-
-role_admin = [
-    RoleEnum.admin,
-]
-
-class APIKeyCreate(BaseModel):
-    user: str
-    role: RoleEnum
-    description: Optional[str] = None
-
-class APIKeyRevoke(BaseModel):
-    user: Optional[str] = None
-    key: Optional[str] = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def check_values(cls, values):
-        if not values.get('user') and not values.get('key'):
-            raise ValueError('A "user" or "key" must be provided.')
-        return values
