@@ -57,10 +57,10 @@ class User:
         self._redis_key = f"ledapi_user:{self.uuid}"
 
         #& redis serialize/deserialize types
-        self._stringify = ['role']
+        self._stringify = []
         self._floatify = ['created_at']
         self._intify = []
-        self._picklefy = []
+        self._picklefy = ['role']
 
     def to_dict(self):
         full_dict = self.__dict__
@@ -202,6 +202,8 @@ class User:
             await redis_pool.set(f"index:keybase_id:{existing.keybase_id}")
         #; Delete primary hex entry
         await redis_pool.delete(f"ledapi_user:{existing.uuid}")
+
+    #TODO - update_user() - I want to change my role!
 
 #@##############################################################################
 #@### Setup Redis Client

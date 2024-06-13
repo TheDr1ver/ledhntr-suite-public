@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, UTC
+from pprint import pformat
+
 from fastapi import APIRouter, Depends, HTTPException, status
 # from ledapi.ledapi import auth
 # from ledapi.ledapi.config import led, _log, tdb
@@ -44,7 +46,8 @@ async def read_hello(api_key: str = Depends(dep_check_role(role_everyone))):
 #~ Hello World Test User
 @router.get("/hello-test-user")
 async def read_hello(user: User = Depends(dep_check_user_role(role_everyone))):
-    return {"message": f"hello world! user: {user}"}
+    return {"message": f"hello world!",
+            "user": user.to_dict()}
 
 #~ Test Redis
 @router.get("/redis-test")

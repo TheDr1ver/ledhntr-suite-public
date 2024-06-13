@@ -22,7 +22,8 @@ class RoleEnum(str, Enum):
 class UserModel(BaseModel):
     uuid: Optional[str] = None,
     user_id: Optional[str] = None,
-    role: Optional[str] = None,
+    # role: Optional[str] = None,
+    role: RoleEnum = None,
     api_key: Optional[str] = None,
     slack_id: Optional[str] = None,
     keybase_id: Optional[str] = None,
@@ -54,6 +55,7 @@ class UserModel(BaseModel):
         return values
     
     #~ Validate role
+    '''
     @model_validator(mode="before")
     @classmethod
     def validate_role(cls, values):
@@ -63,6 +65,7 @@ class UserModel(BaseModel):
         if not valid:
             raise ValueError(f"Invalid role {role_val}")
         return values
+    '''
 
 #@##############################################################################
 #@### Role Groups
