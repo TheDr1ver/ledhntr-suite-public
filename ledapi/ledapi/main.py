@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 # from auth import APIKeyCreate, api_key_header, key_manager
 # import ledapi.ledapi.auth.auth as auth
 # import auth
-from ledapi import auth
+from ledapi.auth import database as auth_db
 from ledapi.config import led, _log
 from ledapi.routes import (
     everyone,
@@ -15,6 +15,7 @@ from ledapi.routes import (
     dbadmin,
     admin
 )
+from ledapi.user import get_redis
 
 # Set Logger
 # logging.basicConfig(level=logging.DEBUG)
@@ -33,9 +34,12 @@ app.include_router(admin.router, tags=["admin"])
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await auth.database.connect()
+    # Connect to the auth database
+    await auth_db.connect()
     yield
-    await auth.database.disconnect()
+    # Disconnect from auth database
+    await auth_db.disconnect()
+
 
 app.router.lifespan_context = lifespan
 

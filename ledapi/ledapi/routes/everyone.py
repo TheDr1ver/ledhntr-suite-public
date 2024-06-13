@@ -4,10 +4,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 # from ledapi.ledapi.config import led, _log, tdb
 # import auth
 # from config import led, _log, tdb
+
+from redis.asyncio.client import Redis
+
 from ledapi.auth import(
     dep_check_role,
 )
+
+from ledapi.user import(
+    User,
+    dep_check_user_role
+)
 from ledapi.config import led, _log, tdb
+from ledapi.helpers import result_error_catching
+from ledapi.user import get_redis_pool
 
 # from ledapi.ledapi.models import (
 #     SearchObject,
@@ -26,20 +36,54 @@ router = APIRouter()
 #@### EVERYONE ENDPOINTS
 #@##############################################################################
 
+#~ Hello World Test
 @router.get("/hello-test")
 async def read_hello(api_key: str = Depends(dep_check_role(role_everyone))):
     return {"message": f"hello world! api_key_header: {api_key}"}
 
+#~ Hello World Test User
+@router.get("/hello-test-user")
+async def read_hello(user: User = Depends(dep_check_user_role(role_everyone))):
+    return {"message": f"hello world! user: {user}"}
+
+#~ Test Redis
+@router.get("/redis-test")
+async def redis_test(
+    # api_key: str = Depends(dep_check_role(role_everyone)),
+    #& user: User = Depends(dep_check_user_role(role_everyone)),
+    redis_pool: Redis = Depends(get_redis_pool)
+):
+    redis_info = await redis_pool.info()
+    return {"message": redis_info}
+
+#~ List Databases
 @router.get("/list-dbs")
 async def list_dbs(
     api_key: str = Depends(dep_check_role(role_everyone))
 ):
+    """List available databases
+
+    :param api_key: API Key Permissions Check, defaults to Depends(dep_check_role(role_everyone))
+    :type api_key: str, optional
+    :return: Dictionary of "result", "status_code", and "count"
+    :rtype: Dict
+    """
     all_dbs = []
-    dbs = tdb.get_all_dbs()
+    dbs = result_error_catching(tdb.get_all_dbs, "Failed to fetch databases")
     for db in dbs:
         all_dbs.append(str(db))
+    results = {
+        'results': [],
+        'message': None,
+        'status_code': None,
+        'count': 0,
+    }
+    if all_dbs:
+        results['results']=all_dbs
+
     return all_dbs
 
+#~ Search database
 @router.post("/search")
 async def search(
     search_obj: SearchObject,
@@ -134,6 +178,8 @@ async def search(
 
     if search_obj.db_name:
         tdb.db_name = search_obj.db_name
+    else:
+        search_obj.db_name = tdb.db_name
 
     results = {
         'results': [],
@@ -141,6 +187,9 @@ async def search(
         'status_code': None,
         'count': 0,
     }
+
+    things = result_error_catching(tdb.find_things, f"Error searching for {so}", so)
+    '''
     try:
         things = tdb.find_things(so)
     except Exception as e:
@@ -149,6 +198,7 @@ async def search(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error searching for {so}: \n\t{e}"
         )
+    '''
     for thing in things:
         if search_obj.new_days_back:
             # * If we're focusing on only new stuff, make sure we grab

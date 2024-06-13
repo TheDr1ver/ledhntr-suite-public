@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
 databases[sqlite]
+redis[asyncio]
 sqlalchemy
 python-dateutil
 requests

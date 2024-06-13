@@ -10,7 +10,13 @@ from ledapi.auth import(
 from ledapi.models import(
     APIKeyCreate,
     APIKeyRevoke,
+    UserModel,
     role_admin,
+)
+from ledapi.user import(
+    Redis,
+    User,
+    get_redis_pool,
 )
 from ledapi.config import led, _log, tdb
 
@@ -21,6 +27,17 @@ router = APIRouter()
 #@##############################################################################
 #@### ADMIN ENDPOINTS
 #@##############################################################################
+
+@router.post("/create-user")
+async def create_user(
+    user: UserModel,
+    redis_pool: Redis = Depends(get_redis_pool)
+):
+    _log.debug(f"Received: {user}")
+    _log.debug(f"Redis Pool: {redis_pool}")
+    new_user = await User.create_user(user, redis_pool=redis_pool)
+    response = new_user.to_dict()
+    return response
 
 @router.post("/generate-key")
 async def generate_key(

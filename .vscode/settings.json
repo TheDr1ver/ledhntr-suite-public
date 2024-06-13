@@ -12,7 +12,7 @@
             "strikethrough": false,
             "underline": false,
             "backgroundColor": "transparent",
-            "bold": false,
+            "bold": true,
             "italic": false
         },
         {
@@ -48,7 +48,7 @@
             "strikethrough": false,
             "underline": false,
             "backgroundColor": "transparent",
-            "bold": false,
+            "bold": true,
             "italic": true
         },
         {
@@ -80,12 +80,27 @@
         },
         {
             "tag": "&",
-            "color": "#00B8AB",
+            "color": "#ff00e1",
             "strikethrough": false,
             "underline": false,
             "backgroundColor": "transparent",
-            "bold": false,
+            "bold": true,
             "italic": false
-        }
-    ]
+        },
+        {
+            "tag": "~",
+            "color": "#00ffff",
+            "strikethrough": false,
+            "underline": false,
+            "backgroundColor": "transparent",
+            "bold": true,
+            "italic": false
+        },
+    ],
+    "better-comments.multilineComments": false,
+    "editor.colorDecorators": true,
+    "editor.defaultColorDecorators": true,
+    "files.associations": {
+        "*.json": "json"
+    },
 }

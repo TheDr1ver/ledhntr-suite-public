@@ -1,5 +1,5 @@
 from .auth import (
-    RoleEnum,
+    # // RoleEnum,
     APIKeyCreate,
     APIKeyRevoke,
     role_everyone,
@@ -11,4 +11,9 @@ from .auth import (
 
 from .everyone import (
     SearchObject
+)
+
+from .user import(
+    UserModel,
+    RoleEnum,
 )

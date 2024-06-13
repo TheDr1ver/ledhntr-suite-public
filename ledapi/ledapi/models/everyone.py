@@ -58,7 +58,7 @@ class SearchObject(BaseModel):
             if db_name not in all_dbs:
                 raise ValueError(f"Database {db_name} does not exist!")
         return values
-    
+
     #* If new_days_back is set, make sure it's > 0
     @model_validator(mode="before")
     @classmethod
