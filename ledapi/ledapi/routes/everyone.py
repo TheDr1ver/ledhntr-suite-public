@@ -17,9 +17,8 @@ from ledapi.user import(
     User,
     dep_check_user_role
 )
-from ledapi.config import led, _log, tdb
+from ledapi.config import led, _log, redis_manager, tdb
 from ledapi.helpers import result_error_catching
-from ledapi.user import get_redis_pool
 
 # from ledapi.ledapi.models import (
 #     SearchObject,
@@ -54,9 +53,10 @@ async def read_hello(user: User = Depends(dep_check_user_role(role_everyone))):
 async def redis_test(
     # api_key: str = Depends(dep_check_role(role_everyone)),
     #& user: User = Depends(dep_check_user_role(role_everyone)),
-    redis_pool: Redis = Depends(get_redis_pool)
+    # redis_pool: Redis = Depends(get_redis_pool)
 ):
-    redis_info = await redis_pool.info()
+    # redis_info = await redis_pool.info()
+    redis_info = redis_manager.redis
     return {"message": redis_info}
 
 #~ List Databases

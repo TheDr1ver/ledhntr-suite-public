@@ -1,33 +1,35 @@
 from enum import Enum
-from pydantic import BaseModel, model_validator
-from typing import Optional, List, Dict, get_type_hints
+from pydantic import BaseModel, Field, model_validator
+from typing import Optional, Union, Any, List, Dict, get_type_hints
 
 from ledapi.config import led, _log
+
+NOCHANGE = object()
 
 #@##############################################################################
 #@### Pydantic API models
 #@##############################################################################
 
 class RoleEnum(str, Enum):
-    read_only = "read-only" # Read-only access to the DB
-    conman = "conman" # Allowed to post confidence levels
-    hunter = "hunter" # Allowed to create/enable/disable hunts
-    dbadmin = "dbadmin" # Allowed to create new databases
-    admin = "admin" # handles generating/revoking auth
+    READ_ONLY = "read-only" # Read-only access to the DB
+    CONMAN = "conman" # Allowed to post confidence levels
+    HUNTER = "hunter" # Allowed to create/enable/disable hunts
+    DBADMIN = "dbadmin" # Allowed to create new databases
+    ADMIN = "admin" # handles generating/revoking auth
 
     @staticmethod
     def is_valid_role(role_str: str) -> bool:
         return role_str in RoleEnum.__members__.values()
 
 class UserModel(BaseModel):
-    uuid: Optional[str] = None,
-    user_id: Optional[str] = None,
+    uuid: Optional[Union[str, Any]] = Field(default=NOCHANGE)
+    user_id: Optional[Union[str, Any]] = Field(default=NOCHANGE)
     # role: Optional[str] = None,
-    role: RoleEnum = None,
-    api_key: Optional[str] = None,
-    slack_id: Optional[str] = None,
-    keybase_id: Optional[str] = None,
-    active_db: Optional[str] = None,
+    role: Optional[Union[RoleEnum, Any]] = Field(default=NOCHANGE)
+    api_key: Optional[Union[str, Any]] = Field(default=NOCHANGE)
+    slack_id: Optional[Union[str, Any]] = Field(default=NOCHANGE)
+    keybase_id: Optional[Union[str, Any]] = Field(default=NOCHANGE)
+    active_db: Optional[Union[str, Any]] = Field(default=NOCHANGE)
 
     #~ Check that at least one of the following is included when submitting
     #~ a User object
@@ -43,10 +45,12 @@ class UserModel(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def no_none(cls, values):
+        _log.debug(f"VALUES: {values}")
         type_hints = get_type_hints(cls)
         for field, field_type in type_hints.items():
-            if values.get(field) is None:
+            if values.get(field) == "":
                 if field_type == Optional[str]:
+                    _log.debug(f"CONVERTING {field} from {values[field]} to empty string")
                     values[field] = ""
                 elif field_type == Optional[List]:
                     values[field] = []
@@ -72,33 +76,33 @@ class UserModel(BaseModel):
 #@##############################################################################
 
 role_everyone = [
-    RoleEnum.read_only,
-    RoleEnum.conman,
-    RoleEnum.hunter,
-    RoleEnum.dbadmin,
-    RoleEnum.admin,
+    RoleEnum.READ_ONLY,
+    RoleEnum.CONMAN,
+    RoleEnum.HUNTER,
+    RoleEnum.DBADMIN,
+    RoleEnum.ADMIN,
 ]
 
 role_conman = [
-    RoleEnum.conman,
-    RoleEnum.hunter,
-    RoleEnum.dbadmin,
-    RoleEnum.admin,
+    RoleEnum.CONMAN,
+    RoleEnum.HUNTER,
+    RoleEnum.DBADMIN,
+    RoleEnum.ADMIN,
 ]
 
 role_hunter = [
-    RoleEnum.hunter,
-    RoleEnum.dbadmin,
-    RoleEnum.admin,
+    RoleEnum.HUNTER,
+    RoleEnum.DBADMIN,
+    RoleEnum.ADMIN,
 ]
 
 role_dbadmin = [
-    RoleEnum.dbadmin,
-    RoleEnum.admin,
+    RoleEnum.DBADMIN,
+    RoleEnum.ADMIN,
 ]
 
 role_admin = [
-    RoleEnum.admin,
+    RoleEnum.ADMIN,
 ]
 
 

@@ -11,9 +11,15 @@ import redis.asyncio as redis
 from redis.asyncio.client import Redis
 from uuid import uuid4
 
-from ledapi.config import _log
+from ledapi.config import _log, redis_manager
 from ledapi.models.user import(
     UserModel,
+    NOCHANGE,
+    role_admin,
+    role_dbadmin,
+    role_hunter,
+    role_conman,
+    role_everyone,
 )
 
 
@@ -68,9 +74,11 @@ class User:
         for k, v in full_dict.items():
             if k.startswith("_"):
                 continue
+            elif v==NOCHANGE:
+                continue
             less_dict[k]=v
         return less_dict
-    
+
     def redisify(self):
         """Serliazer for saving to Redis
         """
@@ -78,7 +86,9 @@ class User:
 
         result = {}
         for key, value in init_dict.items():
-            if key in self._stringify:
+            if value == NOCHANGE:
+                continue
+            elif key in self._stringify:
                 result[key] = str(value)
             elif key in self._floatify:
                 result[key] = float(value)
@@ -90,10 +100,14 @@ class User:
                 result[key] = value
         return result
 
-    async def save_to_redis(self, redis_pool):
+    async def save_to_redis(
+        self,
+    ):
+        #; Load redis_pool
+        redis_pool: Redis = redis_manager.redis
         #; Save primary entry by user_id
         _log.debug(f"Saving to {self._redis_key}:")
-        _log.debug(f"\n{pformat(self.redisify())}")
+        _log.debug(f"Saved Blob: \n{pformat(self.redisify())}")
         await redis_pool.hset(self._redis_key, mapping=self.redisify())
         #; Save additional index entries for other retrieval options
         if self.user_id:
@@ -106,11 +120,11 @@ class User:
             await redis_pool.set(f"index:keybase_id:{self.keybase_id}", self.uuid)
 
     @staticmethod
-    async def load_by_uuid(uuid, redis_pool):
-        data = await redis_pool.hgetall(f"ledapi_user:{uuid}")
-        if not data:
-            return None
-        user = User(uuid=uuid)
+    async def unredis(
+        data: List[bytes] = None,
+    ):
+        deserialized = {}
+        user = User()
         for key, value in data.items():
             attr = key.decode()
             if attr in user._stringify:
@@ -120,49 +134,91 @@ class User:
             elif attr in user._intify:
                 value = int(value)
             elif attr in user._picklefy:
-                value = pickle.loads(value)
+                try:
+                    value = pickle.loads(value)
+                except pickle.UnpicklingError as e:
+                    _log.error(f"Error unpickling {value}: {e}")
+                    _log.error(f"Assuming {value} is in some way corrupt,"
+                                "so we're dropping it.")
+                    value = ""
             else:
                 value = value.decode()
-            setattr(user, attr, value)
+            deserialized[attr] = value
+        return deserialized
+
+    @staticmethod
+    async def load_by_uuid(
+        uuid: str = None,
+    ):
+        #; Load redis_pool
+        redis_pool: Redis = redis_manager.redis
+        _log.debug(f"Loading user by uuid: {uuid}")
+        data = await redis_pool.hgetall(f"ledapi_user:{uuid}")
+        if not data:
+            _log.debug(f"No data found!")
+            return None
+        user = User(uuid=uuid)
+        deserialized = await User.unredis(data)
+        for key, value in deserialized.items():
+            setattr(user, key, value)
         return user
 
     @staticmethod
     async def load_by_property(
         prop_type: str = "",
         prop_value: str = "",
-        redis_pool: Redis = None,
     ):
         """load user from Redis by property value
 
         :param prop_type: the type of user property you want to load
         :type prop_type: str, required
         :param prop_value: value of the property you want to search for
-        :type prop_value: str, equired
-        :param redis_pool: redis client you're connecting to, defaults to None
-        :type redis_pool: Redis, optional
+        :type prop_value: str, required
         :return: User object or None
         :rtype: User
         """
-        _log.debug(f"redis_pool: {redis_pool}")
+        #; Load redis_pool
+        redis_pool: Redis = redis_manager.redis
+        # // _log.debug(f"redis_pool: {redis_pool}")
         uuid = await redis_pool.get(f"index:{prop_type}:{prop_value}")
         if uuid:
-            return await User.load_by_uuid(uuid.decode(), redis_pool)
+            return await User.load_by_uuid(uuid.decode())
         return None
 
     @staticmethod
-    async def create_user(
+    async def get_user(
+        # uuid: str = None,
         # user_id: str = None,
-        # role: str = None,
-        user: UserModel = None,
-        redis_pool: Redis = None,
-        # slack_id: Optional[str] = None,
-        # keybase_id: Optional[str] = None,
+        # api_key: str = None,
+        # slack_id: str = None,
+        # keybase_id: str = None,
+        user_search: UserModel = None,
     ):
-        _log.debug(f"redis_pool: {redis_pool}")
+        user = None
+        if user_search.uuid:
+            user = await User.load_by_uuid(user_search.uuid)
+        elif user_search.user_id:
+            user = await User.load_by_property('user_id', user_search.user_id)
+        elif user_search.api_key:
+            user = await User.load_by_property('api_key', user_search.api_key)
+        elif user_search.slack_id:
+            user = await User.load_by_property('slack_id', user_search.slack_id)
+        elif user_search.keybase_id:
+            user = await User.load_by_property('keybase_id', user_search.keybase_id)
+        if user is not None:
+            return user
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User not found: {user_search}",
+        )
+
+    @staticmethod
+    async def create_user(
+        user: UserModel = None,
+    ):
         existing = await User.load_by_property(
             prop_type='user_id',
             prop_value=user.user_id,
-            redis_pool=redis_pool,
         )
         if existing:
             _log.info(f"Attempted to create user that already exists: {user.user_id}")
@@ -174,22 +230,50 @@ class User:
             slack_id=user.slack_id,
             keybase_id=user.keybase_id
         )
-        await new_user.save_to_redis(redis_pool=redis_pool)
+        await new_user.save_to_redis()
         _log.info(f"New user created: {new_user.user_id} | {new_user.role} | {new_user.uuid}")
         return new_user
 
     @staticmethod
-    async def delete_user(
-        user_id: str = None,
-        redis_pool: Redis = None,
+    async def update_user(
+        user: UserModel = None,
     ):
-        existing = await User.load_by_property(
-            prop_type='user_id',
-            prop_value=user_id,
-            redis_pool=redis_pool
-        )
+        existing = await User.get_user(user)
         if not existing:
-            _log.info(f"Attempted to delete user that does not exist: {user_id}")
+            _log.info(f"User {user} does not exist!")
+            return False
+        #; Loop through all attributes looking for new values
+        for attr_name in dir(existing):
+            if not attr_name.startswith("_") and not callable(getattr(existing, attr_name)):
+                if not hasattr(user, attr_name):
+                    continue
+                attr_value = getattr(user, attr_name)
+                _log.debug(f"Checking {attr_name} - user value is {attr_value} {type(attr_value)}")
+                if attr_value!=NOCHANGE and getattr(existing, attr_name) != attr_value:
+                    _log.debug(f"Updating {attr_name} to {attr_value}")
+                    # existing.attr_name = attr_value
+                    setattr(existing, attr_name, attr_value)
+        #; Save updated object
+        _log.debug(f"Saving updated user: {existing.to_dict()}")
+        # Serialize
+        await existing.save_to_redis()
+        return existing
+
+    @staticmethod
+    async def delete_user(
+        user: UserModel = None,
+    ):
+        #; Load redis_pool
+        redis_pool: Redis = redis_manager.redis
+        if user.uuid:
+            existing = await User.load_by_uuid(user.uuid)
+        else:
+            existing = await User.load_by_property(
+                prop_type='user_id',
+                prop_value=user.user_id,
+            )
+        if not existing:
+            _log.info(f"Attempted to delete user that does not exist: {user}")
             return False
         #; Delete reference indexes
         if existing.user_id:
@@ -197,52 +281,64 @@ class User:
         if existing.api_key:
             await redis_pool.delete(f"index:api_key:{existing.api_key}")
         if existing.slack_id:
-            await redis_pool.set(f"index:slack_id:{existing.slack_id}")
+            await redis_pool.delete(f"index:slack_id:{existing.slack_id}")
         if existing.keybase_id:
-            await redis_pool.set(f"index:keybase_id:{existing.keybase_id}")
+            await redis_pool.delete(f"index:keybase_id:{existing.keybase_id}")
         #; Delete primary hex entry
         await redis_pool.delete(f"ledapi_user:{existing.uuid}")
+        _log.debug(f"Finished deleting all references to {existing}")
 
-    #TODO - update_user() - I want to change my role!
+    @staticmethod
+    async def list_all_users():
+        #; Load redis_pool
+        redis_pool: Redis = redis_manager.redis
+        all_users = []
+        cursor = '0'
+        keys = []
 
-#@##############################################################################
-#@### Setup Redis Client
-#@###
-#@### This should probably be loaded as its own LEDHNTR plugin, but since
-#@### all we're doing at this point is loading a redis client I'm not too
-#@### worried about it.
-#@##############################################################################
-REDIS_URL = "redis://192.168.70.10"
-# redis_client = None
+        #; SCAN to find keys with specified prefix
+        while True:
+            cursor, partial_keys = await redis_pool.scan(cursor=cursor, match="ledapi_user:*")
+            # // _log.debug(f"Cursor: {cursor}, Keys found: {partial_keys}")
+            keys.extend(partial_keys)
+            if cursor == 0:
+                break
 
-async def get_redis()->Redis:
-    '''
-    global redis_client
-    if redis_client is None:
-        redis_client = await redis.from_url(REDIS_URL)
-        redis_client
-    '''
-    redis_client = await redis.from_url(REDIS_URL)
-    return redis_client
+        #; Dump the values of the keys
+        for key in keys:
+            value = await redis_pool.hgetall(key)
+            all_users.append(value)
 
+        clean_users = []
+        # // _log.debug(f"all_users bytes: {all_users}")
+        for user in all_users:
+            res = await User.unredis(user)
+            clean_users.append(res)
+        _log.debug(f"All users found: {clean_users}")
+        return clean_users
+
+
+
+'''
 async def get_user(
     uuid: str = None,
     user_id: str = None,
     api_key: str = None,
     slack_id: str = None,
     keybase_id: str = None,
-    redis_pool: Redis = None,
 ) -> User:
+    #; Load redis_pool
+    redis_pool: Redis = redis_manager.redis
     if uuid:
-        user = await User.load_by_uuid(uuid, redis_pool)
+        user = await User.load_by_uuid(uuid)
     elif user_id:
-        user = await User.load_by_property('user_id', user_id, redis_pool)
+        user = await User.load_by_property('user_id', user_id)
     elif api_key:
-        user = await User.load_by_property('api_key', api_key, redis_pool)
+        user = await User.load_by_property('api_key', api_key)
     elif slack_id:
-        user = await User.load_by_property('slack_id', slack_id, redis_pool)
+        user = await User.load_by_property('slack_id', slack_id)
     elif keybase_id:
-        user = await User.load_by_property('keybase_id', keybase_id, redis_pool)
+        user = await User.load_by_property('keybase_id', keybase_id)
 
     if user is None:
         user = User(
@@ -252,43 +348,9 @@ async def get_user(
             slack_id=slack_id,
             keybase_id=keybase_id,
         )
-        await user.save_to_redis(redis_pool)
+        await user.save_to_redis()
     return user
-
 '''
-async def main():
-    redis_pool = await get_redis()
-    instance = await get_testclass_instance('user1', redis_pool)
-    print(instance)
-    pprint(instance.to_dict())
-    print(f"Is expired: {instance.is_expired()}")
-    instance.set_database("new_database")
-    await instance.save_to_redis(redis_pool)
-
-    # Reload and verify
-    reloaded = await get_testclass_instance('user1', redis_pool)
-    pprint(reloaded.to_dict())
-
-    # What type of object is redis_pool?
-    print(redis_pool)
-    print(type(redis_pool))
-    print(redis_client)
-    print(type(redis_client))
-
-await main()
-'''
-
-#@##############################################################################
-#@### Connect to Redis Pool
-#@##############################################################################
-
-# Dependency for accessing Redis Pool
-async def get_redis_pool():
-    redis_pool = await get_redis()
-    try:
-        yield redis_pool
-    finally:
-        await redis_pool.close()
 
 #@##############################################################################
 #@### Authentication OPERATIONS
@@ -296,14 +358,14 @@ async def get_redis_pool():
 
 async def get_user_by_api_key(
     api_key_header: str = Depends(api_key_header),
-    redis_pool: Redis = Depends(get_redis_pool),
 ):
     """Return User object based on API Key Header as long as it's valid
     """
+    #; Load redis_pool
+    redis_pool: Redis = redis_manager.redis
     user = await User.load_by_property(
         prop_type='api_key',
         prop_value=api_key_header,
-        redis_pool=redis_pool,
     )
     if user:
         return user
@@ -313,7 +375,7 @@ async def get_user_by_api_key(
     )
 
 async def check_role(
-    user: User = Depends(get_user_by_api_key),
+    user: User = None,
     roles: List = []
 )->User:
     """Check the role of the user accessing the API
@@ -331,7 +393,31 @@ async def check_role(
 
 def dep_check_user_role(roles: List=[]):
     """Check that the user belongs to one of the roles listed
+    NOTE: This one needs a wrapper function while dep_check_self_or_admin
+    does not because this one takes an argument (role_X) from the route, but all
+    dep_check_self_or_admin takes is user- and self-generated input.
     """
     async def _dep_check_role(user: User = Depends(get_user_by_api_key)):
         return await check_role(user, roles)
     return _dep_check_role
+
+async def dep_check_self_or_admin(
+    modified_user: UserModel = None,
+    user: User = Depends(get_user_by_api_key)
+)->bool:
+    """Check if user submitting change request is either self or Admin
+    """
+    is_admin = False
+    is_self = False
+    if user.role in role_admin:
+        is_admin = True
+    unique_values = ["user_id", "api_key", "uuid"]
+    for uv in unique_values:
+        if getattr(user, uv) == getattr(modified_user, uv):
+            is_self = True
+    if is_admin or is_self:
+        return True
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"You don't have permissions to modify {modified_user}."
+    )

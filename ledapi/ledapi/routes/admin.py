@@ -14,9 +14,9 @@ from ledapi.models import(
     role_admin,
 )
 from ledapi.user import(
-    Redis,
     User,
-    get_redis_pool,
+    dep_check_user_role,
+    dep_check_self_or_admin,
 )
 from ledapi.config import led, _log, tdb
 
@@ -31,13 +31,45 @@ router = APIRouter()
 @router.post("/create-user")
 async def create_user(
     user: UserModel,
-    redis_pool: Redis = Depends(get_redis_pool)
+    admin_rights: User = Depends(dep_check_user_role(role_admin))
 ):
     _log.debug(f"Received: {user}")
-    _log.debug(f"Redis Pool: {redis_pool}")
-    new_user = await User.create_user(user, redis_pool=redis_pool)
+    new_user = await User.create_user(user)
     response = new_user.to_dict()
     return response
+
+@router.post("/delete-user")
+async def delete_user(
+    user: UserModel,
+    admin_rights: User = Depends(dep_check_user_role(role_admin))
+):
+    _log.debug(f"Received: {user}")
+    await User.delete_user(user)
+    response = {'message': f'Deleted {user}'}
+    return response
+
+# @router.post("/update-user", response_model=UserModel)
+@router.post("/update-user")
+async def update_user(
+    modified_user: UserModel,
+    verified: bool = Depends(dep_check_self_or_admin)
+):
+    _log.debug(f"Received: {modified_user}")
+
+    updated_user = await User.update_user(user=modified_user)
+    # response = UserModel(**updated_user.to_dict())
+    # response = UserModel()
+    response = updated_user.to_dict()
+    return response
+
+@router.get("/list-users")
+async def list_users(
+    admin: User = Depends(dep_check_user_role(role_admin))
+):
+    _log.debug(f"Received: {admin}")
+    all_users = await User.list_all_users()
+    return all_users
+
 
 @router.post("/generate-key")
 async def generate_key(
@@ -58,13 +90,14 @@ async def generate_key(
     }
     return response
 
+'''
 @router.get("/list-users")
 async def list_users(
     admin_api_key: str = Depends(dep_check_role(role_admin))
 ):
     users = await key_manager.list_users()
     return users
-
+'''
 @router.post("/revoke-key")
 async def revoke_key(
     api_key_revoke: APIKeyRevoke,
