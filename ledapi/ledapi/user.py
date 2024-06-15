@@ -238,6 +238,9 @@ class User:
     async def update_user(
         user: UserModel = None,
     ):
+        #!!!! This absolutely needs to be
+        #!!!! changed. Roles can only be changed by admins and only user preferences and API Key should be changeable by self user
+        #!!!!
         existing = await User.get_user(user)
         if not existing:
             _log.info(f"User {user} does not exist!")
