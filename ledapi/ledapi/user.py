@@ -35,6 +35,8 @@ api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 #@##############################################################################
 
 class User:
+    # attributes that can be changed by a user or admin
+    changeable = ["api_key", "slack_id", "keybase_id", "db_name"]
 
     def __init__(
         self,
@@ -56,7 +58,7 @@ class User:
         #& RBAC
         self.role = role if role else ""
         #& Preferences
-        self.db_name = active_db if active_db else ""
+        self.db_name = active_db if active_db else "all"
         #& Metadata
         self.created_at = time.time()
         #& Internal Variables
@@ -80,7 +82,7 @@ class User:
         return less_dict
 
     def redisify(self):
-        """Serliazer for saving to Redis
+        """Serializer for saving to Redis
         """
         init_dict = self.to_dict()
 
@@ -123,6 +125,8 @@ class User:
     async def unredis(
         data: List[bytes] = None,
     ):
+        """Convert Redis-stored data into Python-actionable
+        """
         deserialized = {}
         user = User()
         for key, value in data.items():
@@ -180,6 +184,7 @@ class User:
         #; Load redis_pool
         redis_pool: Redis = redis_manager.redis
         # // _log.debug(f"redis_pool: {redis_pool}")
+        _log.debug(f"Searching for user with {prop_type}: {prop_value}")
         uuid = await redis_pool.get(f"index:{prop_type}:{prop_value}")
         if uuid:
             return await User.load_by_uuid(uuid.decode())
@@ -187,23 +192,18 @@ class User:
 
     @staticmethod
     async def get_user(
-        # uuid: str = None,
-        # user_id: str = None,
-        # api_key: str = None,
-        # slack_id: str = None,
-        # keybase_id: str = None,
         user_search: UserModel = None,
     ):
         user = None
-        if user_search.uuid:
+        if user_search.uuid and not user_search.uuid==NOCHANGE:
             user = await User.load_by_uuid(user_search.uuid)
-        elif user_search.user_id:
+        elif user_search.user_id and not user_search.user_id==NOCHANGE:
             user = await User.load_by_property('user_id', user_search.user_id)
-        elif user_search.api_key:
+        elif user_search.api_key and not user_search.api_key==NOCHANGE:
             user = await User.load_by_property('api_key', user_search.api_key)
-        elif user_search.slack_id:
+        elif user_search.slack_id and not user_search.slack_id==NOCHANGE:
             user = await User.load_by_property('slack_id', user_search.slack_id)
-        elif user_search.keybase_id:
+        elif user_search.keybase_id and not user_search.keybase_id==NOCHANGE:
             user = await User.load_by_property('keybase_id', user_search.keybase_id)
         if user is not None:
             return user
@@ -238,24 +238,42 @@ class User:
     async def update_user(
         user: UserModel = None,
     ):
-        #!!!! This absolutely needs to be
-        #!!!! changed. Roles can only be changed by admins and only user preferences and API Key should be changeable by self user
-        #!!!!
+        """Update user settings
+        """
+        _log.debug(f"Updating with user object: {user}")
         existing = await User.get_user(user)
         if not existing:
             _log.info(f"User {user} does not exist!")
             return False
+        #; Load redis_pool
+        redis_pool: Redis = redis_manager.redis
         #; Loop through all attributes looking for new values
         for attr_name in dir(existing):
+            if attr_name not in User.changeable:
+                # UUID and user_id cannot be changed
+                # Only attributes listed in User.changeable can be changed.
+                _log.debug(f"{attr_name} cannot be changed!")
+                continue
             if not attr_name.startswith("_") and not callable(getattr(existing, attr_name)):
                 if not hasattr(user, attr_name):
+                    # Skip attributes that weren't passed to be changed
                     continue
                 attr_value = getattr(user, attr_name)
                 _log.debug(f"Checking {attr_name} - user value is {attr_value} {type(attr_value)}")
+                if getattr(existing, attr_name, None) is None:
+                    _log.error(f"Existing User does not have attribute: {attr_name}")
+                    continue
                 if attr_value!=NOCHANGE and getattr(existing, attr_name) != attr_value:
                     _log.debug(f"Updating {attr_name} to {attr_value}")
+                    #; remove existing index
+                    val = getattr(existing, attr_name, None)
+                    if val is not None:
+                        await redis_pool.delete(f"index:{attr_name}:{val}")
+                    #; Update attribute
                     # existing.attr_name = attr_value
                     setattr(existing, attr_name, attr_value)
+                    #; update index
+                    await redis_pool.set(f"index:{attr_name}:{attr_value}", existing.uuid)
         #; Save updated object
         _log.debug(f"Saving updated user: {existing.to_dict()}")
         # Serialize
@@ -266,18 +284,12 @@ class User:
     async def delete_user(
         user: UserModel = None,
     ):
-        #; Load redis_pool
-        redis_pool: Redis = redis_manager.redis
-        if user.uuid:
-            existing = await User.load_by_uuid(user.uuid)
-        else:
-            existing = await User.load_by_property(
-                prop_type='user_id',
-                prop_value=user.user_id,
-            )
+        existing = await User.get_user(user)
         if not existing:
             _log.info(f"Attempted to delete user that does not exist: {user}")
             return False
+        #; Load redis_pool
+        redis_pool: Redis = redis_manager.redis
         #; Delete reference indexes
         if existing.user_id:
             await redis_pool.delete(f"index:user_id:{existing.user_id}")
@@ -321,40 +333,6 @@ class User:
         return clean_users
 
 
-
-'''
-async def get_user(
-    uuid: str = None,
-    user_id: str = None,
-    api_key: str = None,
-    slack_id: str = None,
-    keybase_id: str = None,
-) -> User:
-    #; Load redis_pool
-    redis_pool: Redis = redis_manager.redis
-    if uuid:
-        user = await User.load_by_uuid(uuid)
-    elif user_id:
-        user = await User.load_by_property('user_id', user_id)
-    elif api_key:
-        user = await User.load_by_property('api_key', api_key)
-    elif slack_id:
-        user = await User.load_by_property('slack_id', slack_id)
-    elif keybase_id:
-        user = await User.load_by_property('keybase_id', keybase_id)
-
-    if user is None:
-        user = User(
-            uuid=uuid,
-            user_id=user_id,
-            api_key=api_key,
-            slack_id=slack_id,
-            keybase_id=keybase_id,
-        )
-        await user.save_to_redis()
-    return user
-'''
-
 #@##############################################################################
 #@### Authentication OPERATIONS
 #@##############################################################################
@@ -364,8 +342,6 @@ async def get_user_by_api_key(
 ):
     """Return User object based on API Key Header as long as it's valid
     """
-    #; Load redis_pool
-    redis_pool: Redis = redis_manager.redis
     user = await User.load_by_property(
         prop_type='api_key',
         prop_value=api_key_header,
@@ -404,6 +380,7 @@ def dep_check_user_role(roles: List=[]):
         return await check_role(user, roles)
     return _dep_check_role
 
+
 async def dep_check_self_or_admin(
     modified_user: UserModel = None,
     user: User = Depends(get_user_by_api_key)
@@ -418,6 +395,13 @@ async def dep_check_self_or_admin(
     for uv in unique_values:
         if getattr(user, uv) == getattr(modified_user, uv):
             is_self = True
+    if not is_admin:
+        if getattr(modified_user, 'role') and \
+        getattr(user, 'role') != getattr(modified_user, 'role'):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Non-admin user cannot change their own role."
+            )
     if is_admin or is_self:
         return True
     raise HTTPException(

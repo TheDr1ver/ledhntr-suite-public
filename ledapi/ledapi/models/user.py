@@ -29,7 +29,7 @@ class UserModel(BaseModel):
     api_key: Optional[Union[str, Any]] = Field(default=NOCHANGE)
     slack_id: Optional[Union[str, Any]] = Field(default=NOCHANGE)
     keybase_id: Optional[Union[str, Any]] = Field(default=NOCHANGE)
-    active_db: Optional[Union[str, Any]] = Field(default=NOCHANGE)
+    db_name: Optional[Union[str, Any]] = Field(default=NOCHANGE)
 
     #~ Check that at least one of the following is included when submitting
     #~ a User object

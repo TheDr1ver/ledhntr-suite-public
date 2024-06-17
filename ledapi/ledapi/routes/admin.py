@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 # from ledapi.ledapi import auth
 # from ledapi.ledapi.config import led, _log, tdb
 # import auth
@@ -17,10 +17,11 @@ from ledapi.user import(
     User,
     dep_check_user_role,
     dep_check_self_or_admin,
+    get_user_by_api_key,
 )
 from ledapi.config import led, _log, tdb
 
-from ledhntr.data_classes import Attribute, Entity, Relation, Thing, Query
+from ledhntr.data_classes import Attribute, Entity, Relation
 
 router = APIRouter()
 
@@ -57,8 +58,6 @@ async def update_user(
     _log.debug(f"Received: {modified_user}")
 
     updated_user = await User.update_user(user=modified_user)
-    # response = UserModel(**updated_user.to_dict())
-    # response = UserModel()
     response = updated_user.to_dict()
     return response
 
@@ -70,7 +69,26 @@ async def list_users(
     all_users = await User.list_all_users()
     return all_users
 
+@router.get("/get-user")
+async def get_user(
+    user_id: str = Query(None, description="The user_id of the user"),
+    uuid: str = Query(None, description="The unique UUID of the user"),
+    slack_id: str = Query(None, description="The Slack ID of the user"),
+    keybase_id: str = Query(None, description="The Keybase ID of the user"),
+    verified: bool = Depends(dep_check_user_role(role_admin))
+):
+    if uuid:
+        user = UserModel(uuid=uuid)
+    elif user_id:
+        user = UserModel(user_id=user_id)
+    elif slack_id:
+        user = UserModel(slack_id=slack_id)
+    elif keybase_id:
+        user = UserModel(keybase_id=keybase_id)
+    myuser = await User.get_user(user)
+    return myuser.to_dict()
 
+'''
 @router.post("/generate-key")
 async def generate_key(
     api_key_create: APIKeyCreate,
@@ -90,14 +108,14 @@ async def generate_key(
     }
     return response
 
-'''
+
 @router.get("/list-users")
 async def list_users(
     admin_api_key: str = Depends(dep_check_role(role_admin))
 ):
     users = await key_manager.list_users()
     return users
-'''
+
 @router.post("/revoke-key")
 async def revoke_key(
     api_key_revoke: APIKeyRevoke,
@@ -112,3 +130,4 @@ async def revoke_key(
         "results": results,
     }
     return response
+'''

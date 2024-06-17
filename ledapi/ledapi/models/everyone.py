@@ -9,6 +9,9 @@ from ledapi.config import led, _log, tdb
 #@##############################################################################
 #@### Pydantic API models
 #@##############################################################################
+class DBName(BaseModel):
+    db_name: Optional[str] = None
+
 class SearchObject(BaseModel):
     db_name: Optional[str] = None
     label: Optional[str] = None

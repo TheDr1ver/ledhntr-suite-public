@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, UTC
 from pprint import pformat
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Query
 # from ledapi.ledapi import auth
 # from ledapi.ledapi.config import led, _log, tdb
 # import auth
@@ -15,7 +15,8 @@ from ledapi.auth import(
 
 from ledapi.user import(
     User,
-    dep_check_user_role
+    dep_check_user_role,
+    get_user_by_api_key
 )
 from ledapi.config import led, _log, redis_manager, tdb
 from ledapi.helpers import result_error_catching
@@ -25,11 +26,13 @@ from ledapi.helpers import result_error_catching
 # )
 # from models import(
 from ledapi.models import(
+    DBName,
     SearchObject,
+    UserModel,
     role_everyone,
 )
 
-from ledhntr.data_classes import Attribute, Entity, Relation, Thing, Query
+from ledhntr.data_classes import Attribute, Entity, Relation
 
 router = APIRouter()
 
@@ -48,26 +51,31 @@ async def read_hello(user: User = Depends(dep_check_user_role(role_everyone))):
     return {"message": f"hello world!",
             "user": user.to_dict()}
 
+#~ Get User info about self
+@router.get("/user-info")
+async def user_info(
+    user = Depends(get_user_by_api_key),
+):
+    return user.to_dict()
+
 #~ Test Redis
 @router.get("/redis-test")
 async def redis_test(
-    # api_key: str = Depends(dep_check_role(role_everyone)),
-    #& user: User = Depends(dep_check_user_role(role_everyone)),
-    # redis_pool: Redis = Depends(get_redis_pool)
+    user: User = Depends(dep_check_user_role(role_everyone)),
 ):
     # redis_info = await redis_pool.info()
-    redis_info = redis_manager.redis
+    redis_info = await redis_manager.redis.info()
     return {"message": redis_info}
 
 #~ List Databases
 @router.get("/list-dbs")
 async def list_dbs(
-    api_key: str = Depends(dep_check_role(role_everyone))
+    user: User = Depends(dep_check_user_role(role_everyone))
 ):
     """List available databases
 
-    :param api_key: API Key Permissions Check, defaults to Depends(dep_check_role(role_everyone))
-    :type api_key: str, optional
+    :param user: User Permissions Check, defaults to Depends(dep_check_role(role_everyone))
+    :type user: User, required
     :return: Dictionary of "result", "status_code", and "count"
     :rtype: Dict
     """
@@ -86,11 +94,65 @@ async def list_dbs(
 
     return all_dbs
 
+#~ Set User Database
+@router.post("/set-db")
+async def set_db(
+    user: User = Depends(dep_check_user_role(role_everyone)),
+    db_name: str = Query('all', description="Set database for subsequent searches. Defaults to 'all'"),
+    db_name_model: DBName = Body(None)
+):
+    """Sets preferred dictionary to focus on. Defaults to 'all'
+
+    :param user: user making the request, defaults to Depends(dep_check_user_role(role_everyone))
+    :type user: User, required
+    :param db_name: db_name to inspect, defaults to 'all'
+    :type db_name: str, optional
+    :param db_name_model: DBName model pydantic object, optional
+    :type db_name_model: DBName
+    :raises HTTPException: 500
+    :return: new db_name result
+    :rtype: Dict
+    """
+    if db_name_model and db_name_model.db_name:
+        new_db_name = db_name_model.db_name
+    else:
+        new_db_name = db_name
+    modified_user = UserModel(uuid=user.uuid, db_name=new_db_name)
+    try:
+        await User.update_user(user=modified_user)
+    except Exception as e:
+        _log.error(f"Failed to update user: \n\t{e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update user: \n\t{e}"
+        )
+    result = {
+        'message': f'Successfully set database to {new_db_name}',
+        'status_code': status.HTTP_200_OK
+    }
+    return result
+
+#~ Get User Database
+@router.get("/get-db")
+async def get_db(
+    user: User = Depends(dep_check_user_role(role_everyone)),
+):
+    """Gets the currently selected database for this user
+
+    :param user: user making the request
+    :type user: User, required
+    :raises HTTPException: 500
+    :return: name of selected db
+    :rtype: str
+    """
+    return user.db_name
+
+
 #~ Search database
 @router.post("/search")
 async def search(
     search_obj: SearchObject,
-    everyone_api_key: str = Depends(dep_check_role(role_everyone))
+    user: User = Depends(dep_check_user_role(role_everyone))
 ):
     """search database
 
@@ -181,6 +243,9 @@ async def search(
 
     if search_obj.db_name:
         tdb.db_name = search_obj.db_name
+    elif user.db_name and user.db_name!="all":
+        tdb.db_name = user.db_name
+        search_obj.db_name = user.db_name
     else:
         search_obj.db_name = tdb.db_name
 
