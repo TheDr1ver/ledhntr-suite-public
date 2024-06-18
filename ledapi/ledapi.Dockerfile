@@ -18,9 +18,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Clone ledhntr for install
-# RUN git clone https://github.com/TheDr1ver/ledhntr-suite-public /ledapi/ledhntr-suite-public
-# Clone with different branch
-RUN git clone --branch ledapi https://github.com/TheDr1ver/ledhntr-suite-public.git /ledapi/ledhntr-suite-public
+RUN git clone https://github.com/TheDr1ver/ledhntr-suite-public.git /ledapi/ledhntr-suite-public
+# Change branch for dev
+WORKDIR /ledapi/ledhntr-suite-public
+RUN git checkout ledapi
+# Install requirements
 RUN pip install --no-cache-dir -r /ledapi/ledhntr-suite-public/requirements.txt
 RUN pip install --no-cache-dir -r /ledapi/ledhntr-suite-public/ledhntr/requirements.txt
 RUN pip install --no-cache-dir -e /ledapi/ledhntr-suite-public/ledhntr
