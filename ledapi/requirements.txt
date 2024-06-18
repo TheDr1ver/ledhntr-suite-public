@@ -3,7 +3,7 @@ uvicorn[standard]
 databases[sqlite]
 redis[asyncio]
 rq
-sqlalchemy
+psutil
 python-dateutil
 requests
 typedb-driver==2.28.0
