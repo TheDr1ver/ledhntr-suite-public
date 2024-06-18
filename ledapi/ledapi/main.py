@@ -3,16 +3,11 @@ import logging
 from fastapi import FastAPI, Depends, HTTPException, status
 from contextlib import asynccontextmanager
 
-# from auth import APIKeyCreate, api_key_header, key_manager
-# import ledapi.ledapi.auth.auth as auth
-# import auth
-from ledapi.auth import database as auth_db
 from ledapi.config import(
-    led, 
-    _log, 
-    redis_manager, 
-    # ! redis_jq,
-) 
+    led,
+    _log,
+    redis_manager,
+)
 from ledapi.routes import(
     everyone,
     conman,
@@ -20,6 +15,7 @@ from ledapi.routes import(
     dbadmin,
     admin
 )
+from ledapi.worker_manager import start_all_workers, stop_all_workers
 
 # Set Logger
 # logging.basicConfig(level=logging.DEBUG)
@@ -38,21 +34,18 @@ app.include_router(admin.router, tags=["admin"])
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Connect to the auth database
-    # await auth_db.connect()
     # Connect to redis
-    await redis_manager.connect()
+    if redis_manager.redis is None:
+        _log.debug(f"Starting redis_manager")
+        await redis_manager.connect()
+        _log.debug(f"Connection result: {redis_manager.redis}")
 
-    # Connect to redis job queue
-    # ! await redis_jq.connect()
+    # Start plugin workers
+    await start_all_workers()
 
     yield
 
-    # Disconnect from auth database
-    # await auth_db.disconnect()
-
-    # Disconnect from redis job queue
-    # ! await redis_jq.disconnect()
+    await stop_all_workers()
 
     # Disconnect from redis_manager
     await redis_manager.disconnect()
@@ -60,5 +53,6 @@ async def lifespan(app: FastAPI):
 app.router.lifespan_context = lifespan
 
 if __name__ == "__main__":
-    import uvicorn
+    import uvicorn, multiprocessing
+    multiprocessing.freeze_support()
     uvicorn.run(app, host="0.0.0.0", port=8000)

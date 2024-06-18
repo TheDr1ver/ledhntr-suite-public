@@ -2,29 +2,20 @@ from datetime import datetime, timedelta, UTC
 from pprint import pformat
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status, Query
-# from ledapi.ledapi import auth
-# from ledapi.ledapi.config import led, _log, tdb
-# import auth
-# from config import led, _log, tdb
-
-from redis.asyncio.client import Redis
-
-from ledapi.auth import(
-    dep_check_role,
-)
 
 from ledapi.user import(
     User,
     dep_check_user_role,
     get_user_by_api_key
 )
-from ledapi.config import led, _log, redis_manager, tdb
+from ledapi.config import(
+    led,
+    _log,
+    get_tdb,
+    redis_manager
+)
 from ledapi.helpers import result_error_catching
 
-# from ledapi.ledapi.models import (
-#     SearchObject,
-# )
-# from models import(
 from ledapi.models import(
     DBName,
     SearchObject,
@@ -39,11 +30,6 @@ router = APIRouter()
 #@##############################################################################
 #@### EVERYONE ENDPOINTS
 #@##############################################################################
-
-#~ Hello World Test
-@router.get("/hello-test")
-async def read_hello(api_key: str = Depends(dep_check_role(role_everyone))):
-    return {"message": f"hello world! api_key_header: {api_key}"}
 
 #~ Hello World Test User
 @router.get("/hello-test-user")
@@ -80,6 +66,7 @@ async def list_dbs(
     :rtype: Dict
     """
     all_dbs = []
+    tdb = get_tdb()
     dbs = result_error_catching(tdb.get_all_dbs, "Failed to fetch databases")
     for db in dbs:
         all_dbs.append(str(db))
@@ -183,7 +170,7 @@ async def search(
     :return: Returns JSON serialized objects from the database
     :rtype: List[Dict]
     """
-
+    tdb = get_tdb()
     if search_obj.ttype == 'entity': # * If we want to return all entities...
         # * and our search label is a known entity...
         if search_obj.label in led.all_labels['entity']:

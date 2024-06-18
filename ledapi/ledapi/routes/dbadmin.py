@@ -15,7 +15,11 @@ from ledapi.user import(
     dep_check_user_role,
 )
 
-from ledapi.config import led, _log, tdb
+from ledapi.config import(
+    led,
+    _log,
+    get_tdb
+)
 from ledapi.helpers import result_error_catching
 
 from ledhntr.data_classes import Attribute, Entity, Relation
@@ -34,6 +38,7 @@ async def add_db(
     dbadmin_model: DBName,
     dbadmin_api_key: str = Depends(dep_check_user_role(role_dbadmin)),
 ):
+    tdb = get_tdb()
     msg = None
     try:
         if tdb.check_db(dbadmin_model.db_name):
@@ -59,6 +64,7 @@ async def delete_db(
     dbadmin_model: DBName,
     dbadmin_api_key: str = Depends(dep_check_user_role(role_dbadmin))
 ):
+    tdb = get_tdb()
     try:
         tdb.delete_db(dbadmin_model.db_name)
         msg = f"Successfully deleted {dbadmin_model.db_name}!"

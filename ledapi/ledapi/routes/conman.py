@@ -14,7 +14,11 @@ from ledapi.user import(
     dep_check_user_role,
 )
 
-from ledapi.config import led, _log, tdb
+from ledapi.config import(
+    led,
+    _log,
+    get_tdb
+)
 from ledapi.helpers import result_error_catching
 
 from ledhntr.data_classes import Attribute, Entity, Relation

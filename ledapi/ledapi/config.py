@@ -6,11 +6,21 @@ from redis.asyncio.client import Redis
 
 # Load LEDHNTR
 led = LEDHNTR()
-tdb = led.load_plugin('typedb_client')
+def get_tdb():
+    if 'typedb_client' in led.plugins:
+        tdb = led.plugins['typedb_client']
+    else:
+        tdb = led.load_plugin('typedb_client')
+    return tdb
+
 _log = led.logger
 
 # Set log level
 _log.setLevel('DEBUG')
+
+# load config vars
+conf = led._ledhntr_config
+redis_url = conf['ledapi']['redis_url']
 
 # Organize Schema so we don't have to do it again
 def org_schema(led):
@@ -40,10 +50,12 @@ class RedisManager:
         self.redis = None
 
     async def connect(self):
+        _log.debug(f"Connecting to {self.redis_url}")
         self.redis = await redis.from_url(self.redis_url)
 
     async def disconnect(self):
         if self.redis:
+            _log.debug(f"Disconnecting redis instance {self.redis}")
             await self.redis.close()
 
-redis_manager = RedisManager(redis_url="redis://192.168.70.10")
+redis_manager = RedisManager(redis_url=redis_url)

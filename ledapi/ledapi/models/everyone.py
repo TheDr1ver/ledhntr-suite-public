@@ -3,7 +3,11 @@ from typing import Optional, Dict
 
 # from ledapi.ledapi.config import led, _log
 # from config import led, _log
-from ledapi.config import led, _log, tdb
+from ledapi.config import(
+    led,
+    _log,
+    get_tdb,
+)
 
 
 #@##############################################################################
@@ -56,6 +60,7 @@ class SearchObject(BaseModel):
     @classmethod
     def check_db(cls, values):
         db_name = values.get('db_name')
+        tdb = get_tdb()
         if db_name:
             all_dbs = tdb.get_all_dbs(readable=True)
             if db_name not in all_dbs:

@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends, Query
-# from ledapi.ledapi import auth
-# from ledapi.ledapi.config import led, _log, tdb
-# import auth
-# from config import led, _log, tdb
-from ledapi.auth import(
-    dep_check_role,
-    key_manager,
+from fastapi import APIRouter, Depends, Query, status
+from ledhntr.data_classes import Attribute, Entity, Relation
+
+from ledapi.config import(
+    led,
+    _log,
+    get_tdb
 )
 from ledapi.models import(
     APIKeyCreate,
@@ -19,15 +18,27 @@ from ledapi.user import(
     dep_check_self_or_admin,
     get_user_by_api_key,
 )
-from ledapi.config import led, _log, tdb
+from ledapi.worker_manager import(
+    get_all_workers,
+    get_worker_status,
+    restart_all_workers,
+    start_all_workers,
+    start_worker,
+    stop_all_workers,
+    stop_worker,
+)
 
-from ledhntr.data_classes import Attribute, Entity, Relation
+
 
 router = APIRouter()
 
 #@##############################################################################
 #@### ADMIN ENDPOINTS
 #@##############################################################################
+
+#&##############################################################################
+#&### USER MANAGEMENT ENDPOINTS
+#&##############################################################################
 
 @router.post("/create-user")
 async def create_user(
@@ -88,46 +99,81 @@ async def get_user(
     myuser = await User.get_user(user)
     return myuser.to_dict()
 
-'''
-@router.post("/generate-key")
-async def generate_key(
-    api_key_create: APIKeyCreate,
-    admin_api_key: str = Depends(dep_check_role(role_admin))
+#&##############################################################################
+#&### WORKER MANAGEMENT ENDPOINTS
+#&##############################################################################
+
+@router.get("/get-all-workers")
+async def get_all_workers_ep(
+    verified: bool = Depends(dep_check_user_role(role_admin))
 ):
-    _log.debug(f"Received: {api_key_create}")
-    new_key = await key_manager.generate_key(
-        api_key_create.user,
-        api_key_create.role,
-        api_key_create.description
-    )
-    response = {
-        "api_key": new_key,
-        "user": api_key_create.user,
-        "role": api_key_create.role,
-        "description": api_key_create.description
+    response = await get_all_workers()
+    return {
+        "message": response,
+        "status": status.HTTP_200_OK,
     }
-    return response
 
-
-@router.get("/list-users")
-async def list_users(
-    admin_api_key: str = Depends(dep_check_role(role_admin))
+@router.get("/get-worker-status/{worker_name}/{worker_id}")
+async def get_worker_status_ep(
+    worker_name: str,
+    worker_id: int,
+    verified: bool = Depends(dep_check_user_role(role_admin))
 ):
-    users = await key_manager.list_users()
-    return users
-
-@router.post("/revoke-key")
-async def revoke_key(
-    api_key_revoke: APIKeyRevoke,
-    admin_api_key: str = Depends(dep_check_role(role_admin))
-):
-    _log.debug(f"Received: {api_key_revoke}")
-    results = await key_manager.revoke_key(
-        api_key_revoke.user,
-        api_key_revoke.key,
-    )
-    response = {
-        "results": results,
+    response = await get_worker_status(worker_name, worker_id)
+    return {
+        "message": response,
+        "status": status.HTTP_200_OK,
     }
-    return response
-'''
+
+@router.get("/restart-all-workers")
+async def restart_all_workers_ep(
+    verified: bool = Depends(dep_check_user_role(role_admin))
+):
+    response = await restart_all_workers()
+    return {
+        "message": response,
+        "status": status.HTTP_200_OK,
+    }
+
+@router.get("/start-all-workers")
+async def start_all_workers_ep(
+    verified: bool = Depends(dep_check_user_role(role_admin))
+):
+    response = await start_all_workers()
+    return {
+        "message": response,
+        "status": status.HTTP_200_OK,
+    }
+
+@router.get("/start-worker/{worker_name}")
+async def start_worker_ep(
+    worker_name: str,
+    verified: bool = Depends(dep_check_user_role(role_admin))
+):
+    response = await start_worker(worker_name)
+    return {
+        "message": response,
+        "status": status.HTTP_200_OK,
+    }
+
+@router.get("/stop-all-workers")
+async def stop_all_workers_ep(
+    verified: bool = Depends(dep_check_user_role(role_admin))
+):
+    response = await stop_all_workers()
+    return {
+        "message": response,
+        "status": status.HTTP_200_OK,
+    }
+
+@router.get("/stop-worker/{worker_name}/{worker_id}")
+async def stop_worker_ep(
+    worker_name: str,
+    worker_id: int,
+    verified: bool = Depends(dep_check_user_role(role_admin))
+):
+    response = await stop_worker(worker_name, worker_id)
+    return {
+        "message": response,
+        "status": status.HTTP_200_OK,
+    }

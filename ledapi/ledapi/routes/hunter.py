@@ -10,25 +10,28 @@ from ledapi.models import(
     JobSubmission,
     role_hunter
 )
-
 from ledapi.user import(
     User,
     dep_check_user_role,
 )
-
 from ledapi.config import (
-    led, 
-    _log, 
-    tdb, 
-    # ! redis_jq,
+    led,
+    _log,
+    get_tdb,
+    redis_manager,
+)
+from ledapi.tasks import(
+    run_hunt,
+)
+from ledapi.worker_manager import(
+    queues
 )
 from ledapi.helpers import result_error_catching
-# ! from ledapi.hunting import job_queues, process_job
 
 from ledhntr.data_classes import Attribute, Entity, Relation
 
 from datetime import datetime, timedelta, UTC
-# ! from rq.registry import StartedJobRegistry
+from redis.asyncio.client import Redis
 from typing import List, Dict
 from uuid import uuid4
 import time
@@ -38,6 +41,7 @@ router = APIRouter()
 #@##############################################################################
 #@### Job Queuing
 #@##############################################################################
+'''
 jobs: Dict[str, Dict[str, str]] = {}
 def background_task(job_id: str):
     time.sleep(15)
@@ -46,7 +50,7 @@ def background_task(job_id: str):
 
 # hunts: Dict[str, Dict[str, str]] = {}
 # def background_hunt(job_id: str):
-
+'''
 
 #@##############################################################################
 #@### HUNTER ENDPOINTS
@@ -83,10 +87,10 @@ async def submit_job(job: JobSubmission):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Worker is already running"
         )
-    
+
     job_result = queue.enqueue(
-        process_job, 
-        job.target_db, 
+        process_job,
+        job.target_db,
         job.worker_name,
         job.user_id,
         job.forced
@@ -115,6 +119,7 @@ async def get_hunts(
     :return: Dictionary of "result", "status_code", and "count"
     :rtype: Dict
     """
+    tdb = get_tdb()
     results = {
         'results': {},
         'message': None,
@@ -159,6 +164,7 @@ async def get_hunts(
     return results
 
 #~ Test Job Queuing
+'''
 @router.get("/start-job")
 async def start_job(background_tasks: BackgroundTasks):
     job_id = str(uuid4())
@@ -169,6 +175,44 @@ async def start_job(background_tasks: BackgroundTasks):
 @router.get("/get-jobs")
 async def get_jobs():
     return jobs
+'''
+#~ Submit Hunt Job
+@router.post("/run-hunt")
+async def run_hunt_ep(
+    job: JobSubmission = None,
+    user: User = Depends(dep_check_user_role(role_hunter)),
+):
+    job_id = str(uuid4())
+    job_data = {
+        "job_id": job_id,
+        "db_name": job.db_name or user.db_name,
+        "hunt_name": job.hunt_name,
+        "plugin": job.plugin,
+        "status": "pending",
+        "user_id": user.user_id,
+        "forced": job.forced,
+        "submitted_at": datetime.now(UTC),
+        "completed_at": None,
+    }
+
+    queue = queues.get(job.plugin)
+    if not queue:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"Invalid worker name {job.plugin}. Must be one of {queue.keys()}"
+        )
+    
+    job_result = queue.enqueue(
+        run_hunt,
+        job_data
+    )
+
+    job_data['job_result_id'] = job_result.id
+
+    # Save job details in redis with expiry of 7 days
+    redis_pool: Redis = redis_manager.redis
+    await redis_pool.setex(job_id, timedelta(days=7), str(job_data))
+    return {"job_id": job_id, "status": "Job submitted"}
 
 #~ Enable/Disable hunt by DB+Name
 
