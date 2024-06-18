@@ -11,6 +11,7 @@ WORKDIR /ledapi
 RUN chown -R leduser:leduser /ledapi
 
 USER leduser
+ENV PATH="/home/leduser/.local/bin:${PATH}"
 
 COPY requirements.txt .
 
