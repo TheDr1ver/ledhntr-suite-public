@@ -34,5 +34,5 @@ RUN ledhntr install ./censys/
 # Copy the configs to the .ledhntr directory
 COPY ledhntr.cfg /home/leduser/.ledhntr/
 
-WORKDIR /ledapi/ledhntr-suite-public/ledapi
+WORKDIR /ledapi
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
