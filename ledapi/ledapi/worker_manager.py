@@ -4,7 +4,10 @@ import redis as syncredis
 from rq import Queue, Worker, Connection
 # from rq.registry import StartedJobRegistry
 from multiprocessing import Process, Manager, set_start_method
+from redis.asyncio.client import Redis
+import json
 import psutil
+
 
 from ledapi.config import(
     _log,
@@ -31,9 +34,8 @@ for key in conf['ledapi.workers']:
 queues = {queue: Queue(queue, connection=conn) for queue in workers_conf}
 
 def init_manager():
-    global worker_manager, worker_processes
-    worker_manager = Manager()
-    worker_processes = worker_manager.dict()
+    global worker_processes
+    worker_processes = Manager().dict()
 
 async def check_redis_conn():
     if redis_manager.redis is None:
@@ -67,6 +69,7 @@ async def get_all_workers():
 def get_worker(worker_name):
     return Worker([queues[worker_name]], connection=conn)
 
+'''# Original Setup
 def worker_process(worker_name, worker_id):
     async def main():
         await check_redis_conn()
@@ -80,6 +83,39 @@ def worker_process(worker_name, worker_id):
             await clear_worker_status(worker_name, worker_id)
             await redis_manager.disconnect()
     asyncio.run(main())
+'''
+'''# Attempt 1
+def worker_process(worker_name, worker_id):
+    try:
+        _log.debug(f"Connecting to redis for worker {worker_name}_{worker_id}")
+        conn = syncredis.from_url(redis_url)
+        with Connection(conn):
+            _log.debug(f"Starting worker {worker_name}_{worker_id}")
+            worker = Worker([queues[worker_name]])
+            worker.work()
+    except Exception as e:
+        _log.error(f"Failed to start workier {worker_name}_{worker_id}: {e}")
+'''
+async def async_worker_process(worker_name, worker_id):
+    try:
+        _log.debug(f"Connecting to Redis for worker {worker_name}_{worker_id}")
+        await redis_manager.connect()
+        redis_sync_client = redis_manager.syncredis
+        
+        # with Connection(redis_pool.sync_client):
+        with Connection(redis_sync_client):
+            _log.debug(f"Starting worker {worker_name}_{worker_id}")
+            worker = Worker([queues[worker_name]])
+            await worker.work()
+    except Exception as e:
+        _log.error(f"Failed to start worker {worker_name}_{worker_id}: {e}")
+
+def worker_process(worker_name, worker_id):
+    try:
+        asyncio.run(async_worker_process(worker_name, worker_id))
+    except Exception as e:
+        _log.error(f"Failed to run async worker process {worker_name}_{worker_id}: {e}")
+
 
 async def start_worker(worker_name):
     _log.debug(f"Starting worker {worker_name}...")
@@ -120,7 +156,8 @@ async def stop_worker(worker_name, worker_id):
     if pid is not None:
         try:
             process = psutil.Process(pid)
-            process.terminate() # Or process.kill() if you want to forcefully kill the process
+            # process.terminate() # Or process.kill() if you want to forcefully kill the process
+            process.kill()
             process.wait() # Wait for the process to terminate
             del worker_processes[(worker_name, worker_id)]
             await clear_worker_status(worker_name, worker_id)
@@ -138,7 +175,7 @@ async def stop_worker(worker_name, worker_id):
         #! NOTE - This is probably a bad idea if I want to have the hunt queue persist
         #! after the app is restarted or crashes
         await clear_worker_status(worker_name, worker_id)
-
+    await redis_manager.disconnect()
     return msg
 
 async def get_worker_status(worker_name, worker_id):

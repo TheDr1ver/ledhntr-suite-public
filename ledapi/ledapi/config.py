@@ -2,6 +2,7 @@ from ledhntr import LEDHNTR
 from ledhntr.data_classes import Attribute, Entity, Relation, Thing, Query
 
 import redis.asyncio as redis
+import redis as syncredis
 from redis.asyncio.client import Redis
 
 # Load LEDHNTR
@@ -48,14 +49,22 @@ class RedisManager:
     def __init__(self, redis_url: str):
         self.redis_url = redis_url
         self.redis = None
+        self.syncredis = None
 
     async def connect(self):
-        _log.debug(f"Connecting to {self.redis_url}")
-        self.redis = await redis.from_url(self.redis_url)
+        if not self.redis:
+            _log.debug(f"Connecting to {self.redis_url}")
+            self.redis = await redis.from_url(self.redis_url)
+        if not self.syncredis:
+            self.syncredis = syncredis.from_url(self.redis_url)
 
     async def disconnect(self):
         if self.redis:
             _log.debug(f"Disconnecting redis instance {self.redis}")
             await self.redis.close()
+            self.redis = None
+        if self.syncredis:
+            self.syncredis.close()
+            self.syncredis = None
 
 redis_manager = RedisManager(redis_url=redis_url)

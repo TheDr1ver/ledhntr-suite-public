@@ -22,6 +22,7 @@ from ledapi.config import (
 )
 from ledapi.tasks import(
     run_hunt,
+    get_all_jobs,
 )
 from ledapi.worker_manager import(
     queues
@@ -30,10 +31,11 @@ from ledapi.helpers import result_error_catching
 
 from ledhntr.data_classes import Attribute, Entity, Relation
 
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from redis.asyncio.client import Redis
 from typing import List, Dict
 from uuid import uuid4
+import json
 import time
 
 router = APIRouter()
@@ -191,7 +193,7 @@ async def run_hunt_ep(
         "status": "pending",
         "user_id": user.user_id,
         "forced": job.forced,
-        "submitted_at": datetime.now(UTC),
+        "submitted_at": datetime.now(timezone.utc).isoformat(),
         "completed_at": None,
     }
 
@@ -209,10 +211,31 @@ async def run_hunt_ep(
 
     job_data['job_result_id'] = job_result.id
 
+    # Serialize the job_data
+    job_data = json.dumps(job_data)
+
     # Save job details in redis with expiry of 7 days
     redis_pool: Redis = redis_manager.redis
-    await redis_pool.setex(job_id, timedelta(days=7), str(job_data))
+    await redis_pool.setex(job_id, timedelta(days=7), job_data)
     return {"job_id": job_id, "status": "Job submitted"}
+
+#~ Check all job statuses
+@router.get("/check-jobs")
+async def check_jobs_ep(
+    user: User = Depends(dep_check_user_role(role_hunter)),
+):
+    try:
+        job_statuses = await get_all_jobs()
+        return {
+            "job_statuses": job_statuses,
+            "status": status.HTTP_200_OK,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed getting job statuses: {e}"
+        )
+    
 
 #~ Enable/Disable hunt by DB+Name
 
