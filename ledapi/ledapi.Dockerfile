@@ -4,7 +4,13 @@ FROM python:3.11.9-bullseye
 # Install git
 RUN apt update
 
+RUN useradd --create-home leduser
+
 WORKDIR /ledapi
+
+RUN chown -R leduser:leduser /ledapi
+
+USER leduser
 
 COPY requirements.txt .
 
@@ -23,6 +29,7 @@ RUN ledhntr install ./shodan/
 RUN ledhntr install ./censys/
 
 # Copy the configs to the .ledhntr directory
-COPY ledhntr.cfg /root/.ledhntr/
+COPY ledhntr.cfg /home/leduser/.ledhntr/
 
-WORKDIR /ledapi
+WORKDIR /ledapi/ledhntr-suite-public/ledapi
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
