@@ -95,9 +95,18 @@ async def get_all_jobs():
             key_type = await redis_pool.type(key)
             if not key_type == b'string':
                 continue
+            _log.debug(f"Geting data from key {key}")
             job_data = await redis_pool.get(key)
             if job_data:
-                job_data = json.loads(job_data.decode('utf-8'))
+                _log.debug(f"Got job_data: {job_data}")
+                try:
+                    job_data = json.loads(job_data.decode('utf-8'))
+                except Exception as e:
+                    _log.error(f"Failed json.loads: {e}")
+                    continue
+                if not hasattr(job_data, 'get'):
+                    _log.error(f"{job_data} doesn't have a 'get' attribute")
+                    continue
                 status = job_data.get('status')
                 job_id = job_data.get('job_id')
                 if status and job_id:
