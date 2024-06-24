@@ -10,3 +10,4 @@ class JobSubmission(BaseModel):
     hunt_name: Optional[str] = None
     plugin: Optional[str] = None
     forced: Optional[bool] = False
+    sleep_time: Optional[int] = 15

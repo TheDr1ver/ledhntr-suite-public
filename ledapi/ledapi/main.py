@@ -7,6 +7,7 @@ from ledapi.config import(
     led,
     _log,
     redis_manager,
+    wqm,
 )
 from ledapi.routes import(
     everyone,
@@ -35,19 +36,31 @@ app.include_router(admin.router, tags=["admin"])
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Connect to redis
+    '''
     if redis_manager.redis is None:
         _log.debug(f"Starting redis_manager")
         await redis_manager.connect()
         _log.debug(f"Connection result: {redis_manager.redis}")
+    '''
+    _log.debug(f"### MAIN ### OPENING REDIS CONNECTIONS")
+    await redis_manager.check_redis_conn()
 
+    # Load WorkersQueueManager
+    # _log.debug(f"### MAIN ### LOADING WORKER QUEUES")
+    # await wqm.check_queues()
+
+    # Build WorkersQueueManager
     # Start plugin workers
+    _log.debug(f"### MAIN ### STARTING ALL WORKERS")
     await start_all_workers()
 
     yield
 
+    _log.debug(f"### MAIN ### STOPPING ALL WORKERS")
     await stop_all_workers()
 
     # Disconnect from redis_manager
+    _log.debug(f"### MAIN ### DISCONNECTING FROM REDIS")
     await redis_manager.disconnect()
 
 app.router.lifespan_context = lifespan

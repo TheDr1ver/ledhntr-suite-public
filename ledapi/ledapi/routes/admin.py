@@ -19,6 +19,7 @@ from ledapi.user import(
     get_user_by_api_key,
 )
 from ledapi.worker_manager import(
+    cleanup_jobs,
     get_all_workers,
     get_worker_status,
     restart_all_workers,
@@ -176,4 +177,14 @@ async def stop_worker_ep(
     return {
         "message": response,
         "status": status.HTTP_200_OK,
+    }
+
+@router.get("/clean-queues")
+async def clean_queues_ep(
+    verified: bool = Depends(dep_check_user_role(role_admin)),
+):
+    response = await cleanup_jobs()
+    return {
+        "message": response,
+        "status": status.HTTP_200_OK
     }
