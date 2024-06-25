@@ -1,5 +1,6 @@
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from pprint import pformat
+from typing import Optional, Dict, List
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status, Query
 
@@ -23,7 +24,7 @@ from ledapi.models import(
     role_everyone,
 )
 
-from ledhntr.data_classes import Attribute, Entity, Relation
+from ledhntr.data_classes import Attribute, Entity, Relation, Thing
 
 router = APIRouter()
 
@@ -258,8 +259,8 @@ async def search(
         if search_obj.new_days_back:
             # * If we're focusing on only new stuff, make sure we grab
             # * the things with the date-discovered within our threshold
-            min_date = datetime.now(UTC) - timedelta(days=search_obj.new_days_back)
-            dd_attr = thing.get_attributes(label='date-discovered')
+            min_date = datetime.now(timezone.utc) - timedelta(days=search_obj.new_days_back)
+            dd_attr = thing.get_attributes(label='date-discovered')[0]
             if isinstance(dd_attr.value, datetime) and dd_attr.value >= min_date:
                 results['results'].append(thing.to_dict())
         else:
@@ -267,5 +268,83 @@ async def search(
     results['message'] = f"Search object: {search_obj}"
     results['status_code'] = status.HTTP_200_OK
     results['count'] = len(results['results'])
+    if tdb.session and tdb.session.is_open():
+        tdb.session.close()
     return results
 
+#~ Get News
+@router.get("/news")
+async def news_ep(
+    days_back: Optional[int] = Query(1, description="Number of days back to consider something 'new'"),
+    user: User = Depends(dep_check_user_role(role_everyone))
+):
+    """Get the new stuff. Optionally specify days_back if you want something older than 24 hrs
+    """
+    results = {
+        'results': {},
+        'message': None,
+        'status_code': None,
+        'count': {},
+    }
+
+    async def news_loop(
+        days_back: int = 1,
+        so: Thing = None,
+        results: Dict = {},
+    ):
+        min_date = datetime.now(timezone.utc) - timedelta(days=days_back)
+
+        tdb = get_tdb()
+        all_dbs = []
+        dbs = result_error_catching(tdb.get_all_dbs, "Failed to fetch databases")
+        for db in dbs:
+            all_dbs.append(str(db))
+        for db_name in all_dbs:
+            if db_name not in results['results']:
+                results['results'][db_name] = {}
+            tdb.db_name = db_name
+            rez = []
+            # ent_so = Entity(label='entity')
+            things = result_error_catching(
+                tdb.find_things,
+                f"Error searching for {so}",
+                so
+            )
+            for thing in things:
+                dd_attr = thing.get_attributes(label='date-discovered')[0]
+                if isinstance(dd_attr.value, datetime) and dd_attr.value >= min_date:
+                    simple_attrs = {}
+                    skip_me = ['date-seen', 'ledid']
+                    for attr in thing.has:
+                        if attr.label in skip_me:
+                            continue
+                        # y = {attr.label: attr.value}
+                        # simple_attrs.append(y)
+                        if attr.label not in simple_attrs:
+                            simple_attrs[attr.label] = [attr.value]
+                        else:
+                            simple_attrs[attr.label].append(attr.value)
+                    x = {'label': thing.label, 'value': thing.keyval, 'attrs':simple_attrs}
+                    rez.append(x)
+            for ent in rez:
+                if ent['label'] not in results['results'][db_name]:
+                    results['results'][db_name][ent['label']] = [{ent['value']: ent['attrs']}]
+                else:
+                    results['results'][db_name][ent['label']].append({ent['value']: ent['attrs']})
+
+        return results
+
+
+    so = Entity(label='entity')
+    results = await news_loop(days_back, so, results)
+    so = Relation(label='relation')
+    results = await news_loop(days_back, so, results)
+    results['status_code'] = status.HTTP_200_OK
+    for db_name, labels in results['results'].items():
+        for label, vals in labels.items():
+            if label not in results['count']:
+                results['count'][label]=len(vals)
+            else:
+                results['count'][label]+=len(vals)
+
+    return results

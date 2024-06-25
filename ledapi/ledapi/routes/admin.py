@@ -114,6 +114,7 @@ async def get_all_workers_ep(
         "status": status.HTTP_200_OK,
     }
 
+'''
 @router.get("/get-worker-status/{worker_name}/{worker_id}")
 async def get_worker_status_ep(
     worker_name: str,
@@ -125,55 +126,13 @@ async def get_worker_status_ep(
         "message": response,
         "status": status.HTTP_200_OK,
     }
+'''
 
 @router.get("/restart-all-workers")
 async def restart_all_workers_ep(
     verified: bool = Depends(dep_check_user_role(role_admin))
 ):
     response = await restart_all_workers()
-    return {
-        "message": response,
-        "status": status.HTTP_200_OK,
-    }
-
-@router.get("/start-all-workers")
-async def start_all_workers_ep(
-    verified: bool = Depends(dep_check_user_role(role_admin))
-):
-    response = await start_all_workers()
-    return {
-        "message": response,
-        "status": status.HTTP_200_OK,
-    }
-
-@router.get("/start-worker/{worker_name}")
-async def start_worker_ep(
-    worker_name: str,
-    verified: bool = Depends(dep_check_user_role(role_admin))
-):
-    response = await start_worker(worker_name)
-    return {
-        "message": response,
-        "status": status.HTTP_200_OK,
-    }
-
-@router.get("/stop-all-workers")
-async def stop_all_workers_ep(
-    verified: bool = Depends(dep_check_user_role(role_admin))
-):
-    response = await stop_all_workers()
-    return {
-        "message": response,
-        "status": status.HTTP_200_OK,
-    }
-
-@router.get("/stop-worker/{worker_name}/{worker_id}")
-async def stop_worker_ep(
-    worker_name: str,
-    worker_id: int,
-    verified: bool = Depends(dep_check_user_role(role_admin))
-):
-    response = await stop_worker(worker_name, worker_id)
     return {
         "message": response,
         "status": status.HTTP_200_OK,

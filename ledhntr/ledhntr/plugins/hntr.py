@@ -15,18 +15,18 @@ from pprint import pformat
 from time import time, sleep
 
 from ledhntr.data_classes import (
-    Attribute, 
-    Entity, 
-    Relation, 
+    Attribute,
+    Entity,
+    Relation,
     Thing,
     pretty_schema,
 )
 from ledhntr.plugins import BasePlugin
 from ledhntr.plugins.connector import ConnectorPlugin
 from ledhntr.helpers import (
-    LEDConfigParser, 
-    format_date, 
-    flatten_dict, 
+    LEDConfigParser,
+    format_date,
+    flatten_dict,
     parse_schema_file,
     get_dict_from_list,
 )
@@ -1068,7 +1068,7 @@ class HNTRPlugin(BasePlugin, ABC):
         if not hunt_name:
             dto = datetime.now()
             hunt_name = str(dto).replace(' ','T').replace('-','')
-            hunt_name = hunt_name.replace(':','_').replace('.','_')        
+            hunt_name = hunt_name.replace(':','_').replace('.','_')
         if not hunt_name.startswith(f"{self.__class__.__name__.lower()}-"):
             hunt_name = f"{self.__class__.__name__.lower()}-{hunt_name}"
         attr = Attribute(label='hunt-name', value=hunt_name)
@@ -1333,7 +1333,7 @@ class HNTRPlugin(BasePlugin, ABC):
                         if thing not in hunt.has and thing.label not in hunt.meta_attrs:
                             hunt.has.append(thing)
                         continue
-                    # Make sure all Entity and Relation things have this 
+                    # Make sure all Entity and Relation things have this
                     # hunt-name attached
                     if hunt_name_attr not in thing.has:
                         thing.has.append(hunt_name_attr)
@@ -1372,10 +1372,10 @@ class HNTRPlugin(BasePlugin, ABC):
                                 bulk_add['entities'].append(thing)
                     '''
                     # ! END REMOVE
-                    
+
 
                 # add date-seen to hunt
-                bulk_add['relations'].append(hunt)
+                bulk_add['entities'].append(hunt)
                 added_hunts.append(hunt)
         _log.info(
             f"\n\t[{self.__class__.__name__}] - Running dbc.bulk_add for "
@@ -1421,7 +1421,7 @@ class HNTRPlugin(BasePlugin, ABC):
 
         :param check_dates: list of dates to check against
         :param raw: full JSON dictionary
-        :param rule: jsonpath, label, type (attribute) for location of the 
+        :param rule: jsonpath, label, type (attribute) for location of the
             date to check
 
         :returns: False if date is missing or date value if date exists
@@ -1650,12 +1650,12 @@ class HNTRPlugin(BasePlugin, ABC):
 
     def process_parsing_rules(
         self,
-        data: dict = {}, 
-        rules: dict = {}, 
+        data: dict = {},
+        rules: dict = {},
         single: Optional[bool] = False,
     )->List:
         """process parsing rulesets
-        This takes a dict like this and uses it to parse large JSON blobs into 
+        This takes a dict like this and uses it to parse large JSON blobs into
         LEDHNTR objects.
 
         * 'jsonpath' values follow the jsonpath-ng syntax
@@ -1713,7 +1713,7 @@ class HNTRPlugin(BasePlugin, ABC):
             ],
         }
 
-        
+
         ===OR===
 
         If you're using the single=True flag, you may parse a single rule dict, but
@@ -1728,10 +1728,10 @@ class HNTRPlugin(BasePlugin, ABC):
 
         :returns: Either a dictionary of {'attributes':[], 'entities':[], 'relations':[]}
             with each bucket containing properly parsed LEDHTNR Thing Objects,
-            
+
             ===OR===
 
-            If you're using the single=True flag, it will return a list of all 
+            If you're using the single=True flag, it will return a list of all
             resulting single Thing Objects.
 
         """
@@ -1939,7 +1939,7 @@ class HNTRPlugin(BasePlugin, ABC):
                 other_attrs = [attr for attr in rel.has if attr not in uniq_keys]
                 for uk in uniq_keys:
                     newrel = Relation(
-                        label=rel.label, 
+                        label=rel.label,
                         has=other_attrs.copy(),
                         players=rel.players.copy(),
                     )
@@ -2324,7 +2324,7 @@ class HNTRPlugin(BasePlugin, ABC):
             key is optional, and if not provided self.param_query_key will be used.
         :param search_res: Optional dictionary holding pre-existing search results
             in the event we want to run multiple searches for pagination.
-        
+
         :returns: search_res Dictionary. Example:
             search_res = {
                 'things': things,
@@ -2552,7 +2552,7 @@ class HNTRPlugin(BasePlugin, ABC):
                 search_res['things'].append(thing)
 
         search_res['raw'] = data
-        
+
         if api_conf.paginator:
             try:
                 search_res = api_conf.paginator(

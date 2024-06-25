@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
+from datetime import datetime, timedelta, timezone
+from pprint import pformat
 # from ledapi.ledapi import auth
 # from ledapi.ledapi.config import led, _log, tdb
 # import auth
@@ -6,6 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Background
 # from ledapi.auth import(
 #     dep_check_user_role,
 # )
+
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
+from redis.asyncio.client import Redis
+from rq import Queue, Worker
+
 from ledapi.models import(
     JobSubmission,
     role_hunter
@@ -36,9 +42,9 @@ from ledapi.helpers import result_error_catching
 
 from ledhntr.data_classes import Attribute, Entity, Relation
 
-from datetime import datetime, timedelta, timezone
-from pprint import pformat
-from redis.asyncio.client import Redis
+
+
+
 from typing import List, Dict
 from uuid import uuid4
 import json
@@ -88,7 +94,7 @@ async def get_hunts_ep(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             details="Error getting hunts: {e}"
         )
-    
+
     results = {
         'results': rez['results'],
         'message': None,
@@ -116,48 +122,12 @@ async def run_hunt_ep(
         "forced": job.forced,
         "submitted_at": datetime.now(timezone.utc).isoformat(),
         "completed_at": None,
-        "sleep_time": job.sleep_time,
+        "job_result_ids": [],
     }
 
-    plugins = []
-    if job.plugin == None or job.plugin.lower() == 'all':
-        # queue = wqm.queues.get(job.plugin)
-        for worker_name in wqm.queues.keys():
-            for worker_id in range(wqm.conf[worker_name['threshold']]):
-                try:
-                    plugin = led.load_plugin(worker_name, duplicate=True)
-                except Exception as e:
-                    _log.error(f"{worker_name} is not a valid plugin: {e}")
-                    continue
-                plugins.append(plugin)
-
-    queue = wqm.queues.get(job.plugin)
-    if not queue:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail=f"Invalid worker name {job.plugin}. Must be one of {wqm.queues.keys()}"
-        )
-
-    try:    
-        job_result = queue.enqueue_call(
-            run_hunt,
-            args=[job_data],
-            job_id=job_data['job_id'],
-            timeout=60*60,
-            result_ttl=60*60*24,
-            #on_success=DOSOMETHING,
-            #on_failure=DOSOMETHINGELSE,
-        )
-        job_result
-        
-        job_data['job_result_id'] = job_result.id
-
-        # Serialize the job_data
-        job_data = json.dumps(job_data)
-
-        # _log.debug(f"job_data: {pformat(job_data)}")
-        return {"job_id": job_id, "status": "Job submitted"}
-
+    try:
+        result = await run_hunt(job_data)
+        return result
     except Exception as e:
         _log.debug(f"Error submitting job: {e}")
         raise HTTPException(
@@ -184,7 +154,7 @@ async def check_jobs_ep(
             detail=f"Failed getting job statuses: {e}"
             # detail=f"Failed getting job statuses: {e}\n\ntraceback: {traceback.format_exc()}"
         )
-    
+
 #~ Poll the status of a specific job_id
 @router.get("/poll-job/{job_id}")
 async def poll_job_ep(
@@ -193,19 +163,26 @@ async def poll_job_ep(
 ):
     try:
         response = await poll_job(job_id)
-        return {
-            "message": response,
-            "status_code": status.HTTP_200_OK,
-        }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed polling job: {e}"
         )
+    if not response:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No job found with ID {job_id}"
+        )
+    return {
+            "message": response,
+            "status_code": status.HTTP_200_OK,
+        }
+
+#~ Add hunt
+@router.post("/add-hunt")
+async def add_hunt_ep(
+    hunt: HuntSubmission = None,
+    verified: bool = Depends(dep_check_user_role(role_hunter))
+)
 
 #~ Enable/Disable hunt by DB+Name
-
-#~ Run Hunts
-#~   - All hunts
-#~   - All hunts in DB
-#~   - Specific hunt by name in DB

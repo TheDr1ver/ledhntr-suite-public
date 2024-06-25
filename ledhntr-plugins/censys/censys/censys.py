@@ -53,7 +53,7 @@ class Censys(HNTRPlugin):
         _log = self.logger
         self.config = config
         # Figure out best way to keep running talley of API calls
-
+        self.auth = None
         self.base_url = config.get(
             'options',
             'base_url',
@@ -71,11 +71,6 @@ class Censys(HNTRPlugin):
             'secret',
             fallback = "secret",
         )
-
-        self.auth = (self.key, self.secret)
-        if self.auth == ('key', 'secret'):
-            _log.warning("INVALID AUTHORIZATION PROVIDED!")
-            self.auth = False
 
         self.ssl_verify = config.get(
             'options',
@@ -128,6 +123,10 @@ class Censys(HNTRPlugin):
 
         self._load_api_configs()
 
+    def _get_auth(self):
+        self.auth = (self.key, self.secret)
+        return self.auth
+
     def _load_api_configs(
         self,
     ):
@@ -160,7 +159,7 @@ class Censys(HNTRPlugin):
         c = APIConfig(
             endpoint = "search",
             uri = "v2/hosts/search",
-            auth = self.auth,
+            auth = self._get_auth(),
             headers = headers,
             params = {
                 "q": None,
@@ -193,7 +192,7 @@ class Censys(HNTRPlugin):
         c = APIConfig(
             endpoint = "cert_hosts",
             uri = "v2/certificates/{query}/hosts",
-            auth = self.auth,
+            auth = self._get_auth(),
             headers = headers,
             params = {
                 "cursor": None,
@@ -219,7 +218,7 @@ class Censys(HNTRPlugin):
         c = APIConfig(
             endpoint = "view_cert",
             uri = "v1/view/certificates/{query}",
-            auth = self.auth,
+            auth = self._get_auth(),
             headers = headers,
             params = {},
             parser = self.parse_view_cert,
@@ -241,7 +240,7 @@ class Censys(HNTRPlugin):
         c = APIConfig(
             endpoint = "host_details",
             uri = "v2/hosts/{query}",
-            auth = self.auth,
+            auth = self._get_auth(),
             headers = headers,
             params = {
                 "at_time": None, # RFC3339 Timestamp
