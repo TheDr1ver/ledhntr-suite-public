@@ -356,9 +356,13 @@ async def hunt_stuff(
     plugin_name = wqm.conf.get(worker_name)['_plugin_name']
 
     #~ Run Hunts against all databases selected
+    #@ This needs to be broken down into separate jobs so we're nto waiting on
+    #@ database updates or caching when we could be running more Censys/Shodan queries
+    #& GOING TO BREAK ALL THIS OUT INTO SMALLER FUNCTIONS
     for db_name in all_dbs:
         tdb.db_name = db_name
         #* Find active hunts
+        #@ JOB1
         all_active_hunts = plugin.find_active_hunts(tdb, ignore_freq=job_data['forced'])
         #* Narrow it down to only one hunt if we've explicitly provided a name
         if job_data['hunt_name'] and not job_data['hunt_name'].lower()=='all':
@@ -370,8 +374,10 @@ async def hunt_stuff(
         else:
             active_hunts = all_active_hunts
         #* Load cached hunts from disk
+        #@ JOB2 - DEPENDS ON JOB1 SUCCESS
         #TODO - cached_hunts = cache_plugin.load_cached_hunts(active_hunts, plugin_name, db_name)
         #* Run hunts
+        #@ JOB3 - DEPENDS ON JOB1 SUCCESS
         try:
             hunt_results = plugin.run_hunts(
                 active_hunts = active_hunts,
@@ -385,8 +391,13 @@ async def hunt_stuff(
             hunt_summary[db_name]=msg
             continue
         #* Cache hunts to disk
+        #@ JOB4 - DEPENDS ON JOB1 AND JOB3 SUCCESS
         #TODO - cache_plugin.cache_hunt_results(active_hunts, hunt_results, plugin_name, db_name)
         #* Add results to database
+        #@ JOB5 - DEPENDS ON JOB1 AND JOB3 SUCCESS
+        #. NOTE - bulk_add_hunt_results should reall be a function of the
+        #. ConnectorPlugin and not a HNTRPlugin, but it's not worth fixing 
+        #. that right now.
         try:
             plugin.bulk_add_hunt_results(tdb, hunt_results)
             #* Do some quick stats
@@ -413,7 +424,8 @@ async def hunt_stuff(
         #* Add summary for this database
         hunt_summary[db_name] = msg
 
-    #TODO - ADD DEPENDENCY JOB TO QUEUE FOR ENRICHMENTS
+    #TODO - RUN ENRICHMENTS
+    #@ JOB6 - DEPENDS ON JOB5 SUCCESS
     '''
     #* https://python-rq.org/docs/
     from redis import Redis

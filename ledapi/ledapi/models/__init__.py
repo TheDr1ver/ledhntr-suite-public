@@ -22,3 +22,7 @@ from .user import(
 from .job import(
     JobSubmission,
 )
+
+from .hunter import(
+    HuntSubmission,
+)

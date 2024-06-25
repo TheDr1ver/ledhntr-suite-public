@@ -13,6 +13,7 @@ from redis.asyncio.client import Redis
 from rq import Queue, Worker
 
 from ledapi.models import(
+    HuntSubmission,
     JobSubmission,
     role_hunter
 )
@@ -182,7 +183,8 @@ async def poll_job_ep(
 @router.post("/add-hunt")
 async def add_hunt_ep(
     hunt: HuntSubmission = None,
-    verified: bool = Depends(dep_check_user_role(role_hunter))
-)
+    user: User = Depends(dep_check_user_role(role_hunter))
+):
+    _log.debug(f"Adding hunt: {hunt}")
 
 #~ Enable/Disable hunt by DB+Name
