@@ -119,6 +119,18 @@ async def run_hunt_ep(
         "sleep_time": job.sleep_time,
     }
 
+    plugins = []
+    if job.plugin == None or job.plugin.lower() == 'all':
+        # queue = wqm.queues.get(job.plugin)
+        for worker_name in wqm.queues.keys():
+            for worker_id in range(wqm.conf[worker_name['threshold']]):
+                try:
+                    plugin = led.load_plugin(worker_name, duplicate=True)
+                except Exception as e:
+                    _log.error(f"{worker_name} is not a valid plugin: {e}")
+                    continue
+                plugins.append(plugin)
+
     queue = wqm.queues.get(job.plugin)
     if not queue:
         raise HTTPException(

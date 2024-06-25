@@ -1,8 +1,11 @@
+import copy
+
 from ledhntr import LEDHNTR
 from ledhntr.data_classes import Attribute, Entity, Relation, Thing, Query
 
 import redis.asyncio as redis
 import redis as syncredis
+from pprint import pformat
 from redis.asyncio.client import Redis
 from rq import Queue, Worker, Connection
 from typing import (Optional, Dict, List)
@@ -95,15 +98,44 @@ class WorkersQueueManager(object):
     def __init__(self):
         #~ Parse Workers Conf
         self.conf = {}
+        #~ Get plugin names and worker names
         for key in conf['ledapi.workers']:
-            if key.endswith('.threshold'):
-                plugin_name = key.split('.')[0]
-                threshold = int(conf['ledapi.workers'][key])
-                self.conf[plugin_name] = {'threshold': threshold}
-        # TODO - Eventually we'll want to load alternate keys/secrets from each of the plugins.
-        # TODO - This way we could have multiple accounts per plugin to increase throughput.
-        # TODO - For right now though I'm sticking with one worker per plugin just to get
-        # TODO - something out the door.
+            plugin_name = key.split('.')[0]
+            if plugin_name not in led.list_plugins().keys():
+                _log.debug(f"{plugin_name} is not a valid plugin")
+                continue
+            worker_name = f"{key.split('.')[0]}.{key.split('.')[1]}"
+            if worker_name not in self.conf:
+                self.conf[worker_name] = {
+                    '_plugin_name': plugin_name,
+                    '_worker_id': key.split('.')[1],
+                }
+
+        #~ Get settings for each worker
+        safe_dict = copy.deepcopy(self.conf)
+        for worker_name, details in safe_dict.items():
+            for key in conf['ledapi.workers']:
+                if key.startswith(worker_name):
+                    # _log.debug(f"Splitting key {key} into {key.split('.')}")
+                    setting = key.split('.')[2]
+                    if setting not in self.conf[worker_name]:
+                        self.conf[worker_name][setting] = conf['ledapi.workers'][key]
+
+        #~ Load Plugin Modules For Each Worker
+        safe_dict = copy.deepcopy(self.conf)
+        for worker_name, details in safe_dict.items():
+            # self.conf[worker_name]['_plugin'] = led.load_plugin(details['_plugin_name'], duplicate=True)
+            plugin = led.load_plugin(details['_plugin_name'], duplicate=True)
+            for k, v in details.items():
+                if k.startswith('_'):
+                    continue
+                if not hasattr(plugin, k):
+                    _log.debug(f"plugin {plugin} has no attribute {k}")
+                    continue
+                plugin.k = v
+                _log.debug(f"Set {worker_name}.{k}")
+            self.conf[worker_name]['_plugin'] = plugin
+            
         self.queues = None
 
     #~ Define Queues
@@ -115,7 +147,7 @@ class WorkersQueueManager(object):
         if not worker_name is None:
             self.queues = {worker_name: Queue(worker_name, connection=redis_manager.syncredis)}
         else:
-            self.queues = {worker_name: Queue(worker_name, connection=redis_manager.syncredis) for worker_name in self.conf}
+            self.queues = {worker_name: Queue(worker_name, connection=redis_manager.syncredis) for worker_name in self.conf.keys()}
         _log.debug(f"init worker_queues: {self.queues}")
 
     async def check_queues(
@@ -126,3 +158,4 @@ class WorkersQueueManager(object):
             await self.load_queues(worker_name)
 
 wqm = WorkersQueueManager()
+# _log.debug(f"wqm: {pformat(wqm.conf)}")

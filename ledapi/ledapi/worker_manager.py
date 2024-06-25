@@ -39,34 +39,39 @@ def init_manager():
 
 
 
-async def is_worker_running(worker_name, worker_id):
+# async def is_worker_running(worker_name):
+async def is_worker_running(worker_name):
     # status = await redis_manager.redis.get(f"worker_status:{worker_name}:{worker_id}")
     await redis_manager.check_redis_conn()
     status = None
-    # status = await redis_manager.redis.get(f"rq:worker:{worker_name}_{worker_id}")
+    # status = await redis_manager.redis.get(f"rq:worker:{worker_name}")
+    _log.debug(f"GETTING STATUS OF {worker_name}")
+    #& TODO - PICK THIS UP TOMORROW
     for worker in Worker.all(connection=redis_manager.syncredis):
-        if worker.name == f"{worker_name}_{worker_id}":
+        # if worker.name == f"{worker_name}":
+        _log.debug(f"worker.name: {worker.name} vs worker_name {worker_name}")
+        if worker.name == f"{worker_name}":
             return True
     return False
 
 async def set_worker_status(worker_name, worker_id, status):
     # await redis_manager.redis.set(f"worker_status:{worker_name}:{worker_id}", status, ex=60*60*24*7)
     await redis_manager.check_redis_conn()
-    await redis_manager.redis.set(f"rq:worker:{worker_name}_{worker_id}", status, ex=60*60*24*7)
+    await redis_manager.redis.set(f"rq:worker:{worker_name}", status, ex=60*60*24*7)
 
-async def clear_worker_status(worker_name, worker_id):
+async def clear_worker_status(worker_name):
     # await redis_manager.redis.delete(f"worker_status:{worker_name}:{worker_id}")
     await redis_manager.check_redis_conn()
-    await redis_manager.redis.delete(f"rq:worker:{worker_name}:{worker_id}")
+    await redis_manager.redis.delete(f"rq:worker:{worker_name}")
 
-async def get_worker(worker_name, worker_id):
+async def get_worker(worker_name):
     running_worker = None
     await redis_manager.check_redis_conn()
     for worker in Worker.all(connection=redis_manager.syncredis):
-        if worker.name == f"{worker_name}_{worker_id}":
+        if worker.name == f"{worker_name}":
             return worker
 
-    _log.info(f"No worker {worker_name}_{worker_id} found!")
+    _log.info(f"No worker {worker_name} found!")
     return running_worker
 
 async def get_all_workers():
@@ -135,35 +140,35 @@ async def get_all_workers():
 def get_worker(worker_name):
     return Worker([wqm.queues[worker_name]], connection=conn)
 
-def worker_process(worker_name, worker_id):
+def worker_process(worker_name):
     async def main():
         await check_redis_conn()
-        if await is_worker_running(worker_name, worker_id):
+        if await is_worker_running(worker_name):
             print(f"Worker {worker_name} with ID {worker_id} is already running. Exiting.")
         try:
             await set_worker_status(worker_name, worker_id, "running")
             worker = get_worker(worker_name)
             worker.work()
         finally:
-            await clear_worker_status(worker_name, worker_id)
+            await clear_worker_status(worker_name)
             await redis_manager.disconnect()
     asyncio.run(main())
 '''
 '''# Attempt 1
-def worker_process(worker_name, worker_id):
+def worker_process(worker_name):
     try:
-        _log.debug(f"Connecting to redis for worker {worker_name}_{worker_id}")
+        _log.debug(f"Connecting to redis for worker {worker_name}")
         conn = syncredis.from_url(redis_url)
         with Connection(conn):
-            _log.debug(f"Starting worker {worker_name}_{worker_id}")
+            _log.debug(f"Starting worker {worker_name}")
             worker = Worker([wqm.queues[worker_name]])
             worker.work()
     except Exception as e:
-        _log.error(f"Failed to start workier {worker_name}_{worker_id}: {e}")
+        _log.error(f"Failed to start workier {worker_name}: {e}")
 '''
-async def async_worker_process(worker_name, worker_id):
+async def async_worker_process(worker_name):
     try:
-        _log.debug(f"Connecting to Redis for worker {worker_name}_{worker_id}")
+        _log.debug(f"Connecting to Redis for worker {worker_name}")
         await redis_manager.check_redis_conn()
         redis_sync_client = redis_manager.syncredis
 
@@ -175,114 +180,122 @@ async def async_worker_process(worker_name, worker_id):
         # Check for existing workers
         _log.debug(f"Checking for existing workers...")
         for worker in Worker.all(connection=redis_sync_client):
-            if worker.name == f"{worker_name}_{worker_id}":
+            if worker.name == f"{worker_name}":
                 _log.debug(f"Exisitng worker {worker.name} found!")
-                # await worker.work()
+                ##& await worker.work()
                 return worker
             else:
-                _log.debug(f"{worker_name}_{worker_id} != {worker.name}")
+                _log.debug(f"{worker_name} != {worker.name}")
         
         _log.debug(f"No existing workers found. Starting new process.")
         # with Connection(redis_pool.sync_client):
         with Connection(redis_sync_client):
-            _log.debug(f"Starting worker {worker_name}_{worker_id}")
-            worker = Worker([wqm.queues[worker_name]], name=f"{worker_name}_{worker_id}")
+            _log.debug(f"Starting worker {worker_name}")
+            worker = Worker([wqm.queues[worker_name]], name=f"{worker_name}")
             await worker.work()
     except Exception as e:
-        _log.error(f"Failed to start worker {worker_name}_{worker_id}: {e}")
+        _log.error(f"Failed to start worker {worker_name}: {e}")
 
-def worker_process(worker_name, worker_id):
+def worker_process(worker_name):
     try:
-        asyncio.run(async_worker_process(worker_name, worker_id))
+        asyncio.run(async_worker_process(worker_name))
     except Exception as e:
-        _log.error(f"Failed to run async worker process {worker_name}_{worker_id}: {e}")
+        _log.error(f"Failed to run async worker process {worker_name}: {e}")
 
 
 async def start_worker(worker_name):
     _log.debug(f"Starting worker {worker_name}...")
-    active_workers = [worker_id for worker_id in range(wqm.conf[worker_name]['threshold']) if await is_worker_running(worker_name, worker_id)]
-    if len(active_workers) >= wqm.conf[worker_name]['threshold']:
-        running_processes = [worker_id for worker_id in range(wqm.conf[worker_name]['threshold']) if (worker_name, worker_id) in worker_processes]
+    #! active_workers = [worker_id for worker_id in range(wqm.conf[worker_name]['threshold']) if await is_worker_running(worker_name)]
+    active_workers = []
+    for worker_name, details in wqm.conf.items():
+        if await is_worker_running(worker_name):
+            active_workers.append(worker_name)
+    if len(active_workers) >= len(wqm.conf.keys()):
+        #! running_processes = [worker_id for worker_id in range(wqm.conf[worker_name]['threshold']) if worker_name in worker_processes]
+        running_processes = []
+        for worker_name, details in wqm.conf.items():
+            if worker_name in worker_processes:
+                running_processes.append(worker_name)
         if len(running_processes) == len(active_workers):
-            return f"Maximum number of {wqm.conf[worker_name]['threshold']} {worker_name} workers are already running."
+            return f"All {wqm.conf[worker_name]['_plugin_name']} workers are already running."
         '''
         else:
             _log.error(f"Workers in Redis do not match workers in active processes. Clearing Redis and restarting worker processes")
             for worker_id in range(wqm.conf[worker_name]['threshold']):
-                if (worker_name, worker_id) not in worker_processes:
-                    if await is_worker_running(worker_name, worker_id):
-                        await clear_worker_status(worker_name, worker_id)
+                if worker_name not in worker_processes:
+                    if await is_worker_running(worker_name):
+                        await clear_worker_status(worker_name)
                         _log.debug(f"Removed ({worker_name}, {worker_id}) from Redis.")
             
             # TODO - I WANT TO GRAB EXISTING WORKERS FROM REDIS IF POSSIBLE, NOT NUKE THEM
         '''
 
-    worker_id = None
-    # worker_id = next(worker_id for worker_id in range(wqm.conf[worker_name]['threshold']) if not await is_worker_running(worker_name, worker_id))
-    for wid in range(wqm.conf[worker_name]['threshold']):
+    worker_name = None
+    # worker_id = next(worker_id for worker_id in range(wqm.conf[worker_name]['threshold']) if not await is_worker_running(worker_name))
+    #! for wid in range(wqm.conf[worker_name]['threshold']):
+    for worker_name, details in wqm.conf.items():
         #! if not await is_worker_running(worker_name, wid):
         #!     worker_id = wid
         #!     break
-        if await is_worker_running(worker_name, wid):
-            if (worker_name, wid) not in worker_processes:
-                _log.debug(f"Found running worker {worker_name}_{wid} in Redis that wasn't in processes.")
+        if await is_worker_running(worker_name):
+            if worker_name not in worker_processes:
+                _log.debug(f"Found running worker {worker_name} in Redis that wasn't in processes.")
                 _log.debug(f"Adding worker to running processes...")
-                process = Process(target=worker_process, args=(worker_name, wid))
+                process = Process(target=worker_process, args=(worker_name,))
                 process.start()
-                worker_processes[(worker_name, wid)] = process.pid
-                msg = f"Existing Worker {worker_name} with ID {wid} started new process."
+                worker_processes[worker_name] = process.pid
+                msg = f"Existing Worker {worker_name} started new process."
                 _log.debug(msg)
                 return msg
         else:
-            worker_id = wid
             break
 
-    if worker_id is None:
+    if worker_name is None:
         return f"No available worker ID space found for workers of type {worker_name}"
-    _log.debug(f"Starting new process: {worker_name}, {worker_id}")
+    _log.debug(f"Starting new process: {worker_name}")
     # process = Process(target=partial(worker_process, worker_name, worker_id))
-    process = Process(target=worker_process, args=(worker_name, worker_id))
+    process = Process(target=worker_process, args=(worker_name,))
     process.start()
-    # worker_processes[(worker_name, worker_id)] = process
-    worker_processes[(worker_name, worker_id)] = process.pid
-    msg = f"New Worker {worker_name} with ID {worker_id} started and added to redis."
+    # worker_processes[worker_name] = process
+    worker_processes[worker_name] = process.pid
+    msg = f"New Worker {worker_name} started and added to redis."
     _log.debug(msg)
     return msg
 
-async def stop_worker(worker_name, worker_id):
+async def stop_worker(worker_name):
     _log.debug(worker_processes)
-    pid = worker_processes.get((worker_name, worker_id))
+    pid = worker_processes.get(worker_name)
     if pid is not None:
         try:
             process = psutil.Process(pid)
             # process.terminate() # Or process.kill() if you want to forcefully kill the process
             process.kill()
             process.wait() # Wait for the process to terminate
-            del worker_processes[(worker_name, worker_id)]
-            await clear_worker_status(worker_name, worker_id)
-            msg = f"Worker {worker_name} with ID {worker_id} stopped."
+            del worker_processes[worker_name]
+            await clear_worker_status(worker_name)
+            msg = f"Worker {worker_name} stopped."
             _log.debug(msg)
             return msg
         except psutil.NoSuchProcess:
             msg = "No such process with PID {pid}"
             _log.error(msg)
     else:
-        msg = f"No running worker found with name {worker_name} and ID {worker_id}.\n"
+        msg = f"No running worker found with name {worker_name}.\n"
         msg += f"worker_processes: {worker_processes}"
         _log.debug(msg)
-        _log.debug(f"Clearing {worker_name} {worker_id} anyway to make sure redis is clear")
+        _log.debug(f"Clearing {worker_name} anyway to make sure redis is clear")
         #! NOTE - This is probably a bad idea if I want to have the hunt queue persist
         #! after the app is restarted or crashes
-        await clear_worker_status(worker_name, worker_id)
+        await clear_worker_status(worker_name)
     await redis_manager.disconnect()
     return msg
 
-async def get_worker_status(worker_name, worker_id):
-    if await is_worker_running(worker_name, worker_id):
-        msg = f"Worker {worker_name} with ID {worker_id} is running."
+async def get_worker_status(worker_name):
+    if await is_worker_running(worker_name):
+        msg = f"Worker {worker_name} is running."
         _log.debug(msg)
         return msg
-    msg = f"Worker {worker_name} with ID {worker_id} is not running."
+    msg = f"Worker {worker_name} is not running."
     _log.debug(msg)
     return msg
 
@@ -294,9 +307,10 @@ async def start_all_workers():
     await wqm.check_queues()
     _log.debug(f"Starting all workers...")
     responses = {}
-    for worker_name in wqm.queues.keys():
-        for worker_id in range(wqm.conf[worker_name]['threshold']):
-            responses[f"{worker_name}_{worker_id}"] = await start_worker(worker_name)
+    # for worker_name in wqm.queues.keys():
+    for worker_name in wqm.conf.keys():
+        _log.debug(f"Looping through {worker_name}...")
+        responses[f"{worker_name}"] = await start_worker(worker_name)
     responses['worker_processes'] = pformat(worker_processes.items())
     _log.debug(responses)
     return responses
@@ -304,8 +318,7 @@ async def start_all_workers():
 async def stop_all_workers():
     responses = {}
     for worker_name in wqm.queues.keys():
-        for worker_id in range(wqm.conf[worker_name]['threshold']):
-            responses[f"{worker_name}_{worker_id}"] = await stop_worker(worker_name, worker_id)
+        responses[f"{worker_name}"] = await stop_worker(worker_name)
     _log.debug(responses)
     return responses
 

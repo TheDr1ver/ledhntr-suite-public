@@ -60,19 +60,19 @@ class Censys(HNTRPlugin):
             fallback = 'https://search.censys.io/api/',
         )
 
-        key = config.get(
+        self.key = config.get(
             'options',
             'key',
             fallback = 'key',
         )
 
-        secret = config.get(
+        self.secret = config.get(
             'options',
             'secret',
             fallback = "secret",
         )
 
-        self.auth = (key, secret)
+        self.auth = (self.key, self.secret)
         if self.auth == ('key', 'secret'):
             _log.warning("INVALID AUTHORIZATION PROVIDED!")
             self.auth = False
