@@ -14,6 +14,7 @@ from rq.registry import (
     FinishedJobRegistry,
     ScheduledJobRegistry,
     StartedJobRegistry,
+    DeferredJobRegistry,
 )
 
 from ledapi.config import(
@@ -77,7 +78,6 @@ async def async_worker_process(worker_name):
     worker = await get_worker(worker_name)
     if worker:
         _log.debug(f"FOUND EXISTING WORKER {worker_name}")
-        #@ await worker.work()
         try:
             await worker.work()
         except ValueError as e:
@@ -88,16 +88,6 @@ async def async_worker_process(worker_name):
     _log.debug(f"No existing workers found. Starting new process.")
     # with Connection(redis_pool.sync_client):
     with Connection(redis_sync_client):
-        '''
-        #* If it's not a HNTR class it shouldn't have rate-limiting we need to 
-        #* worry about, so it's better for multiple workers to share a single queue.
-        #* If it is a HNTR class we'll want a unique queue per worker to abide by
-        #* rate limits for each account.
-        if wqm.conf[worker_name]['_plugin_class'] != 'HNTR':
-            queue_name = wqm.conf[worker_name]['_plugin_name']
-        else:
-            queue_name = worker_name
-        '''
         _log.debug(f"Starting worker {worker_name}")
         # worker = Worker([wqm.queues[worker_name]], name=f"{worker_name}")
         worker = Worker([wqm.conf[worker_name]['queue']], name=worker_name)
@@ -172,6 +162,49 @@ async def get_worker_status(worker_name):
     _log.debug(msg)
     return msg
 
+async def get_available_worker(
+    plugin_name: str = None,
+)->str:
+    """Get Available Workers Based on job_data['plugin']
+
+    Picks a worker to use based on worker status and queue length.
+
+    :param plugin_name: name of the plugin you want to grab
+        a worker for, defaults to None
+    :type plugin_name: str, required
+    :return: worker_name of available worker
+    :rtype: str
+    """
+
+    chosen_worker_name = None
+    chosen_queue = None
+    for worker_name, details in wqm.conf.items():
+        #* Pick a queue/worker to use.
+        #* If a queue belongs to an idle worker, pick that queue.
+        #* If no workers are idle, pick the queue with the least amount of jobs.
+        if details['_plugin_name'] != plugin_name:
+            continue
+
+        queue = details['queue']
+        workers = Worker.all(queue=queue)
+        for w in workers:
+            if w.state == 'idle':
+                _log.debug(f"Found idle worker {w.name}. Using queue {queue}.")
+                return w.name
+            if chosen_queue is None:
+                chosen_queue = queue
+                chosen_worker_name = worker_name
+                continue
+            if len(chosen_queue.jobs) > len(queue.jobs):
+                _log.debug(
+                    f"Found queue {queue.name} with lower job count "
+                    f"{len(queue.jobs)} vs {len(chosen_queue.jobs)}"
+                )
+                chosen_queue = queue
+                chosen_worker_name = worker_name
+    _log.debug(f"Picked worker {chosen_worker_name}")
+    return chosen_worker_name
+
 async def start_all_workers():
     # _log.debug(f"Initializing Multiprocess manager")
     if not "worker_processes" in globals():
@@ -202,55 +235,6 @@ async def stop_all_workers():
 #&###########################
 #& API ENDPOINT FUNCTIONS
 #&###########################
-
-'''
-async def get_all_workers(with_jobs: bool = False):
-    await redis_manager.check_redis_conn()
-    workers = []
-    _log.debug(f"first wqm.queues: {pformat(wqm.queues)}")
-    for worker_name, queue in wqm.queues.items():
-        _log.debug(f"queue_name: {queue_name}, queue: {queue}")
-        job_ids = []
-        if with_jobs:
-            failed_registry = FailedJobRegistry(queue_name, connection=redis_manager.syncredis)
-            fin_registry = FinishedJobRegistry(queue_name, connection=redis_manager.syncredis)
-            sched_registry = ScheduledJobRegistry(queue_name, connection=redis_manager.syncredis)
-            start_registry = StartedJobRegistry(queue_name, connection=redis_manager.syncredis)
-
-            job_ids += failed_registry.get_job_ids()
-            job_ids += fin_registry.get_job_ids()
-            job_ids += sched_registry.get_job_ids()
-            # job_ids = sched_registry.get_job_ids()
-            job_ids += start_registry.get_job_ids()
-
-        for worker in Worker.all(connection=redis_manager.syncredis):
-            _log.debug(f"queue_name: {queue_name} worker.queues: {worker.queues}")
-            if queue_name in [q.name for q in worker.queues]:
-                jobs = []
-                for job_id in job_ids:
-                    job = queue.fetch_job(job_id)
-                    if job:
-                        jobs.append({
-                            'id': job.id,
-                            'status': job.get_status(),
-                            'description': job.description,
-                            'enqueued_at': job.enqueued_at,
-                            'started_at': job.started_at,
-                            'ended_at': job.ended_at,
-                            'result': job.result,
-                        })
-
-                workers.append({
-                    'name': worker.name,
-                    'all_keys': worker.all_keys,
-                    'redis_key': worker.key,
-                    'queues': [q.name for q in worker.queues],
-                    'state': worker.get_state(),
-                    'current_job_id': worker.get_current_job_id(),
-                    'jobs': jobs,
-                })
-    return workers
-'''
 async def get_all_workers(with_jobs: bool = False):
     await redis_manager.check_redis_conn()
     workers = []

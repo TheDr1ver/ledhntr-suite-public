@@ -194,47 +194,12 @@ class WorkersQueueManager(object):
             _log.debug(f"{CYAN}plugin.key: {details['_plugin'].key}{RESET}")
 
     #~ Define Queues
-    '''
-    async def load_queues(
-        self, 
-        worker_name: Optional[str] = None,
-    ):
-        await redis_manager.check_redis_conn()
-        #* If we're explicitly passing a worker name, it means we want to create
-        #* a single dedicated queue for that explicit worker if it's a HNTR worker
-        #* because each set of credentials has its own rate limit.
-        #* However, if it's a Connector or Analyzer worker, we don't have to worry
-        #* about rate limits and can share a single queue across multiple workers/processes
-        if not worker_name is None:
-            if self.conf[worker_name]['_plugin_class'] != 'HNTR':
-                #* If it's not a hunter we just want one queue shared with all workers of that type
-                
-                queue_name = self.conf[worker_name]['_plugin_name']
-                _log.debug(f"{worker_name} is not a HNTR worker. Changing queue name to {queue_name}.")
-            else:
-                #* Otherwise, we want a specific queue for each unique hunter worker_name
-                #* so we'll leave queue_name as-is.
-                queue_name = worker_name
-            self.queues = {worker_name: Queue(queue_name, connection=redis_manager.syncredis)}
-        else:
-            # self.queues = {worker_name: Queue(worker_name, connection=redis_manager.syncredis) for worker_name in self.conf.keys()}
-            #* If we're not passing a worker name that means we want to load all queues
-            #* for the main process.
-            self.queues = {}
-            for worker_name, details in self.conf.items():
-                if details['_plugin_class'] != 'HNTR':
-                    queue_name = details['_plugin_name']
-                else:
-                    queue_name = worker_name
-                self.queues[worker_name] = Queue(queue_name, connection=redis_manager.syncredis)
-
-        _log.debug(f"init worker_queues: {self.queues}")
-    '''
     async def load_queues(
         self,
     ):
         await redis_manager.check_redis_conn()
         for worker_name, details in self.conf.items():
+            '''
             if details['_plugin_class'] != 'HNTR':
                 #* If it's not a hunter we just want one queue shared with all workers of that type
                 queue_name = details['_plugin_name']
@@ -242,8 +207,23 @@ class WorkersQueueManager(object):
                 #* Otherwise, we want a specific queue for each unique hunter worker_name
                 #* so we'll leave queue_name as-is.
                 queue_name = worker_name
-            # self.queues[worker_name] = Queue(queue_name, connection=redis_manager.syncredis)
+            '''
+            #* Each plugin should have a single queue, regardless of how many workers
+            #* are able to process it. That way if you have 2 Shodan accounts with
+            #* separate rate limits they can both execute from the same queue.
+            queue_name = details['_plugin_name']
             self.conf[worker_name]['queue'] = Queue(queue_name, connection=redis_manager.syncredis)
+
+        #& TODO - Add endpoints for add/enable/disable/modify hunt
+        #&
+        #& TODO - Add a few AutoHunter Analyzer workers to handle things like
+        #& - Running hunts
+        #& - Checking enrichments
+        #& - Doing DB clean-up operations
+        #& - Disabling "dead" hunts
+        #& - Giving summaries of the day's jobs successes/failures
+        #&
+        #& TODO - Finally Need to write the Slack bot plugin to get to MVP
 
         _log.debug(f"init worker_queues: {self.queues}")
 
