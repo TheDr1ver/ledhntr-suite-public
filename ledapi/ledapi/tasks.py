@@ -276,7 +276,8 @@ async def run_hunt(
     #* Get all the plugin names and their associated queues and workers
     #* Results in plugin_queues={'shodan': [('shodan.01',<Queue1>),('shodan.02',<Queue2>)]}
     for plugin in plugins:
-        worker_queues = [(worker, queue) for worker, queue in wqm.queues.items() if queue.name.startswith(plugin)]
+        # worker_queues = [(worker, queue) for worker, queue in wqm.queues.items() if queue.name.startswith(plugin)]
+        worker_queues = [(worker, details['queue']) for worker, details in wqm.conf.items() if details['queue'].name.startswith(plugin)]
         if worker_queues:
             plugin_queues[plugin] = worker_queues
         else:

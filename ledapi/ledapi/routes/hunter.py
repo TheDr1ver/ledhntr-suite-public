@@ -144,7 +144,7 @@ async def check_jobs_ep(
 ):
     try:
         # job_statuses = await get_all_jobs()
-        job_statuses = await get_all_workers()
+        job_statuses = await get_all_workers(with_jobs=True)
         return {
             "job_statuses": job_statuses,
             "status": status.HTTP_200_OK,

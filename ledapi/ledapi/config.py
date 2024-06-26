@@ -146,6 +146,7 @@ class WorkersQueueManager(object):
                 self.conf[worker_name] = {
                     '_plugin_name': plugin_name,
                     '_worker_id': key.split('.')[1],
+                    'settings': {},
                 }
 
         #~ Get settings for each worker
@@ -156,16 +157,14 @@ class WorkersQueueManager(object):
                     # _log.debug(f"Splitting key {key} into {key.split('.')}")
                     setting = key.split('.')[2]
                     if setting not in self.conf[worker_name]:
-                        self.conf[worker_name][setting] = await self.parse_value(conf['ledapi.workers'][key])
+                        self.conf[worker_name]['settings'][setting] = await self.parse_value(conf['ledapi.workers'][key])
 
         #~ Load Plugin Modules For Each Worker
         safe_dict = copy.deepcopy(self.conf)
         for worker_name, details in safe_dict.items():
             # self.conf[worker_name]['_plugin'] = led.load_plugin(details['_plugin_name'], duplicate=True)
             plugin = led.load_plugin(details['_plugin_name'], duplicate=True)
-            for k, v in details.items():
-                if k.startswith('_'):
-                    continue
+            for k, v in details['settings'].items():
                 if not hasattr(plugin, k):
                     _log.debug(f"plugin {plugin} has no attribute {k}")
                     continue
@@ -174,9 +173,11 @@ class WorkersQueueManager(object):
                 # // _log.debug(f"Set {worker_name} {plugin}.{k} to {v}")
                 # // _log.debug(f"{RED}CONFIRMED{RESET}: k: {k} v: {plugin.k}")
             #* Reload API Configs
-            plugin._load_api_configs()
+            led_plugin_list = led.list_plugins()
+            self.conf[worker_name]['_plugin_class'] = led_plugin_list[details['_plugin_name']]['classes'][0]
+            if self.conf[worker_name]['_plugin_class'] == 'HNTR':
+                plugin._load_api_configs()
             self.conf[worker_name]['_plugin'] = plugin
-
 
     async def test_confs(
         self,
@@ -193,15 +194,57 @@ class WorkersQueueManager(object):
             _log.debug(f"{CYAN}plugin.key: {details['_plugin'].key}{RESET}")
 
     #~ Define Queues
+    '''
     async def load_queues(
         self, 
         worker_name: Optional[str] = None,
     ):
         await redis_manager.check_redis_conn()
+        #* If we're explicitly passing a worker name, it means we want to create
+        #* a single dedicated queue for that explicit worker if it's a HNTR worker
+        #* because each set of credentials has its own rate limit.
+        #* However, if it's a Connector or Analyzer worker, we don't have to worry
+        #* about rate limits and can share a single queue across multiple workers/processes
         if not worker_name is None:
-            self.queues = {worker_name: Queue(worker_name, connection=redis_manager.syncredis)}
+            if self.conf[worker_name]['_plugin_class'] != 'HNTR':
+                #* If it's not a hunter we just want one queue shared with all workers of that type
+                
+                queue_name = self.conf[worker_name]['_plugin_name']
+                _log.debug(f"{worker_name} is not a HNTR worker. Changing queue name to {queue_name}.")
+            else:
+                #* Otherwise, we want a specific queue for each unique hunter worker_name
+                #* so we'll leave queue_name as-is.
+                queue_name = worker_name
+            self.queues = {worker_name: Queue(queue_name, connection=redis_manager.syncredis)}
         else:
-            self.queues = {worker_name: Queue(worker_name, connection=redis_manager.syncredis) for worker_name in self.conf.keys()}
+            # self.queues = {worker_name: Queue(worker_name, connection=redis_manager.syncredis) for worker_name in self.conf.keys()}
+            #* If we're not passing a worker name that means we want to load all queues
+            #* for the main process.
+            self.queues = {}
+            for worker_name, details in self.conf.items():
+                if details['_plugin_class'] != 'HNTR':
+                    queue_name = details['_plugin_name']
+                else:
+                    queue_name = worker_name
+                self.queues[worker_name] = Queue(queue_name, connection=redis_manager.syncredis)
+
+        _log.debug(f"init worker_queues: {self.queues}")
+    '''
+    async def load_queues(
+        self,
+    ):
+        await redis_manager.check_redis_conn()
+        for worker_name, details in self.conf.items():
+            if details['_plugin_class'] != 'HNTR':
+                #* If it's not a hunter we just want one queue shared with all workers of that type
+                queue_name = details['_plugin_name']
+            else:
+                #* Otherwise, we want a specific queue for each unique hunter worker_name
+                #* so we'll leave queue_name as-is.
+                queue_name = worker_name
+            # self.queues[worker_name] = Queue(queue_name, connection=redis_manager.syncredis)
+            self.conf[worker_name]['queue'] = Queue(queue_name, connection=redis_manager.syncredis)
+
         _log.debug(f"init worker_queues: {self.queues}")
 
     async def check_config(
@@ -209,9 +252,11 @@ class WorkersQueueManager(object):
     ):
         if self.conf is None:
             await self.load_config()
-            # // _log.debug(f"{CYAN}TESTING OUTSIDE load_config(){RESET}")
-            # // await self.test_confs()
+            # _log.debug(f"{CYAN}TESTING OUTSIDE load_config(){RESET}")
+            # await self.test_confs()
+            await self.load_queues()
 
+    '''
     async def check_queues(
         self,
         worker_name: Optional[str] = None
@@ -219,6 +264,7 @@ class WorkersQueueManager(object):
         await self.check_config()
         if self.queues is None:
             await self.load_queues(worker_name)
+    '''
 
 wqm = WorkersQueueManager()
 # _log.debug(f"wqm: {pformat(wqm.conf)}")
