@@ -54,4 +54,5 @@ WORKDIR /ledhntr/ledapi
 # @ I just want to leave the container running so I can get colored bash outputs
 # @ in my logs while dev'ing. Normally I won't have bash in this container.
 # @ uvicorn ledapi.main:app --host 0.0.0.0 --port 8000 --reload
+
 CMD ["tail", "-f", "/dev/null"]

@@ -37,6 +37,7 @@ services:
     volumes:
       - ledapi_data:/ledhntr
       - ledapi_ledhntr_data:/home/leduser/.ledhntr
+      - ledapi_dev_home:/home/leduser/
     ports:
       - "8000:8000"
     networks:
