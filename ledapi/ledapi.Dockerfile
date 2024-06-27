@@ -13,6 +13,7 @@ RUN chown -R leduser:leduser /ledapi
 # Switch to leduser
 USER leduser
 ENV PATH="/home/leduser/.local/bin:${PATH}"
+ENV PYTHONPATH="$PYTHONPATH:/ledapi/ledhntr-suite-public/ledapi:/home/leduser/.ledhntr/plugins"
 
 # Copy and install dependencies
 COPY --chown=leduser:leduser requirements.txt .
@@ -44,4 +45,4 @@ COPY --chown=leduser:leduser ledhntr.cfg /home/leduser/.ledhntr/
 WORKDIR /ledapi/ledhntr-suite-public/ledapi
 
 # Run the server
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "ledapi.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

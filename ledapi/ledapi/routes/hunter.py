@@ -39,7 +39,7 @@ from ledapi.worker_manager import(
     get_all_workers,
     poll_job,
 )
-from ledapi.helpers import result_error_catching
+from ledapi.helpers import handle_response
 
 from ledhntr.data_classes import Attribute, Entity, Relation
 
@@ -159,9 +159,10 @@ async def check_jobs_ep(
 #~ Poll the status of a specific job_id
 @router.get("/poll-job/{job_id}")
 async def poll_job_ep(
-    job_id: str,
-    verified: bool = Depends(dep_check_user_role(role_hunter))
+    job_id: str = None,
+    user: User = Depends(dep_check_user_role(role_hunter))
 ):
+    '''
     try:
         response = await poll_job(job_id)
     except Exception as e:
@@ -178,6 +179,19 @@ async def poll_job_ep(
             "message": response,
             "status_code": status.HTTP_200_OK,
         }
+    '''
+    _log.debug(f"Polling job_id {job_id}")
+    msg_400 = f"No job found with ID {job_id}"
+    msg_500 = f"Failed polling job"
+
+    response = await handle_response(
+        poll_job,
+        msg_400,
+        msg_500,
+        job_id
+    )
+
+    return response
 
 #~ Add hunt
 @router.post("/add-hunt")
@@ -188,3 +202,25 @@ async def add_hunt_ep(
     _log.debug(f"Adding hunt: {hunt}")
 
 #~ Enable/Disable hunt by DB+Name
+@router.get("/enable-hunt/{db_name}/{hunt_name}")
+async def enable_hunt_ep(
+    db_name: str = None,
+    hunt_name: str = None,
+    user: User = Depends(dep_check_user_role(role_hunter))
+):
+    _log.debug(f"Enabling hunt {hunt_name} in {db_name}")
+    msg_400 = f"Unable to find {hunt_name} in {db_name}"
+    msg_500 = f"Failed enabling hunt"
+
+    '''
+    response = handle_response(
+        enable_hunt,
+        msg_400,
+        msg_500,
+        db_name,
+        hunt_name,
+    )
+
+    return response
+    '''
+
