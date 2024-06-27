@@ -1,9 +1,12 @@
+import asyncio
+import time
 import traceback
 
 from fastapi import HTTPException, status
+from rq.job import Job
 from typing import Callable, Optional
 
-from ledapi.config import _log
+from ledapi.config import _log, wqm
 
 def result_error_catching(
     result_func: Callable = None,
@@ -11,18 +14,12 @@ def result_error_catching(
     *args,
     **kwargs
 ):
-    #. NOTE - this might need to be revisited because there are probably
-    #. instances where I'm using this where I don't want to raise an error
-    #. and instead just log it and keep churning. tasks.get_hunts() comes to mind
-    #. when looping through DBs.
+    result = None
     try:
         result = result_func(*args, **kwargs)
     except Exception as e:
         _log.error(f"{detail}: \n\t{e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"{detail}: \n\t{e}"
-        )
+        _log.error(f"Traceback: \n{traceback.format_exc()}")
     return result
 
 async def handle_response(
@@ -63,7 +60,53 @@ async def handle_response(
             detail=message_400,
         )
     response = {
-        'message': response,
+        'message': rez,
         'status_code': status.HTTP_200_OK
     }
     return response
+
+async def two_sec_grace(
+    worker_name: str = None,
+    job_id: str = None,
+):
+    """Waits 2 seconds for a job to finish before returning job_id
+
+    If job isn't finished after 2 seconds of waiting, it returns the job_id,
+    otherwise it returns the result of the job.
+
+    :param worker_name: name of the worker executing the job, defaults to None
+    :type worker_name: str, optional
+    :param job_id: job_id being executed, defaults to None
+    :type job_id: str, optional
+    :return: result dict containing worker, job_id, and result. Result set to 
+        job_status if 2 seconds passes and the job hasn't completed.
+    :rtype: dict
+    """
+    result = {
+        "worker": worker_name,
+        "job_id": job_id,
+        "result": None,
+    }
+    queue = wqm.conf.get(worker_name)['queue']
+    last_job: Job
+    last_job = queue.fetch_job(job_id)
+
+    count=0
+    if not last_job.is_finished:
+        _log.debug(f"Waiting 2 seconds for {last_job.id} to finish...")
+        # for _ in range(4):
+        for _ in range(10):
+            if not last_job.is_finished:
+                await asyncio.sleep(0.5)
+                _log.debug(f"...still waiting...")
+            else:
+                break
+
+    if not last_job.is_finished:
+        _log.debug(f"Job still not finished, returning job_id.")
+        status = last_job.get_status()
+        result['result'] = status
+    else:
+        result['result'] = last_job.result
+
+    return result

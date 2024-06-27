@@ -15,13 +15,17 @@ from ledapi.config import(
     get_tdb,
     redis_manager
 )
-from ledapi.helpers import result_error_catching
+from ledapi.helpers import handle_response
 
 from ledapi.models import(
     DBName,
     SearchObject,
     UserModel,
     role_everyone,
+)
+
+from ledapi.tasks import(
+    list_dbs,
 )
 
 from ledhntr.data_classes import Attribute, Entity, Relation, Thing
@@ -31,6 +35,10 @@ router = APIRouter()
 #@##############################################################################
 #@### EVERYONE ENDPOINTS
 #@##############################################################################
+
+#~##########################
+#~ Test Functions
+#~##########################
 
 #~ Hello World Test User
 @router.get("/hello-test-user")
@@ -54,40 +62,16 @@ async def redis_test(
     redis_info = await redis_manager.redis.info()
     return {"message": redis_info}
 
-#~ List Databases
-@router.get("/list-dbs")
-async def list_dbs(
-    user: User = Depends(dep_check_user_role(role_everyone))
-):
-    """List available databases
-
-    :param user: User Permissions Check, defaults to Depends(dep_check_role(role_everyone))
-    :type user: User, required
-    :return: Dictionary of "result", "status_code", and "count"
-    :rtype: Dict
-    """
-    all_dbs = []
-    tdb = get_tdb()
-    dbs = result_error_catching(tdb.get_all_dbs, "Failed to fetch databases")
-    for db in dbs:
-        all_dbs.append(str(db))
-    results = {
-        'results': [],
-        'message': None,
-        'status_code': None,
-        'count': 0,
-    }
-    if all_dbs:
-        results['results']=all_dbs
-
-    return all_dbs
+#~##########################
+#~ User Functions
+#~##########################
 
 #~ Set User Database
 @router.post("/set-db")
 async def set_db(
-    user: User = Depends(dep_check_user_role(role_everyone)),
     db_name: str = Query('all', description="Set database for subsequent searches. Defaults to 'all'"),
-    db_name_model: DBName = Body(None)
+    db_name_model: DBName = Body(None),
+    user: User = Depends(dep_check_user_role(role_everyone)),
 ):
     """Sets preferred dictionary to focus on. Defaults to 'all'
 
@@ -106,19 +90,19 @@ async def set_db(
     else:
         new_db_name = db_name
     modified_user = UserModel(uuid=user.uuid, db_name=new_db_name)
-    try:
-        await User.update_user(user=modified_user)
-    except Exception as e:
-        _log.error(f"Failed to update user: \n\t{e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update user: \n\t{e}"
-        )
-    result = {
-        'message': f'Successfully set database to {new_db_name}',
-        'status_code': status.HTTP_200_OK
-    }
-    return result
+    
+    _log.debug(f"Setting DB to {new_db_name}")
+    msg_400 = f"Could not update {modified_user}"
+    msg_500 = f"Error updating {modified_user}"
+
+    response = await handle_response(
+        User.update_user,
+        msg_400,
+        msg_500,
+        modified_user,
+    )
+
+    return response
 
 #~ Get User Database
 @router.get("/get-db")
@@ -135,6 +119,34 @@ async def get_db(
     """
     return user.db_name
 
+
+#~##########################
+#~ Task Functions
+#~##########################
+
+#~ List Databases
+@router.get("/list-dbs")
+async def list_dbs_ep(
+    user: User = Depends(dep_check_user_role(role_everyone))
+):
+    """List available databases
+
+    :param user: User Permissions Check, defaults to Depends(dep_check_role(role_everyone))
+    :type user: User, required
+    :return: Dictionary of "result", "status_code", and "count"
+    :rtype: Dict
+    """
+    _log.debug(f"Getting list of all databases...")
+    msg_400 = f"No databases found"
+    msg_500 = f"Error fetching databases"
+
+    response = await handle_response(
+        list_dbs,
+        msg_400,
+        msg_500,
+    )
+
+    return response
 
 #~ Search database
 @router.post("/search")
@@ -171,6 +183,7 @@ async def search(
     :return: Returns JSON serialized objects from the database
     :rtype: List[Dict]
     """
+    # TODO - Move this to Tasks.py. If Result not returned in 2 seconds, return job_id
     tdb = get_tdb()
     if search_obj.ttype == 'entity': # * If we want to return all entities...
         # * and our search label is a known entity...
@@ -245,6 +258,8 @@ async def search(
     }
 
     things = result_error_catching(tdb.find_things, f"Error searching for {so}", so)
+    if not things:
+        return results
     '''
     try:
         things = tdb.find_things(so)
@@ -280,6 +295,7 @@ async def news_ep(
 ):
     """Get the new stuff. Optionally specify days_back if you want something older than 24 hrs
     """
+    # TODO - Move this to Tasks.py. If Result not returned in 2 seconds, return job_id
     results = {
         'results': {},
         'message': None,
@@ -296,7 +312,7 @@ async def news_ep(
 
         tdb = get_tdb()
         all_dbs = []
-        dbs = result_error_catching(tdb.get_all_dbs, "Failed to fetch databases")
+        dbs = result_error_catching(tdb.get_all_dbs, "Failed to fetch databases") #! Change to handle_response()
         for db in dbs:
             all_dbs.append(str(db))
         for db_name in all_dbs:
@@ -305,7 +321,7 @@ async def news_ep(
             tdb.db_name = db_name
             rez = []
             # ent_so = Entity(label='entity')
-            things = result_error_catching(
+            things = result_error_catching( #! Change to handle_response()
                 tdb.find_things,
                 f"Error searching for {so}",
                 so

@@ -243,7 +243,7 @@ class User:
         _log.debug(f"Updating with user object: {user}")
         existing = await User.get_user(user)
         if not existing:
-            _log.info(f"User {user} does not exist!")
+            _log.error(f"User {user} does not exist!")
             return False
         #; Load redis_pool
         redis_pool: Redis = redis_manager.redis

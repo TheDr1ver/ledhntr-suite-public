@@ -1,7 +1,6 @@
 import time
 import traceback
 
-
 from datetime import datetime, timedelta, timezone
 from fastapi import Query
 from pprint import pformat
@@ -33,115 +32,16 @@ from ledapi.worker_manager import(
     get_available_worker
 )
 
-#@##############################################################################
-#@ List all Active Hunts
-#@##############################################################################
+#&##############################################################################
+#& Internal Functions
+#&##############################################################################
 
-async def get_hunts(
-    user: User = None,
-    filter: str = Query(None, description="Only return these attributes"),
-):
-    """Return all hunts in the user's set database
-
-    :param user: User making the request
-    :type user: User, required
-    :param filter: Comma-separated list of attributes to return
-    :type filter: str, optional
-    :return: Dictionary of "result", "status_code", and "count"
-    :rtype: Dict
-    """
-    tdb = get_tdb()
-    results = {
-        'results': {},
-        'count': 0,
-    }
-    all_dbs = []
-    if user.db_name == "all":
-        dbs = result_error_catching(tdb.get_all_dbs, "Failed to fetch databases")
-        for db in dbs:
-            all_dbs.append(str(db))
-    else:
-        all_dbs.append(user.db_name)
-
-    for db in all_dbs:
-        tdb.db_name = db
-        so = Entity(label='hunt', has=[Attribute(label='hunt-active', value=True)])
-        res = result_error_catching(tdb.find_things, f"Failed searching for {so}", so)
-        if db not in results['results']:
-            results['results'][db] = []
-        for r in res:
-            r:Entity
-            if r.label=='hunt':
-                # results['results'][db].append(r.to_dict())
-                hunt_res = {
-                    "hunt-name": r.get_attributes('hunt-name', True).value,
-                    "hunt-string": r.get_attributes('hunt-string', True).value,
-                    "hunt-service": r.get_attributes('hunt-service', True).value,
-                    "hunt-endpoint": r.get_attributes('hunt-endpoint', True).value,
-                }
-                filter_vals: List[str] = filter.split(",") if filter else []
-                for fv in filter_vals:
-                    attrs = r.get_attributes(fv)
-                    if attrs:
-                        hunt_res[fv] = []
-                        for attr in attrs:
-                            hunt_res[fv].append(attr.value)
-                results['results'][db].append(hunt_res)
-                results['count']+=1
-    return results
-
-
-
-#@##############################################################################
-#@ Run a Hunt
-#@##############################################################################
-
-async def run_hunt(
-    job_data: Dict = None,
-    user: User = None,
-):
-    """Handle which queue gets which hunt job
-
-    Keyword arguments:
-    argument -- description
-    Return: return_description
-    """
-    plugins = []
-    await wqm.check_config() #~ Make sure plugins and configs are loaded properly
-    #* If we don't specify a plugin or explicitly specify 'all' then use all plugins
-    if job_data['plugin'] == None or job_data['plugin'].lower() == 'all':
-        for worker_name, details in wqm.conf.items():
-            if details['_plugin_name'] not in plugins:
-                plugins.append(details['_plugin_name'])
-    else:
-        plugins.append(job_data['plugin'].lower())
-
-    for plugin_name in plugins:
-        worker_name = await get_available_worker(plugin_name)
-        queue = wqm.conf[worker_name]['queue']
-
-        job_result = queue.enqueue_call(
-            hunt_stuff,
-            args=[job_data, worker_name],
-            job_id=job_data['job_id'],
-            timeout=60*60,
-            result_ttl=60*60*24,
-            #on_success=DOSOMETHING,
-            #on_failure=DOSOMETHINGELSE,
-        )
-
-        job_data['job_result_ids'].append(job_result.id)
-
-    #* Serialize the job_data
-    # job_data = json.dumps(job_data)
-    # _log.debug(f"job_data: {pformat(job_data)}")
-
-    return {"job_ids": job_data['job_result_ids'], "status": "Job submitted"}
-
-
+#~######################################
+#~ run_hunt() tasks
+#~######################################
 
 #@ RUN HUNT JOB1 - FIND ACTIVE HUNTS
-async def find_active_hunts(
+async def find_active_hunts_task(
     db_name: str = None,
     hntr_worker_name: str = None,
     forced: bool = False,
@@ -186,7 +86,7 @@ async def find_active_hunts(
 #TODO RUN HUNT JOB2 - LOAD CACHED HUNTS FROM DISK - DEPENDS ON JOB1 SUCCESS
 
 #@ RUN HUNT JOB3 - RUN HUNTS - DEPENDS ON JOB1 SUCCESS (and uses job2 results if any)
-async def run_hunts(
+async def run_hunts_task(
     hntr_worker_name: str = None,
     active_hunts_id: str = None, # job_id
     #TODO cached_hunts: Dict = None,
@@ -217,7 +117,7 @@ async def run_hunts(
 #TODO RUN HUNT JOB4 - CACHE HUNT RESULTS TO DISK - DEPENDS ON JOB3 SUCCESS
 
 #@ RUN HUNT JOB5 - ADD RESULTS TO DB - DEPENDS ON JOB3 SUCCESS
-async def add_hunt_results(
+async def add_hunt_results_task(
     hntr_worker_name: str = None,
     db_name: str = None,
     hunt_results_id: str = None,
@@ -261,7 +161,73 @@ async def add_hunt_results(
 
 #TODO RUN HUNT JOB6 - RUN ENRICHMENTS - DEPENDS ON JOB5 SUCCESS
 
-async def hunt_db(
+#&##############################################################################
+#& Internal Task Config and Job Queuing
+#&##############################################################################
+
+#~######################################
+#~ run_hunt() config & queue
+#~######################################
+
+async def run_hunt_conf(
+    job_data: Dict = None,
+    worker_name: str = "",
+):
+    await wqm.check_config() #~ Make sure plugins and configs are loaded properly
+    _log.debug(f"#### I'M FLYING, JACK! ####")
+    _log.debug(f"job_data: \n\t {pformat(job_data)}")
+    hunt_summary = {}
+
+    #~ Get targeted database(s)
+    all_dbs = []
+    #~ If "all" is passed, get all databases availble
+    if job_data['db_name'] == "all":
+        #~ Set up the database connection
+        tdb = get_tdb()
+        dbs = result_error_catching(tdb.get_all_dbs, "Failed to fetch databases") #! Change to handle_response()
+        for db in dbs:
+            all_dbs.append(str(db))
+        if tdb.session and tdb.session.is_open():
+            tdb.session.close()
+    else:
+        all_dbs.append(job_data['db_name'])
+
+    #~ Get the Queue we're going to use
+    queue = wqm.conf[worker_name]['queue']
+    #! Honestly, this should probably be changed to a separate 'hunt' queue
+    #! Doesn't make much sense to be adding it to a HNTR Plugin queue that
+    #! should be dedicated for scanning
+
+    #~ Run Hunts against all databases selected
+    for db_name in all_dbs:
+        try:
+            forced = job_data['forced']
+            hunt_name = job_data['hunt_name']
+            hunt_db_job = queue.enqueue_call(
+                run_hunt_job_queue,
+                args=[db_name, worker_name, forced, hunt_name],
+                timeout=60*60*2,
+                result_ttl=60*60*24,
+            )
+        except Exception as e:
+            _log.error(f"Failed running hunt against {db_name}: {e}")
+            _log.error(f"Traceback: {traceback.format_exc()}")
+            continue
+
+        #* Add summary for this database
+        # hunt_summary[db_name] = bulk_add_results
+        hunt_db_job: Job
+        hunt_summary[db_name] = {}
+        hunt_summary[db_name]['job_id'] = hunt_db_job.id
+
+    #~ Close the TDB session so it's not left hanging
+    if tdb.session and tdb.session.is_open():
+        _log.debug(f"Closing tdb session.")
+        tdb.session.close()
+
+    return hunt_summary
+
+async def run_hunt_job_queue(
     db_name: str = None,
     worker_name: str = None,
     forced: bool = False,
@@ -295,7 +261,7 @@ async def hunt_db(
     #@ Queue find_active_hunts JOB1
     queue = wqm.conf[worker_name]['queue'] #~ Queue for HNTR Worker
     active_hunts = queue.enqueue_call(
-        find_active_hunts,
+        find_active_hunts_task,
         args=[db_name, worker_name, forced, hunt_name],
         timeout=60*5,
         result_ttl=60*60*2,
@@ -316,7 +282,7 @@ async def hunt_db(
 
     #@ Queue run_hunts JOB3
     hunt_results = queue.enqueue_call(
-        run_hunts,
+        run_hunts_task,
         depends_on=run_hunts_dep,
         args=[worker_name, active_hunts.id],
         timeout=60*60,
@@ -335,7 +301,7 @@ async def hunt_db(
     # clean_hr = await _clean_data(hunt_results.result)
     #@ Queue run_hunts JOB5
     bulk_add_results = queue.enqueue_call(
-        add_hunt_results,
+        add_hunt_results_task,
         depends_on=bulk_add_dep,
         args=[worker_name, db_name, hunt_results.id],
         timeout=60*60*4, #4 hrs is extreme - in no world should it take this long
@@ -354,60 +320,121 @@ async def hunt_db(
     #@ Return all subsequent job_ids
     return result
 
-async def hunt_stuff(
-    job_data: Dict = None,
-    worker_name: str = "",
-):
-    await wqm.check_config() #~ Make sure plugins and configs are loaded properly
-    _log.debug(f"#### I'M FLYING, JACK! ####")
-    _log.debug(f"job_data: \n\t {pformat(job_data)}")
-    hunt_summary = {}
+#&##############################################################################
+#& API Endpoint-Facing Functions
+#&##############################################################################
 
-    #~ Get targeted database(s)
+#~##########################
+#~ List all Active Hunts
+#~##########################
+
+async def get_hunts(
+    user: User = None,
+    filter: str = Query(None, description="Only return these attributes"),
+):
+    """Return all hunts in the user's set database
+
+    :param user: User making the request
+    :type user: User, required
+    :param filter: Comma-separated list of attributes to return
+    :type filter: str, optional
+    :return: Dictionary of "result", "status_code", and "count"
+    :rtype: Dict
+    """
+    # TODO - THIS NEEDS TO BE TURNED INTO A QUEUED JOB WITH A 2-SEC TIMER
+    tdb = get_tdb()
+    # tdb = wqm.conf['typedb_client.01']['_plugin'] #! This works, so why can't I get list_dbs to work?
+    results = {
+        'results': {},
+        'count': 0,
+    }
     all_dbs = []
-    #~ If "all" is passed, get all databases availble
-    if job_data['db_name'] == "all":
-        #~ Set up the database connection
-        tdb = get_tdb()
-        dbs = result_error_catching(tdb.get_all_dbs, "Failed to fetch databases")
+    if user.db_name == "all":
+        dbs = result_error_catching(tdb.get_all_dbs, "Failed to fetch databases") #! Change to handle_response()
         for db in dbs:
             all_dbs.append(str(db))
-        if tdb.session and tdb.session.is_open():
-            tdb.session.close()
     else:
-        all_dbs.append(job_data['db_name'])
+        all_dbs.append(user.db_name)
 
-    #~ Get the Queue we're going to use
-    queue = wqm.conf[worker_name]['queue']
-    #& Honestly, this should probably be changed to a separate 'hunt' queue
-    #& Doesn't make much sense to be adding it to a HNTR Plugin queue that
-    #& should be dedicated for scanning
-
-    #~ Run Hunts against all databases selected
-    for db_name in all_dbs:
-        try:
-            forced = job_data['forced']
-            hunt_name = job_data['hunt_name']
-            hunt_db_job = queue.enqueue_call(
-                hunt_db,
-                args=[db_name, worker_name, forced, hunt_name],
-                timeout=60*60*2,
-                result_ttl=60*60*24,
-            )
-        except Exception as e:
-            _log.error(f"Failed running hunt against {db_name}: {e}")
-            _log.error(f"Traceback: {traceback.format_exc()}")
+    for db in all_dbs:
+        tdb.db_name = db
+        so = Entity(label='hunt', has=[Attribute(label='hunt-active', value=True)])
+        res = result_error_catching(tdb.find_things, f"Failed searching for {so}", so) #! Change to handle_response()
+        if not res:
+            _log.debug(f"No results for {so} in {tdb.db_name}")
             continue
+        if db not in results['results']:
+            results['results'][db] = []
+        for r in res:
+            r:Entity
+            if r.label=='hunt':
+                # results['results'][db].append(r.to_dict())
+                hunt_res = {
+                    "hunt-name": r.get_attributes('hunt-name', True).value,
+                    "hunt-string": r.get_attributes('hunt-string', True).value,
+                    "hunt-service": r.get_attributes('hunt-service', True).value,
+                    "hunt-endpoint": r.get_attributes('hunt-endpoint', True).value,
+                }
+                filter_vals: List[str] = filter.split(",") if filter else []
+                for fv in filter_vals:
+                    attrs = r.get_attributes(fv)
+                    if attrs:
+                        hunt_res[fv] = []
+                        for attr in attrs:
+                            hunt_res[fv].append(attr.value)
+                results['results'][db].append(hunt_res)
+                results['count']+=1
+    return results
 
-        #* Add summary for this database
-        # hunt_summary[db_name] = bulk_add_results
-        hunt_db_job: Job
-        hunt_summary[db_name] = {}
-        hunt_summary[db_name]['job_id'] = hunt_db_job.id
+#~###############
+#~ Run a Hunt
+#~###############
 
-    #~ Close the TDB session so it's not left hanging
-    if tdb.session and tdb.session.is_open():
-        _log.debug(f"Closing tdb session.")
-        tdb.session.close()
+async def run_hunt(
+    job_data: Dict = None,
+    user: User = None,
+):
+    """Handle which queue gets which hunt job
 
-    return hunt_summary
+    Keyword arguments:
+    argument -- description
+    Return: return_description
+    """
+    plugins = []
+    await wqm.check_config() #~ Make sure plugins and configs are loaded properly
+    #* If we don't specify a plugin or explicitly specify 'all' then use all plugins
+    if job_data['plugin'] == None or job_data['plugin'].lower() == 'all':
+        for worker_name, details in wqm.conf.items():
+            if details['_plugin_name'] not in plugins:
+                plugins.append(details['_plugin_name'])
+    else:
+        plugins.append(job_data['plugin'].lower())
+
+    for plugin_name in plugins:
+        worker_name = await get_available_worker(plugin_name)
+        queue = wqm.conf[worker_name]['queue']
+
+        job_result = queue.enqueue_call(
+            run_hunt_conf,
+            args=[job_data, worker_name],
+            job_id=job_data['job_id'],
+            timeout=60*60,
+            result_ttl=60*60*24,
+            #on_success=DOSOMETHING,
+            #on_failure=DOSOMETHINGELSE,
+        )
+
+        job_data['job_result_ids'].append(job_result.id)
+
+    #* Serialize the job_data
+    # job_data = json.dumps(job_data)
+    # _log.debug(f"job_data: {pformat(job_data)}")
+
+    return {"job_ids": job_data['job_result_ids'], "status": "Job submitted"}
+
+
+
+
+
+
+

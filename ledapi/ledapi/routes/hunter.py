@@ -1,12 +1,5 @@
 from datetime import datetime, timedelta, timezone
 from pprint import pformat
-# from ledapi.ledapi import auth
-# from ledapi.ledapi.config import led, _log, tdb
-# import auth
-# from config import led, _log, tdb
-# from ledapi.auth import(
-#     dep_check_user_role,
-# )
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from redis.asyncio.client import Redis
@@ -53,20 +46,6 @@ import time
 import traceback
 
 router = APIRouter()
-
-#@##############################################################################
-#@### Job Queuing
-#@##############################################################################
-'''
-jobs: Dict[str, Dict[str, str]] = {}
-def background_task(job_id: str):
-    time.sleep(15)
-    jobs[job_id]["status"] = "completed"
-    jobs[job_id]["result"] = "Task completed successfully"
-
-# hunts: Dict[str, Dict[str, str]] = {}
-# def background_hunt(job_id: str):
-'''
 
 #@##############################################################################
 #@### HUNTER ENDPOINTS
