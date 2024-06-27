@@ -23,29 +23,18 @@ ENV PYTHONPATH="$PYTHONPATH:/ledhntr/ledapi:/home/leduser/.ledhntr/plugins"
 
 WORKDIR /ledhntr
 
-# Explicitly check out the dev branch - REMOVE THIS BEFORE MERGING WITH MAIN
+# Explicitly check out the dev branch - #! REMOVE THIS BEFORE MERGING WITH MAIN
 RUN git checkout ledapi
 
-# Copy and install dependencies
-# COPY --chown=leduser:leduser requirements.txt .
+# Install requirements
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install requirements
-# RUN pip install --no-cache-dir -r /ledhntr/requirements.txt
-# RUN pip install --no-cache-dir -r /ledhntr/ledhntr/requirements.txt
 # Install LEDHNTR
 RUN pip install --no-cache-dir -e /ledhntr/ledhntr
 
 # Install plugins
 WORKDIR /ledhntr/ledhntr-plugins
 RUN ledhntr install ./typedb_client/
-# RUN set -ex \
-#   && IFS=' ' read -r -a plugins <<< "$PLUGINS" \
-#   && for plugin in "${plugins[@]}"; do \
-#        echo "Installing $plugin"; \
-#        # Replace with actual installation command for the plugin, e.g. pip install
-#        ledhntr install ./$plugin; \
-#      done
 RUN set -ex \
   && plugins=$(echo $PLUGINS | tr " " "\n") \
   && for plugin in $plugins; do \
@@ -60,4 +49,9 @@ COPY --chown=leduser:leduser ledhntr.cfg /home/leduser/.ledhntr/
 WORKDIR /ledhntr/ledapi
 
 # Run the server
-CMD ["uvicorn", "ledapi.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# CMD ["uvicorn", "ledapi.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Using this for dev work #! SWITCH BACK TO ABOVE BEFORE MERGING WITH MAIN
+# @ I just want to leave the container running so I can get colored bash outputs
+# @ in my logs while dev'ing. Normally I won't have bash in this container.
+# @ uvicorn ledapi.main:app --host 0.0.0.0 --port 8000 --reload
+CMD ["tail", "-f", "/dev/null"]
