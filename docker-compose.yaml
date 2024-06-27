@@ -1,21 +1,88 @@
+# services:
+#   ledmgmt:
+#     build:
+#       context: .
+#       dockerfile: ledhntr.Dockerfile
+#     image: ledmgmt
+#     volumes:
+#       - ./ledhntr.cfg:/home/leduser/.ledhntr/ledhntr.cfg
+#     ports:
+#       - '5001:5001'
+#     # user: 'leduser'
+#   typedb:
+#     image: vaticle/typedb:2.21.0
+#     platform: linux/amd64
+#     volumes:
+#       - typedb-data:/opt/typedb-all-linux/server/data/
+#     ports:
+#       - '1729:1729'
+# 
+# volumes:
+#   typedb-data:
+
 services:
-  ledmgmt:
-    build:
-      context: .
-      dockerfile: ledhntr.Dockerfile
-    image: ledmgmt
-    volumes:
-      - ./ledhntr.cfg:/home/leduser/.ledhntr/ledhntr.cfg
-    ports:
-      - '5001:5001'
-    # user: 'leduser'
   typedb:
-    image: vaticle/typedb:2.21.0
+    image: vaticle/typedb:2.28.3
+    container_name: typedb
     platform: linux/amd64
     volumes:
-      - typedb-data:/opt/typedb-all-linux/server/data/
+      - typedb_opt:/opt/
+      - typedb_data:/opt/typedb-all-linux-x86_64/server/data
     ports:
       - '1729:1729'
+    networks:
+      - lednet
+    restart: unless-stopped
+
+  ledapi-redis-stack:
+    image: redis/redis-stack:7.4.0-rc1-x86_64
+    container_name: ledapi-redis-stack
+    platform: linux/amd64
+    volumes:
+      - ledapi_redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - lednet
+    restart: unless-stopped
+
+  ledapi-container:
+    build:
+      context: .
+      dockerfile: ledapi.Dockerfile
+      args:
+        # typedb_client is required by default, but you can list other plugins
+        # you want to install here in a space-delimited manner
+        PLUGINS: "shodan censys"
+    image: ledapi-app
+    container_name: ledapi-container
+    volumes:
+      - ledapi_data:/ledapi
+      - ledapi_ledhntr_data:/home/leduser/.ledhntr
+    ports:
+      - "8000:8000"
+    networks:
+      - lednet
+    restart: unless-stopped
 
 volumes:
-  typedb-data:
+  typedb_opt:
+  typedb_data:
+  ledapi_redis_data:
+  ledapi_data:
+  ledapi_ledhntr_data:
+
+networks:
+  lednet:
+
+
+#   ledmgmt:
+#     build:
+#       context: .
+#       dockerfile: ledhntr.Dockerfile
+#     image: ledmgmt
+#     volumes:
+#       - ./ledhntr.cfg:/home/leduser/.ledhntr/ledhntr.cfg
+#     ports:
+#       - '5001:5001'
+#     # user: 'leduser'
