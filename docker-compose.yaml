@@ -57,7 +57,7 @@ services:
     image: ledapi-app
     container_name: ledapi-container
     volumes:
-      - ledapi_data:/ledapi
+      - ledapi_data:/ledhntr
       - ledapi_ledhntr_data:/home/leduser/.ledhntr
     ports:
       - "8000:8000"

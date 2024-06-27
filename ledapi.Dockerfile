@@ -2,12 +2,15 @@
 FROM python:3.11.9-bullseye
 
 # Get ARGS
-ARGS PLUGINS
+ARG PLUGINS
 
 # Install git
 RUN apt update
 
 RUN useradd --create-home leduser
+
+# Clone ledhntr for install
+RUN git clone https://github.com/TheDr1ver/ledhntr-suite-public.git /ledhntr/
 
 WORKDIR /ledhntr
 
@@ -18,30 +21,35 @@ USER leduser
 ENV PATH="/home/leduser/.local/bin:${PATH}"
 ENV PYTHONPATH="$PYTHONPATH:/ledhntr/ledapi:/home/leduser/.ledhntr/plugins"
 
+WORKDIR /ledhntr
+
+# Explicitly check out the dev branch - REMOVE THIS BEFORE MERGING WITH MAIN
+RUN git checkout ledapi
+
 # Copy and install dependencies
-COPY --chown=leduser:leduser requirements.txt .
+# COPY --chown=leduser:leduser requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Clone ledhntr for install
-RUN git clone https://github.com/TheDr1ver/ledhntr-suite-public.git /ledhntr/
-WORKDIR /ledhntr
-# Change ownership just to be sure
-RUN chown -R leduser:leduser /ledhntr
-# Explicitly check out the dev branch
-RUN git checkout ledapi
 # Install requirements
-RUN pip install --no-cache-dir -r /ledhntr/requirements.txt
-RUN pip install --no-cache-dir -r /ledhntr/ledhntr/requirements.txt
+# RUN pip install --no-cache-dir -r /ledhntr/requirements.txt
+# RUN pip install --no-cache-dir -r /ledhntr/ledhntr/requirements.txt
+# Install LEDHNTR
 RUN pip install --no-cache-dir -e /ledhntr/ledhntr
 
 # Install plugins
 WORKDIR /ledhntr/ledhntr-plugins
 RUN ledhntr install ./typedb_client/
+# RUN set -ex \
+#   && IFS=' ' read -r -a plugins <<< "$PLUGINS" \
+#   && for plugin in "${plugins[@]}"; do \
+#        echo "Installing $plugin"; \
+#        # Replace with actual installation command for the plugin, e.g. pip install
+#        ledhntr install ./$plugin; \
+#      done
 RUN set -ex \
-  && IFS=' ' read -r -a plugins <<< "$PLUGINS" \
-  && for plugin in "${plugins[@]}"; do \
+  && plugins=$(echo $PLUGINS | tr " " "\n") \
+  && for plugin in $plugins; do \
        echo "Installing $plugin"; \
-       # Replace with actual installation command for the plugin, e.g. pip install
        ledhntr install ./$plugin; \
      done
 
