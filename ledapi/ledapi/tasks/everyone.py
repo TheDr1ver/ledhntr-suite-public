@@ -77,6 +77,8 @@ async def list_dbs_task(
     '''
     _log.debug(f"Attempt number 10000...")
     _log.debug(f"session: {plugin.session}") #! There's no session, cool - look into that.
+    plugin.check_session()
+    _log.debug(f"session: {plugin.session}")
     dbs = plugin.get_all_dbs()
 
     for db in dbs:
