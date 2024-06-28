@@ -31,7 +31,11 @@ from typedb.driver import (
     TypeDBDriverException,
     TypeDBDriverExceptionNative,
     # QueryFuture, # Not sure what this maps to yet
-    
+)
+
+from typedb.native_driver_wrapper import(
+    connection_force_close,
+    Connection as NativeConnection,
 )
 
 from typing import (
@@ -194,7 +198,7 @@ class TypeDBClient(ConnectorPlugin):
         """
 
         _log = self.logger
-        # ! 
+        # !
         '''
         map = {
             "match": tx.query.match,
@@ -274,6 +278,10 @@ class TypeDBClient(ConnectorPlugin):
         options.schema_lock_acquire_timeout_millis = schema_lock_acquire_timeout_millis
 
         return options
+
+    def _unset_client(self):
+        self.client = None
+        return True
 
     def _unset_session(self):
         self.session = None
@@ -463,7 +471,7 @@ class TypeDBClient(ConnectorPlugin):
                     # generate and add one!
                     thing.has.append(comboid)
         return thing
-        
+
 
     def add_thing(
         self,
@@ -1307,6 +1315,26 @@ class TypeDBClient(ConnectorPlugin):
             tx = new_tx
         return tx
 
+    def close_client(
+        self,
+        client: Optional[Union[TypeDB.core_driver, TypeDB.cloud_driver]] = None,
+    ):
+        _log = self.logger
+        # // _log.debug(f"Closing client {self.client}")
+        client = client or self.client
+        if client is None:
+            _log.debug(f"No client to close!")
+            return False
+        try:
+            if self.client.is_open():
+                # // _log.debug(f"Client {self.client}, closing down.")
+                connection_force_close(self.client.native_object)
+                if not self.client.is_open():
+                    _log.debug(f"Client {self.client} closed!")
+        except Exception as e:
+            _log.error(f"Error closing client: {e}")
+        return True
+
     def concept_to_thing(
         self,
         concept: object = None,
@@ -1558,7 +1586,7 @@ class TypeDBClient(ConnectorPlugin):
             # Check to see if the domain already exists in our DB
             exists = self.find_things(domain, search_mode='lite')
             if exists:
-                # If the hostname is already a false-postiive, make sure 
+                # If the hostname is already a false-postiive, make sure
                 # the domain is too.
                 domain = exists[0]
                 hostname_con = hostname.get_attributes('confidence', first_only=True)
@@ -1616,11 +1644,48 @@ class TypeDBClient(ConnectorPlugin):
         client_name = name or generic_client_name
         client.name = client_name
         if save_client:
-            if not self.client:
+            _log.debug(f"Saving client to self.client...")
+            #! WARNING - THIS MIGHT JACK STUFF UP
+            if self.client:
+                _log.debug(f"self.client already exists, closing client {self.client}..")
+                #& self.client.close()
+                #& DO IT BETTER
+                if self.client.is_open():
+                    connection_force_close(self.client.native_object)
+                if not self.client.is_open():
+                    _log.debug(f"self.client {self.client} closed!")
+                #~ self.client <typedb.connection.driver._Driver object at 0x7713ad1b08d0> closed!
+                # // _log.debug(f"self.client.is_open(): {self.client.is_open()}")
+                #~ self.client.is_open(): True
+                # _log.debug(f"Unseting self.client: {self._unset_client()}")
+                #~ thread '<unnamed>' panicked at /rustc/79e9716c980570bfd1f666e3b16ac583f0168962/library/std/src/thread/mod.rs:1519:40:
+                #~ called `Option::unwrap()` on a `None` value
+                #~ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+                #~ fatal runtime error: failed to initiate panic, error 5
+                _log.debug(f"old self.client: {self.client}")
+                self.client = client
+                _log.debug(f"new self.client: {self.client}")
+            #! END WARNING
+            # if not self.client:
+            else:
                 self.client = client
         # ! _log.debug(f"Created DB Client {client.name} for {db_server} with {threads} threads!")
         _log.debug(f"Created DB Client {client.name} for {db_server}!")
         # self.client = client # DONT DO THIS - it causes RPC channel errors with LEDMGMT
+        #@ For the next time I find myself here because the TypeDB Client isn't
+        #@ working as expected, for whatever reason once this module is loaded
+        #@ it's locked into some sort of death loop and can't be loaded anywhere else.
+        #@ If you try setting self.client to None it throws that panic message and
+        #@ if you simply try to replace self.client with a new client it freezs.
+        #@
+        #@ To be fair, it might be an issue with the larger LEDHNTR as a whole
+        #@ because when I tested it with a simple test class that only used clients
+        #@ it seemed to work okay.
+        #@
+        #@ In retrospect it's probably because I'm trying to use a TypeDBClient 
+        #@ object spawned in process A via process B.
+        #& TO FIX IT I PROBABLY NEED TO RUN CHECK_CLIENT BEFORE EVERY DB OPERATION
+        #& AND NEED TO REMOVE self.client = create_client() FROM THE INIT!!!
         # return self.client
         return client
 
@@ -1643,18 +1708,35 @@ class TypeDBClient(ConnectorPlugin):
         options: Optional[TypeDBOptions] = None,
     ):
         _log = self.logger
+        '''
+        _log.debug(f"session_type: {session_type}")
+        _log.debug(f"client: {client}")
+        _log.debug(f"db_name: {db_name}")
+        _log.debug(f"save_session: {save_session}")
+        _log.debug(f"options: {options}")
+        '''
         client = client or self.client
-        if not client:
-            client = self.create_client()
-        db_name = db_name or self.db_name
-        session = client.session(db_name, session_type, options)
-        session.on_close(self._unset_session)
-        if save_session:
-            if self.session:
-                if self.session.is_open():
-                    self.session.close()
-            self.session = session
-            self.session_timer = int(datetime.now().timestamp())
+        # _log.debug(f"client: {client}")
+        # _log.debug(f"client open? {client.is_open()}")
+        try:
+            if not client:
+                _log.debug(f"no client found. creating client.")
+                client = self.create_client()
+            db_name = db_name or self.db_name
+            # _log.debug(f"db_name: {db_name}")
+            client: TypeDB.core_driver
+            session = client.session(db_name, session_type, options)
+            _log.debug(f"session: {session}")
+            session.on_close(self._unset_session)
+            if save_session:
+                if self.session:
+                    if self.session.is_open():
+                        self.session.close()
+                self.session = session
+                self.session_timer = int(datetime.now().timestamp())
+        except Exception as e:
+            _log.error(f"Exception creating session: {e}")
+            raise
         return session
 
     def create_transaction(
@@ -1673,42 +1755,61 @@ class TypeDBClient(ConnectorPlugin):
         _log = self.logger
         _log.debug(f"Creating transaction...")
 
-        client = client or self.client
-        if not client:
-            client = self.create_client()
+        try:
+            client = client or self.client
+            if not client:
+                # // _log.debug(f"No client provided, creating new client.")
+                client = self.create_client()
+            # // _log.debug(f"Loaded client: {client}")
 
-        # If a session was not explicitly passed, nuke all possible sessions
-        if not session:
-            session = self.session
-            if session:
-                db_name = db_name or str(session.database_name())
-                session.close()
-                if self.session:
-                    if self.session.is_open():
-                        self.session.close()
-                session = self.create_session(db_name=db_name, options=options)
-            else:
-                session = self.create_session(db_name=db_name, options=options)
+            # If a session was not explicitly passed, nuke all possible sessions
+            if not session:
+                session = self.session
+                if session:
+                    _log.debug(f"Pre-existing session detected: {session}")
+                    # // _log.debug(f"Getting database name...")
+                    db_name = db_name or str(session.database_name())
+                    # // _log.debug(f"db_name: {db_name}")
+                    # // _log.debug(f"Closing session...")
+                    session.close()
+                    if self.session:
+                        # // _log.debug(f"Checking if self.session is open...")
+                        if self.session.is_open():
+                            # // _log.debug(f"self.session is open... closing.")
+                            self.session.close()
+                            # // _log.debug(f"Closed.")
+                    # // _log.debug(f"Creating new session")
+                    session = self.create_session(db_name=db_name, options=options)
+                else:
+                    _log.debug(f"No session set. Creating new session.")
+                    session = self.create_session(db_name=db_name, options=options)
+            # // _log.debug(f"Getting updated session...")
+            updated_session = self.check_session(
+                client=client,
+                session=session,
+                db_name=db_name,
+                save_session=save_tx,
+                options=options
+            )
+            # // _log.debug(f"updated session: {updated_session} getting tx...")
+            tx = updated_session.transaction(tx_type, options)
+            # // _log.debug(f"tx: {tx}")
 
-        updated_session = self.check_session(
-            client=client,
-            session=session,
-            db_name=db_name,
-            save_session=save_tx,
-            options=options
-        )
-        tx = updated_session.transaction(tx_type, options)
+            # Save it for future referencing until timeout or explicitly closed
+            if save_tx:
+                if self.tx:
+                    if self.tx.is_open():
+                        self.tx.close()
+                self.tx = tx
+                self.tx_timer = int(datetime.now().timestamp())
 
-        # Save it for future referencing until timeout or explicitly closed
-        if save_tx:
-            if self.tx:
-                if self.tx.is_open():
-                    self.tx.close()
-            self.tx = tx
-            self.tx_timer = int(datetime.now().timestamp())
-
-        _log.debug(f"Opened {tx_type} with {session.type}!")
-        return tx
+            _log.debug(f"Opened {tx_type} with {session.type}!")
+            return tx
+        except TypeDBException as e:
+            _log.error(f"TypeDBException during transaction creation: {e}")
+            raise
+        except Exception as e:
+            _log.error(f"Other exception during transaction creation: {e}")
 
     def db_query(
         self,
@@ -1926,6 +2027,7 @@ class TypeDBClient(ConnectorPlugin):
         things: Union[List[Thing], Thing] = [],
         db_name: Optional[str] = '',
         limit_get: Optional[bool] = True,
+        comp_mod: Optional[List[Tuple[Attribute, str, Union[float, int, str, datetime]]]] = [],
         or_mod: Optional[Dict] = {},
         sort_mod: Optional[Dict] = {},
         search_mode: Optional[str] = "full",
@@ -1943,6 +2045,12 @@ class TypeDBClient(ConnectorPlugin):
             Required
         :param limit_get: If True, limit the objects returned specifically to the
             object labels requested instead of all variables in the search.
+        :param comp_mod: If set, uses a comparison method when searching for things.
+            An example of it being set would be [('date-seen', '>', '20240608T00:00:00Z')]
+            This would effectively change your down-stream search to something like:
+            match
+                $entity isa entity, has date-seen $date-seen;
+                $date-seen > 20240608T00:00:00Z;
         :param or_mod: If set, generates 'or' text disjunction patterns.
             format: {
                 'label': 'hunt-name',
@@ -2063,6 +2171,7 @@ class TypeDBClient(ConnectorPlugin):
         # Query Things
         _log.debug(f"Searching for things {things}")
         _log.debug(f"limit_get={limit_get}")
+        _log.debug(f"comp_mod: {pformat(comp_mod)}")
         _log.debug(f"or_mod: {pformat(or_mod)}")
         _log.debug(f"sort_mod: {pformat(sort_mod)}")
         final_query = False
@@ -2075,6 +2184,7 @@ class TypeDBClient(ConnectorPlugin):
             query.string = self.get_query_from_thing(
                 thing,
                 limit_get=limit_get,
+                comp_mod=comp_mod,
                 or_mod=or_mod,
                 sort_mod=sort_mod,
             )
@@ -2447,6 +2557,30 @@ class TypeDBClient(ConnectorPlugin):
         tql += ';'
         return tql
 
+    def get_query_comp_mod(
+        self,
+        thing_var: str = '',
+        comp_mod: Optional[List[Tuple[Attribute, str, Union[float, int, str, datetime]]]] = [],
+        thing_counter: Optional[int] = 0,
+    ):
+        _log = self.logger
+        _log.debug(f"Processing comp_mod {comp_mod}")
+        tql = ''
+        if not isinstance(comp_mod, list):
+            comp_mod = [comp_mod]
+        for cm in comp_mod:
+            if not len(cm) == 3:
+                _log.error(
+                    f"comp_mod requires exactly 3 arguments - type, "
+                    f"comparison, and value"
+                )
+                continue
+            tql += f" {thing_var} has {cm[0]} $compmod_{cm[0]}_{thing_counter};"
+            fmt_val = self.format_value_query(cm[2])
+            tql += f" $compmod_{cm[0]}_{thing_counter} {cm[1]} {fmt_val};"
+        return tql
+
+
     def get_query_sort_mod(
         self,
         thing_var: str = '',
@@ -2537,6 +2671,7 @@ class TypeDBClient(ConnectorPlugin):
         thing: Thing=None,
         thing_counter: int = 0,
         limit_get: Optional[bool] = True,
+        comp_mod: Optional[List[Tuple[Attribute, str, Union[float, int, str, datetime]]]] = [],
         or_mod: Optional[Dict] = {},
         sort_mod: Optional[Dict] = {},
     ):
@@ -2550,6 +2685,12 @@ class TypeDBClient(ConnectorPlugin):
         :param limit_get: [DEPRECATED - Latest version of TypeDB REQUIRES a trailing GET]
             Set this to True if you only want to return the top-level
             object you're feeding the query builder.
+        :param comp_mod: If set, uses a comparison method when searching for things.
+            An example of it being set would be [('date-seen', '>', '20240608T00:00:00Z')]
+            This would effectively change your down-stream search to something like:
+            match
+                $entity isa entity, has date-seen $date-seen;
+                $date-seen > 20240608T00:00:00Z;
         :param or_mod: If set, generates 'or' text disjunction patterns.
             format: {
                 'label': 'hunt-name',
@@ -2721,6 +2862,13 @@ class TypeDBClient(ConnectorPlugin):
                 thing_counter=thing.counter,
             )
 
+        if comp_mod:
+            tql += self.get_query_comp_mod(
+                thing_var = thing_var,
+                comp_mod=comp_mod,
+                thing_counter=thing.counter,
+            )
+
         if sort_mod:
             tql += self.get_query_sort_mod(
                 thing_var = thing_var,
@@ -2759,7 +2907,7 @@ class TypeDBClient(ConnectorPlugin):
             label = ent.get_label().name
             ent_keys = ent.get_owns(
                 tx,
-                value_type=None, 
+                value_type=None,
                 annotations={Annotation.key()} # updated v 2.18.0
             )
             key_label = False
