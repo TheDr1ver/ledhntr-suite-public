@@ -26,6 +26,8 @@ from ledapi.models import(
 
 from ledapi.tasks import(
     list_dbs,
+    search,
+    get_news,
 )
 
 from ledhntr.data_classes import Attribute, Entity, Relation, Thing
@@ -150,8 +152,8 @@ async def list_dbs_ep(
 
 #~ Search database
 @router.post("/search")
-async def search(
-    search_obj: SearchObject,
+async def search_ep(
+    search_obj: SearchObject=None,
     user: User = Depends(dep_check_user_role(role_everyone))
 ):
     """search database
@@ -183,109 +185,20 @@ async def search(
     :return: Returns JSON serialized objects from the database
     :rtype: List[Dict]
     """
-    # TODO - Move this to Tasks.py. If Result not returned in 2 seconds, return job_id
-    tdb = get_tdb()
-    if search_obj.ttype == 'entity': # * If we want to return all entities...
-        # * and our search label is a known entity...
-        if search_obj.label in led.all_labels['entity']:
-            # * start with an Entity object with that label
-            so = Entity(label=search_obj.label)
-            # * if we also passed a value
-            if search_obj.value:
-                # * values only belong to Attributes, so we add a generic attribute
-                # * with that value.
-                so.has.append(Attribute(label='attribute', value=search_obj.value))
-        # * if our search label is not a known entity, but is instead an Attribute...
-        elif search_obj.label in led.all_labels['attribute']:
-            # * ...and we have a value passed...
-            if search_obj.value:
-                # * ...create a specific attribute + value
-                attr = Attribute(label=search_obj.label, value=search_obj.value)
-            # * ...otherwise just use the Attribute label...
-            else:
-                attr = Attribute(label=search_obj.label)
-            # * ...and attach it to a generic entity to get all entites with that attribute
-            so = Entity(label='entity', has=[attr])
-        # * What if we want to get all entities belonging to a Relation?
-        # * I'm not sure how I'd handle that just yet...
-        # * I think it would either be Entity.relations or Entity.plays
-        # * But I'm also trying to avoid Relations at this stage, so I'm not
-        # * worried about it right now
-        # elif search_obj.label in led.all_labels['relation']:
-        #     so = Relation(label=search_obj.label)
-        #     if search_obj.value:
-        #         so.has[Attribute(label='attribute', value=search_obj.value)]
-    elif search_obj.ttype == 'relation': # * If we want to return all relations...
-        # * and our search label is a known relation...
-        if search_obj.label in led.all_labels['relation']:
-            #* start with a Relation object with that label
-            so = Relation(label=search_obj.label)
-            # * if we also passed a value
-            if search_obj.value:
-                # * values only belong to Attributes, so we add a generic attribute
-                # * with that value
-                so.has.append(Attribute(label='attribute', value=search_obj.value))
-        # * if our search label is not a known Relation, but is instead an Attribute...
-        elif search_obj.label in led.all_labels['attribute']:
-            # * ...and we have a value passed...
-            if search_obj.value:
-                # * ...create a specific attribute + value
-                attr = Attribute(label=search_obj.label, value=search_obj.value)
-            # * ...otherwise just use the Attribute label...
-            else:
-                attr = Attribute(label=search_obj.label)
-            # * ...and attach it to a generic Relation to get all Relations with that Attribute
-            so = Relation(label='relation', has=[attr])
-        # * there's probably a better way to let us search for Relations with specific
-        # * players belonging to Entity labels, or Relations with Player Entities that
-        # * own a specific Attribute, but again - I'm trying to avoid Relations in this
-        # * model, and don't want to waste too much time searching Relations when all
-        # * of this will inevitably have to be changed in TypeDB 3.0 anyway...
 
-    if search_obj.db_name:
-        tdb.db_name = search_obj.db_name
-    elif user.db_name and user.db_name!="all":
-        tdb.db_name = user.db_name
-        search_obj.db_name = user.db_name
-    else:
-        search_obj.db_name = tdb.db_name
+    _log.debug(f"Searching for {search_obj}")
+    # msg_400 = f"No results found" #; this isn't exactly "Bad request"
+    msg_500 = f"Error fetching databases"
 
-    results = {
-        'results': [],
-        'message': None,
-        'status_code': None,
-        'count': 0,
-    }
+    response = await handle_response(
+        search,
+        None,
+        msg_500,
+        search_obj,
+        user,
+    )
 
-    things = result_error_catching(tdb.find_things, f"Error searching for {so}", so)
-    if not things:
-        return results
-    '''
-    try:
-        things = tdb.find_things(so)
-    except Exception as e:
-        _log.error(e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error searching for {so}: \n\t{e}"
-        )
-    '''
-    for thing in things:
-        if search_obj.new_days_back:
-            # * If we're focusing on only new stuff, make sure we grab
-            # * the things with the date-discovered within our threshold
-            min_date = datetime.now(timezone.utc) - timedelta(days=search_obj.new_days_back)
-            dd_attr = thing.get_attributes(label='date-discovered')[0]
-            if isinstance(dd_attr.value, datetime) and dd_attr.value >= min_date:
-                results['results'].append(thing.to_dict())
-        else:
-            results['results'].append(thing.to_dict())
-    results['message'] = f"Search object: {search_obj}"
-    results['status_code'] = status.HTTP_200_OK
-    results['count'] = len(results['results'])
-    if tdb.session and tdb.session.is_open():
-        tdb.session.close()
-    return results
+    return response
 
 #~ Get News
 @router.get("/news")
@@ -295,72 +208,16 @@ async def news_ep(
 ):
     """Get the new stuff. Optionally specify days_back if you want something older than 24 hrs
     """
-    # TODO - Move this to Tasks.py. If Result not returned in 2 seconds, return job_id
-    results = {
-        'results': {},
-        'message': None,
-        'status_code': None,
-        'count': {},
-    }
+    _log.debug(f"Getting things newer than {days_back} days...")
+    # msg_400 = f"No results found" #; this isn't exactly "Bad request"
+    msg_500 = f"Error fetching databases"
 
-    async def news_loop(
-        days_back: int = 1,
-        so: Thing = None,
-        results: Dict = {},
-    ):
-        min_date = datetime.now(timezone.utc) - timedelta(days=days_back)
+    response = await handle_response(
+        get_news,
+        None,
+        msg_500,
+        days_back,
+        user,
+    )
 
-        tdb = get_tdb()
-        all_dbs = []
-        dbs = result_error_catching(tdb.get_all_dbs, "Failed to fetch databases") #! Change to handle_response()
-        for db in dbs:
-            all_dbs.append(str(db))
-        for db_name in all_dbs:
-            if db_name not in results['results']:
-                results['results'][db_name] = {}
-            tdb.db_name = db_name
-            rez = []
-            # ent_so = Entity(label='entity')
-            things = result_error_catching( #! Change to handle_response()
-                tdb.find_things,
-                f"Error searching for {so}",
-                so
-            )
-            for thing in things:
-                dd_attr = thing.get_attributes(label='date-discovered')[0]
-                if isinstance(dd_attr.value, datetime) and dd_attr.value >= min_date:
-                    simple_attrs = {}
-                    skip_me = ['date-seen', 'ledid']
-                    for attr in thing.has:
-                        if attr.label in skip_me:
-                            continue
-                        # y = {attr.label: attr.value}
-                        # simple_attrs.append(y)
-                        if attr.label not in simple_attrs:
-                            simple_attrs[attr.label] = [attr.value]
-                        else:
-                            simple_attrs[attr.label].append(attr.value)
-                    x = {'label': thing.label, 'value': thing.keyval, 'attrs':simple_attrs}
-                    rez.append(x)
-            for ent in rez:
-                if ent['label'] not in results['results'][db_name]:
-                    results['results'][db_name][ent['label']] = [{ent['value']: ent['attrs']}]
-                else:
-                    results['results'][db_name][ent['label']].append({ent['value']: ent['attrs']})
-
-        return results
-
-
-    so = Entity(label='entity')
-    results = await news_loop(days_back, so, results)
-    so = Relation(label='relation')
-    results = await news_loop(days_back, so, results)
-    results['status_code'] = status.HTTP_200_OK
-    for db_name, labels in results['results'].items():
-        for label, vals in labels.items():
-            if label not in results['count']:
-                results['count'][label]=len(vals)
-            else:
-                results['count'][label]+=len(vals)
-
-    return results
+    return response

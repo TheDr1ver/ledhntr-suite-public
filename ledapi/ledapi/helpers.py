@@ -53,12 +53,13 @@ async def handle_response(
         )
 
     if not rez:
-        _log.error(message_400)
-        _log.error(f"Traceback: \n{traceback.format_exc()}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=message_400,
-        )
+        if message_400 is not None:
+            _log.error(message_400)
+            _log.error(f"Traceback: \n{traceback.format_exc()}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=message_400,
+            )
     response = {
         'message': rez,
         'status_code': status.HTTP_200_OK
@@ -91,14 +92,13 @@ async def two_sec_grace(
     last_job: Job
     last_job = queue.fetch_job(job_id)
 
-    count=0
     if not last_job.is_finished:
         _log.debug(f"Waiting 2 seconds for {last_job.id} to finish...")
         # for _ in range(4):
         for _ in range(10):
             if not last_job.is_finished:
                 await asyncio.sleep(0.5)
-                _log.debug(f"...still waiting...")
+                _log.debug(f"...still waiting... {0.5*_} seconds passed")
             else:
                 break
 

@@ -23,7 +23,9 @@ BOLD_RED = "\033[1;31m"
 #@##############################################################################
 # Load LEDHNTR
 led = LEDHNTR()
-def get_tdb():
+def get_tdb(
+    old_plugin: Optional[object] = None,
+):
     #~ NOTE - I'm not sure if creating a bunch of database connections is a good idea,
     #~ but I think it's worse if we try reusing the same one for all operations/jobs
     '''
@@ -33,6 +35,24 @@ def get_tdb():
         tdb = led.load_plugin('typedb_client')
     '''
     tdb = led.load_plugin('typedb_client', duplicate=True)
+    ignore_attrs = [
+        'client',
+        'session',
+        'generic_client_counter',
+        'log',
+        'logger',
+        'session',
+        'session_timer',
+        'tx',
+        'tx_timer'
+    ]
+    if old_plugin:
+        for k, v in vars(old_plugin).items():
+            if k in ignore_attrs:
+                continue
+            setattr(tdb, k, v)
+        if old_plugin.client and old_plugin.client.is_open():
+            old_plugin.close_client()
     return tdb
 
 _log = led.logger
@@ -177,6 +197,7 @@ class WorkersQueueManager(object):
             self.conf[worker_name]['_plugin_class'] = led_plugin_list[details['_plugin_name']]['classes'][0]
             if self.conf[worker_name]['_plugin_class'] == 'HNTR':
                 plugin._load_api_configs()
+
             self.conf[worker_name]['_plugin'] = plugin
 
     async def test_confs(

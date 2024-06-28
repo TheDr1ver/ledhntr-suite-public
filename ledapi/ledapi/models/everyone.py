@@ -22,6 +22,7 @@ class SearchObject(BaseModel):
     new_days_back: Optional[int] = None
     ttype: Optional[str] = None
     value: Optional[str] = None
+    verbose: Optional[bool] = False
 
     #* Make sure we have at least one value or label
     @model_validator(mode="before")
@@ -63,6 +64,7 @@ class SearchObject(BaseModel):
         tdb = get_tdb()
         if db_name:
             all_dbs = tdb.get_all_dbs(readable=True)
+            tdb.close_client()
             if db_name not in all_dbs:
                 raise ValueError(f"Database {db_name} does not exist!")
         return values

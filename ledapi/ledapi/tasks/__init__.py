@@ -5,4 +5,6 @@ from .hunter import (
 
 from .everyone import(
     list_dbs,
+    search,
+    get_news,
 )

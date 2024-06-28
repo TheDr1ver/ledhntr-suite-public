@@ -75,11 +75,11 @@ async def find_active_hunts_task(
                         active_hunts[endpoint]=[hunt]
         else:
             active_hunts = all_active_hunts
-        if tdb.session and tdb.session.is_open():
-            tdb.session.close()
+        tdb.close_client()
     except Exception as e:
         _log.error(f"Failed finding hunts: {e}")
         _log.error(f"Traceback: {traceback.format_exc()}")
+        tdb.close_client()
         raise Exception
     return active_hunts
 
@@ -155,8 +155,7 @@ async def add_hunt_results_task(
         msg = f"Error adding hunt results: {e}"
         _log.error(msg)
         _log.error(f"Traceback: {traceback.format_exc()}")
-    if tdb.session and tdb.session.is_open():
-        tdb.session.close()
+    tdb.close_client()
     return msg
 
 #TODO RUN HUNT JOB6 - RUN ENRICHMENTS - DEPENDS ON JOB5 SUCCESS
@@ -187,8 +186,7 @@ async def run_hunt_conf(
         dbs = result_error_catching(tdb.get_all_dbs, "Failed to fetch databases") #! Change to handle_response()
         for db in dbs:
             all_dbs.append(str(db))
-        if tdb.session and tdb.session.is_open():
-            tdb.session.close()
+        tdb.close_client()
     else:
         all_dbs.append(job_data['db_name'])
 
@@ -219,11 +217,6 @@ async def run_hunt_conf(
         hunt_db_job: Job
         hunt_summary[db_name] = {}
         hunt_summary[db_name]['job_id'] = hunt_db_job.id
-
-    #~ Close the TDB session so it's not left hanging
-    if tdb.session and tdb.session.is_open():
-        _log.debug(f"Closing tdb session.")
-        tdb.session.close()
 
     return hunt_summary
 
@@ -360,6 +353,7 @@ async def get_hunts(
         tdb.db_name = db
         so = Entity(label='hunt', has=[Attribute(label='hunt-active', value=True)])
         res = result_error_catching(tdb.find_things, f"Failed searching for {so}", so) #! Change to handle_response()
+        tdb.close_client()
         if not res:
             _log.debug(f"No results for {so} in {tdb.db_name}")
             continue

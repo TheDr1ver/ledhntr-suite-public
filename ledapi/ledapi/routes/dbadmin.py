@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from importlib.resources import files
 # from ledapi.ledapi import auth
 # from ledapi.ledapi.config import led, _log, tdb
 # import auth
@@ -48,15 +49,19 @@ async def add_db(
         _log.error(msg)
     if msg:
         response = {'message': msg}
+        tdb.close_client()
         return response
     try:
         tdb.create_db(dbadmin_model.db_name)
+        SCHEMA = str(files('ledhntr').joinpath('schemas/schema.tql'))
+        tdb.write_tql_file(file=SCHEMA)
         msg = f"Successfully created {dbadmin_model.db_name}!"
     except Exception as e:
         msg = f"Failed creating {dbadmin_model.db_name}: {e}"
         _log.error(msg)
     if msg:
         response = {'message': msg}
+        tdb.close_client()
         return response
 
 @router.post("/delete-db")
@@ -72,4 +77,5 @@ async def delete_db(
         msg = f"Failed deleting {dbadmin_model.db_name}: {e}"
         _log.error(msg)
     response = {'message': msg}
+    tdb.close_client()
     return response

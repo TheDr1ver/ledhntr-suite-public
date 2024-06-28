@@ -99,6 +99,7 @@ class HuntSubmission(BaseModel):
         tdb = get_tdb()
         if db_name:
             all_dbs = tdb.get_all_dbs(readable=True)
+            tdb.close_client()
             if db_name not in all_dbs:
                 raise ValueError(f"Database {db_name} does not exist!")
         else:
@@ -116,19 +117,10 @@ class HuntSubmission(BaseModel):
         tdb = get_tdb()
         tdb.db_name = db_name
         so = Entity(label='hunt', has=[Attribute(label='hunt-name', value=hunt_name)])
-        try:
-            rez = tdb.find_things(so, search_mode='lite')
-        except Exception as e:
-            _log.error(f"Failed searching for {so} in {db_name}: {e}")
-            if tdb.session.is_open():
-                tdb.session.close()
-            raise
+        rez = tdb.find_things(so, search_mode='lite')
+        tdb.close_client()
         if rez:
-            if tdb.session.is_open():
-                tdb.session.close()
             raise ValueError(f"Database {db_name} already has a hunt named {hunt_name}")
-        if tdb.session.is_open():
-            tdb.session.close()
         return values
 
     #~Validate hunt query
@@ -140,5 +132,10 @@ class HuntSubmission(BaseModel):
         tdb = get_tdb()
         tdb.db_name = db_name
         so = Entity(label='hunt', has=[Attribute(label='hunt-string', value=query)])
+        rez = tdb.find_things(so, search_mode='lite')
+        tdb.close_client()
+        if rez:
+            raise ValueError(f"Database {db_name} already has a hunt with search value {query}")
+        return values
 
 
