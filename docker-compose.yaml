@@ -59,7 +59,7 @@ services:
     container_name: cloudflared
     command: tunnel --no-autoupdate run
     environment:
-      - TUNNEL_TOKEN=<your_cloudflare_tunnel_token>
+      - TUNNEL_TOKEN=ASFASFASFASF
     networks:
       - led_dmz
 
