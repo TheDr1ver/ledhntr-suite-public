@@ -52,9 +52,6 @@ services:
       - ./certbot/www:/var/www/certbot
       - ./certbot/conf:/etc/letsencrypt
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
-    ports:
-      - "80:80"
-      - "443:443"
     networks:
       - led_dmz
 

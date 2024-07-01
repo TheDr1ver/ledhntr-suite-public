@@ -170,3 +170,6 @@ logs/
 
 # Databases
 *.db
+
+# Certbot
+certbot/
