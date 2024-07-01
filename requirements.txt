@@ -3,6 +3,7 @@ uvicorn[standard]
 databases[sqlite]
 redis[asyncio]
 rq
+# rq-scheduler
 psutil
 python-dateutil
 requests

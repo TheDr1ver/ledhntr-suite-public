@@ -159,6 +159,16 @@ class WorkersQueueManager(object):
         for key in conf['ledapi.workers']:
             plugin_name = key.split('.')[0]
             if plugin_name not in led.list_plugins().keys():
+                if plugin_name == "maintenance":
+                    worker_id = key.split('.')[1]
+                    worker_name = f"{plugin_name}.{worker_id}"
+                    self.conf[worker_name] = {
+                        '_plugin_name': plugin_name,
+                        '_plugin_class': 'maintenance',
+                        '_plugin': None,
+                        'settings': {},
+                    }
+                    continue
                 _log.debug(f"{plugin_name} is not a valid plugin")
                 continue
             worker_name = f"{key.split('.')[0]}.{key.split('.')[1]}"
@@ -183,22 +193,23 @@ class WorkersQueueManager(object):
         safe_dict = copy.deepcopy(self.conf)
         for worker_name, details in safe_dict.items():
             # self.conf[worker_name]['_plugin'] = led.load_plugin(details['_plugin_name'], duplicate=True)
-            plugin = led.load_plugin(details['_plugin_name'], duplicate=True)
-            for k, v in details['settings'].items():
-                if not hasattr(plugin, k):
-                    _log.debug(f"plugin {plugin} has no attribute {k}")
-                    continue
-                #! FFS STOP DOING THIS!!! plugin.k = v
-                setattr(plugin, k, v)
-                # // _log.debug(f"Set {worker_name} {plugin}.{k} to {v}")
-                # // _log.debug(f"{RED}CONFIRMED{RESET}: k: {k} v: {plugin.k}")
-            #* Reload API Configs
-            led_plugin_list = led.list_plugins()
-            self.conf[worker_name]['_plugin_class'] = led_plugin_list[details['_plugin_name']]['classes'][0]
-            if self.conf[worker_name]['_plugin_class'] == 'HNTR':
-                plugin._load_api_configs()
+            if not '_plugin' in details: #; we explicitly set _plugin = None for maintenance
+                plugin = led.load_plugin(details['_plugin_name'], duplicate=True)
+                for k, v in details['settings'].items():
+                    if not hasattr(plugin, k):
+                        _log.debug(f"plugin {plugin} has no attribute {k}")
+                        continue
+                    #! FFS STOP DOING THIS!!! plugin.k = v
+                    setattr(plugin, k, v)
+                    # // _log.debug(f"Set {worker_name} {plugin}.{k} to {v}")
+                    # // _log.debug(f"{RED}CONFIRMED{RESET}: k: {k} v: {plugin.k}")
+                #* Reload API Configs
+                led_plugin_list = led.list_plugins()
+                self.conf[worker_name]['_plugin_class'] = led_plugin_list[details['_plugin_name']]['classes'][0]
+                if self.conf[worker_name]['_plugin_class'] == 'HNTR':
+                    plugin._load_api_configs()
 
-            self.conf[worker_name]['_plugin'] = plugin
+                self.conf[worker_name]['_plugin'] = plugin
 
     async def test_confs(
         self,

@@ -4,7 +4,8 @@ from ledhntr.data_classes import Attribute, Entity, Relation
 from ledapi.config import(
     led,
     _log,
-    get_tdb
+    get_tdb,
+    wqm,
 )
 from ledapi.models import(
     APIKeyCreate,
@@ -19,14 +20,22 @@ from ledapi.user import(
     get_user_by_api_key,
 )
 from ledapi.worker_manager import(
-    cleanup_jobs,
     get_all_workers,
+    get_available_worker,
     get_worker_status,
     restart_all_workers,
     start_all_workers,
     start_worker,
     stop_all_workers,
     stop_worker,
+)
+
+from ledapi.helpers import (
+    handle_response,
+)
+
+from ledapi.tasks import(
+    clean_queues,
 )
 
 
@@ -140,10 +149,19 @@ async def restart_all_workers_ep(
 
 @router.get("/clean-queues")
 async def clean_queues_ep(
-    verified: bool = Depends(dep_check_user_role(role_admin)),
+    user: User = Depends(dep_check_user_role(role_admin)),
+    hours: int = Query(24, description="Number of hours back to clear jobs"),
 ):
-    response = await cleanup_jobs()
-    return {
-        "message": response,
-        "status": status.HTTP_200_OK
-    }
+    _log.debug(f"Cleaning queues from last {hours} hours")
+    # msg_400 = f"No results found" #; this isn't exactly "Bad request"
+    msg_500 = f"Error cleaning queues"
+
+    response = await handle_response(
+        clean_queues,
+        None,
+        msg_500,
+        hours,
+        user,
+    )
+
+    return response

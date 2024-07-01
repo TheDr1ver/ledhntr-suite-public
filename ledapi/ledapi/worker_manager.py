@@ -9,12 +9,20 @@ import psutil
 import redis as syncredis
 from redis.asyncio.client import Redis
 from rq import Queue, Worker, Connection
+from rq.job import Job
 from rq.registry import (
     FailedJobRegistry,
     FinishedJobRegistry,
     ScheduledJobRegistry,
     StartedJobRegistry,
     DeferredJobRegistry,
+)
+# from rq_scheduler import Scheduler
+from typing import(
+    Dict,
+    List,
+    Optional,
+    Union,
 )
 
 from ledapi.config import(
@@ -247,12 +255,14 @@ async def get_all_workers(with_jobs: bool = False):
             fin_registry = FinishedJobRegistry(queue.name, connection=redis_manager.syncredis)
             sched_registry = ScheduledJobRegistry(queue.name, connection=redis_manager.syncredis)
             start_registry = StartedJobRegistry(queue.name, connection=redis_manager.syncredis)
+            deferred_registry = DeferredJobRegistry(queue.name, connection=redis_manager.syncredis)
 
             job_ids += failed_registry.get_job_ids()
             job_ids += fin_registry.get_job_ids()
             job_ids += sched_registry.get_job_ids()
             # job_ids = sched_registry.get_job_ids()
             job_ids += start_registry.get_job_ids()
+            job_ids += deferred_registry.get_job_ids()
 
         for worker in Worker.all(queue=queue, connection=redis_manager.syncredis):
             if worker.name != worker_name:
@@ -328,27 +338,3 @@ async def poll_job(job_id):
                     return job_details
     _log.debug(f"No job details found for: {job_id}")
     return False
-
-async def cleanup_jobs():
-    # TODO - I don't think this actually is working as intended.
-    # await wqm.check_queues()
-    await wqm.check_config()
-    await redis_manager.check_redis_conn()
-    queues = []
-    # for queue_name, queue in wqm.queues.items():
-    for worker_name, details in wqm.conf.items():
-        queue = details['queue']
-        queue_name = details['queue'].name
-        fin_reg = FinishedJobRegistry(queue_name, connection=redis_manager.syncredis)
-        fail_reg = FailedJobRegistry(queue_name, connection=redis_manager.syncredis)
-
-        # Delete jobs older than 24 hrs
-        now = int(datetime.now(timezone.utc).timestamp())
-        yesterday = now-60*60*24
-        # fin_reg.cleanup(timestamp=yesterday)
-        # fail_reg.cleanup(timestamp=yesterday)
-        fin_reg.cleanup()
-        fail_reg.cleanup()
-        queues.append(queue_name)
-
-    return f"Cleaned finished and failed registries for {queues} that were older than 24 hrs."

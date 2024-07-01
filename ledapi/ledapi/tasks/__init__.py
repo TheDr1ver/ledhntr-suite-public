@@ -8,3 +8,7 @@ from .everyone import(
     search,
     get_news,
 )
+
+from .maintenance import(
+    clean_queues,
+)
