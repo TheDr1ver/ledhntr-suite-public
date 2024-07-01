@@ -52,12 +52,22 @@ services:
       - ./certbot/www:/var/www/certbot
       - ./certbot/conf:/etc/letsencrypt
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      -led_dmz
 
   nginx:
     image: nginx:latest
     container_name: led-nginx-proxy
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./certbot/www:/var/www/certbot
+      - ./certbot/conf:/etc/letsencrypt
+    ports:
+      - "80:80"
+      - "443:443"
     networks:
       - led_dmz
       - led_apinet
@@ -68,6 +78,8 @@ services:
     command: tunnel --no-autoupdate run
     environment:
       - TUNNEL_TOKEN=<your_cloudflare_tunnel_token>
+    volumes:
+      - ./cloudflared_config.yml:/etc/cloudflared/config.yml
     networks:
       - led_dmz
 
