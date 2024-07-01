@@ -27,7 +27,7 @@ from ledapi.models.user import(
 #@### Define Access Token/API Key Header
 #@##############################################################################
 
-API_KEY_NAME = "access_token"
+API_KEY_NAME = "access-token"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 #@##############################################################################

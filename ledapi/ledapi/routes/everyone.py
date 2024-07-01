@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from pprint import pformat
 from typing import Optional, Dict, List
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Query, Request
 
 from ledapi.user import(
     User,
@@ -125,6 +125,16 @@ async def get_db(
 #~##########################
 #~ Task Functions
 #~##########################
+
+@router.get("/debug")
+async def debug_ep(
+    request: Request
+):
+    headers = request.headers
+    _log.info(f"Headers: {headers}")
+    # return await request.json()
+    return headers
+
 
 #~ List Databases
 @router.get("/list-dbs")
