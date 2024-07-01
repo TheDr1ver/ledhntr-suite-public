@@ -75,8 +75,6 @@ services:
     command: tunnel --no-autoupdate run
     environment:
       - TUNNEL_TOKEN=<your_cloudflare_tunnel_token>
-    volumes:
-      - ./cloudflared_config.yml:/etc/cloudflared/config.yml
     networks:
       - led_dmz
 

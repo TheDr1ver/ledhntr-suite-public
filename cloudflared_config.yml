@@ -1,6 +1,0 @@
-tunnel: ledapi-01
-ingress:
-  - hostname: mojo.drvr.dev
-  # - service: http://led-nginx-proxy:80
-  - service: http://certbot:80
-  - service: http_status:404
