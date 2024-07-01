@@ -56,7 +56,7 @@ services:
       - "80:80"
       - "443:443"
     networks:
-      -led_dmz
+      - led_dmz
 
   nginx:
     image: nginx:latest
