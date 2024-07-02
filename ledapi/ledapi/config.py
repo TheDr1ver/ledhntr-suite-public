@@ -125,7 +125,7 @@ redis_manager = RedisManager(redis_url=redis_url)
 #@##############################################################################
 #@ WORKER MANAGEMENT
 #@##############################################################################
-
+no_plugin_workers = ["maintenance", "slackbot"] # neither of these have LEDHNTR Plugins
 class WorkersQueueManager(object):
     def __init__(self):
         self.conf = None
@@ -159,12 +159,13 @@ class WorkersQueueManager(object):
         for key in conf['ledapi.workers']:
             plugin_name = key.split('.')[0]
             if plugin_name not in led.list_plugins().keys():
-                if plugin_name == "maintenance":
+                # Don't load plugin for generic workers that don't have an LEDHNTR Plugin
+                if plugin_name in no_plugin_workers:
                     worker_id = key.split('.')[1]
                     worker_name = f"{plugin_name}.{worker_id}"
                     self.conf[worker_name] = {
                         '_plugin_name': plugin_name,
-                        '_plugin_class': 'maintenance',
+                        '_plugin_class': plugin_name,
                         '_plugin': None,
                         'settings': {},
                     }

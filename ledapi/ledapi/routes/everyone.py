@@ -131,9 +131,24 @@ async def debug_ep(
     request: Request
 ):
     headers = request.headers
-    _log.info(f"Headers: {headers}")
+    _log.info(f"Headers: \n{pformat(headers)}")
     # return await request.json()
     return headers
+
+@router.post("/debug")
+async def debug_post_ep(
+    request: Request,
+):
+    resp = {'headers': None, 'body': None}
+    resp['headers'] = {key: val for  key, val in request.headers.items()}
+    # _log.info(f"Headers: \n{pformat(headers)}")
+    resp['body'] = await request.body()
+    resp['body'] = resp['body'].decode('utf-8')
+    # resp['body'] = request.json()
+    # _log.info(f"Body: {pformat(await request.json())}")
+    _log.info(pformat(resp))
+    # return await request.json()
+    return resp
 
 
 #~ List Databases

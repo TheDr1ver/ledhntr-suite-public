@@ -96,17 +96,19 @@ async def two_sec_grace(
         _log.debug(f"Waiting 2 seconds for {last_job.id} to finish...")
         # for _ in range(4):
         for _ in range(10):
-            if not last_job.is_finished:
+            if not (last_job.is_finished or last_job.is_failed or last_job.is_canceled):
                 await asyncio.sleep(0.5)
                 _log.debug(f"...still waiting... {0.5*_} seconds passed")
             else:
                 break
 
-    if not last_job.is_finished:
+    if last_job.is_failed:
+        result['result']=last_job.exc_info
+
+    elif not (last_job.is_finished or last_job.is_failed or last_job.is_canceled):
         _log.debug(f"Job still not finished, returning job_id.")
         status = last_job.get_status()
         result['result'] = status
-    else:
-        result['result'] = last_job.result
 
+    _log.debug(f"Wait result: {result}")
     return result

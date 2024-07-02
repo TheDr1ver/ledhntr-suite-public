@@ -1,8 +1,9 @@
+import json
 import pickle
 import secrets
 import time
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security.api_key import APIKeyHeader
 
 from pprint import pformat
@@ -113,13 +114,17 @@ class User:
         await redis_pool.hset(self._redis_key, mapping=self.redisify())
         #; Save additional index entries for other retrieval options
         if self.user_id:
-            await redis_pool.set(f"index:user_id:{self.user_id}", self.uuid)
+            x = await redis_pool.set(f"index:user_id:{self.user_id}", self.uuid)
+            _log.debug(f"Saved user_id: {self.user_id}: {x}")
         if self.api_key:
-            await redis_pool.set(f"index:api_key:{self.api_key}", self.uuid)
+            x = await redis_pool.set(f"index:api_key:{self.api_key}", self.uuid)
+            _log.debug(f"Saved api_key: {self.api_key} : {x}")
         if self.slack_id:
-            await redis_pool.set(f"index:slack_id:{self.slack_id}", self.uuid)
+            x = await redis_pool.set(f"index:slack_id:{self.slack_id}", self.uuid)
+            _log.debug(f"Saved slack_id: {self.slack_id} : {x}")
         if self.keybase_id:
-            await redis_pool.set(f"index:keybase_id:{self.keybase_id}", self.uuid)
+            x = await redis_pool.set(f"index:keybase_id:{self.keybase_id}", self.uuid)
+            _log.debug(f"Saved keybase_id: {self.keybase_id} : {x}")
 
     @staticmethod
     async def unredis(
@@ -235,6 +240,34 @@ class User:
         return new_user
 
     @staticmethod
+    async def clean_index(
+        redis_pool: Redis = None,
+        pattern: str = None,
+        old_uuid: str = None,
+    ):
+        cursor = '0'
+        keys = []
+        nuked = []
+
+        while cursor != 0:
+            cursor, keys = await redis_pool.scan(cursor=cursor, match=pattern)
+            for key in keys:
+                try:
+                    this_uuid = await redis_pool.get(key)
+                    this_uuid = this_uuid.decode('utf-8')
+                    _log.debug(f"Found uuid: {this_uuid}")
+                    if this_uuid == old_uuid:
+                        _log.debug(f"Found matching uuid: {this_uuid}=={old_uuid}")
+                        value = await redis_pool.delete(key)
+                        nuked.append(key)
+                except Exception as e:
+                    _log.error(f"Failed getting {key}")
+                    continue
+        _log.debug(f"Cleaned {len(nuked)} keys.")
+        return True
+
+
+    @staticmethod
     async def update_user(
         user: UserModel = None,
     ):
@@ -267,13 +300,21 @@ class User:
                     _log.debug(f"Updating {attr_name} to {attr_value}")
                     #; remove existing index
                     val = getattr(existing, attr_name, None)
+                    _log.debug(f"Existing {attr_name} is {val}")
                     if val is not None:
-                        await redis_pool.delete(f"index:{attr_name}:{val}")
+                        if not isinstance(val, str):
+                            val = val.decode('utf-8')
+                        _log.debug(f"Deleting index:{attr_name}:* == {existing.uuid}")
+                        # ! await redis_pool.delete(f"index:{attr_name}:{val}")
+                        pattern = f"index:{attr_name}:*"
+                        await User.clean_index(redis_pool, pattern, existing.uuid)
                     #; Update attribute
                     # existing.attr_name = attr_value
                     setattr(existing, attr_name, attr_value)
                     #; update index
-                    await redis_pool.set(f"index:{attr_name}:{attr_value}", existing.uuid)
+                    _log.debug(f"Setting new index-> index:{attr_name}:{attr_value} == {existing.uuid}")
+                    x = await redis_pool.set(f"index:{attr_name}:{attr_value}", existing.uuid)
+                    _log.debug(f"response: {x}")
         #; Save updated object
         _log.debug(f"Saving updated user: {existing.to_dict()}")
         # Serialize
@@ -292,13 +333,33 @@ class User:
         redis_pool: Redis = redis_manager.redis
         #; Delete reference indexes
         if existing.user_id:
-            await redis_pool.delete(f"index:user_id:{existing.user_id}")
+            this_key = f"index:user_id:{existing.user_id}"
+            this_uuid = await redis_pool.get(this_key)
+            if this_uuid:
+                this_uuid = this_uuid.decode('utf-8')
+                if this_uuid == existing.uuid:
+                    await redis_pool.delete(this_key)
         if existing.api_key:
-            await redis_pool.delete(f"index:api_key:{existing.api_key}")
+            this_key = f"index:api_key:{existing.api_key}"
+            this_uuid = await redis_pool.get(this_key)
+            if this_uuid:
+                this_uuid = this_uuid.decode('utf-8')
+                if this_uuid == existing.uuid:
+                    await redis_pool.delete(this_key)
         if existing.slack_id:
-            await redis_pool.delete(f"index:slack_id:{existing.slack_id}")
+            this_key = f"index:slack_id:{existing.slack_id}"
+            this_uuid = await redis_pool.get(this_key)
+            if this_uuid:
+                this_uuid = this_uuid.decode('utf-8')
+                if this_uuid == existing.uuid:
+                    await redis_pool.delete(this_key)
         if existing.keybase_id:
-            await redis_pool.delete(f"index:keybase_id:{existing.keybase_id}")
+            this_key = f"index:keybase_id:{existing.keybase_id}"
+            this_uuid = await redis_pool.get(this_key)
+            if this_uuid:
+                this_uuid = this_uuid.decode('utf-8')
+                if this_uuid == existing.uuid:
+                    await redis_pool.delete(this_key)
         #; Delete primary hex entry
         await redis_pool.delete(f"ledapi_user:{existing.uuid}")
         _log.debug(f"Finished deleting all references to {existing}")
@@ -310,17 +371,32 @@ class User:
         all_users = []
         cursor = '0'
         keys = []
+        idx = {}
 
         #; SCAN to find keys with specified prefix
+        # patterns = ["index:user_id:*", "index:api_key:*", "index:slack_id:*", "index:keybase_id:*"]
+        patterns = ["index:slack_id:*"]
+        for pattern in patterns:
+            idx[pattern] = {}
+            while cursor != 0:
+                cursor, keys = await redis_pool.scan(cursor=cursor, match=pattern)
+                for key in keys:
+                    try:
+                        value = await redis_pool.get(key)
+                    except Exception as e:
+                        _log.error(f"Failed getting {key}")
+                        continue
+                    idx[pattern][key.decode('utf-8')] = value.decode('utf-8')
+        hash_keys = []
         while True:
             cursor, partial_keys = await redis_pool.scan(cursor=cursor, match="ledapi_user:*")
             # // _log.debug(f"Cursor: {cursor}, Keys found: {partial_keys}")
-            keys.extend(partial_keys)
+            hash_keys.extend(partial_keys)
             if cursor == 0:
                 break
 
         #; Dump the values of the keys
-        for key in keys:
+        for key in hash_keys:
             value = await redis_pool.hgetall(key)
             all_users.append(value)
 
@@ -330,7 +406,8 @@ class User:
             res = await User.unredis(user)
             clean_users.append(res)
         _log.debug(f"All users found: {clean_users}")
-        return clean_users
+        final = {'users': clean_users, 'indices': idx}
+        return final
 
 
 #@##############################################################################
@@ -353,14 +430,60 @@ async def get_user_by_api_key(
         detail=f"Invalid credentials",
     )
 
+async def get_user_by_slack_id(
+    request: Request,
+):
+    """Return User object based on SlackID,TeamID as long as it's valid
+    """
+    try:
+        # body = await request.body()
+        form = await request.form()
+        _log.debug(f"FORM:")
+        _log.debug(f"{pformat(form)}")
+        # data = json.loads(body)
+        # user_id = data['user']['id']
+        # team_id = data['user']['team_id']
+        user_id = form.get('user_id')
+        team_id = form.get('team_id')
+        _log.debug(f"user_id: {user_id}")
+        _log.debug(f"team_id: {team_id}")
+        if not (user_id or team_id):
+            _log.debug(f"Getting user info from form payload")
+            payload = form.get('payload')
+            _log.debug(f"PAYLOAD: {payload}")
+            if payload is not None:
+                payload = json.loads(payload) # serialize
+                user_info = payload.get('user')
+                _log.debug(f"USER_INFO:{user_info}")
+                if user_info:
+                    user_id = user_info.get('id')
+                    team_id = user_info.get('team_id')
+        slack_id = f"({user_id},{team_id})"
+        user = await User.load_by_property(
+            prop_type="slack_id",
+            prop_value=slack_id,
+        )
+    except Exception as e:
+        _log.error(f"Unable to load user by slack_id: {e}")
+        raise
+    if user:
+        _log.debug(f"Successfully loaded user {user}")
+        return user
+    _log.debug(f"Unable to find user with slack_id {slack_id}")
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"Invalid credentials",
+    )
+
 async def check_role(
     user: User = None,
     roles: List = []
 )->User:
     """Check the role of the user accessing the API
     """
-    if user.role in roles:
+    if hasattr(user, 'role') and user.role in roles:
         return user
+    _log.error(f"{user.user_id} is not in {roles}")
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail=f"{user.user_id} is not in {roles}",
@@ -379,6 +502,14 @@ def dep_check_user_role(roles: List=[]):
     async def _dep_check_role(user: User = Depends(get_user_by_api_key)):
         return await check_role(user, roles)
     return _dep_check_role
+
+def dep_check_user_role_by_slack(roles: List=[]):
+    """Checks that a user belongs to one of the roles listed
+    This is done by using the SlackID,TeamID combo for the user
+    """
+    async def _dep_check_role_slack(user: User = Depends(get_user_by_slack_id)):
+        return await check_role(user, roles)
+    return _dep_check_role_slack
 
 
 async def dep_check_self_or_admin(

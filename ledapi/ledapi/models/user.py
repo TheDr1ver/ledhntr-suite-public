@@ -1,6 +1,6 @@
 from enum import Enum
 from pydantic import BaseModel, Field, model_validator
-from typing import Optional, Union, Any, List, Dict, get_type_hints
+from typing import Optional, Union, Any, List, Dict, get_type_hints, Tuple
 
 from ledapi.config import led, _log
 
@@ -21,6 +21,10 @@ class RoleEnum(str, Enum):
     def is_valid_role(role_str: str) -> bool:
         return role_str in RoleEnum.__members__.values()
 
+    @classmethod
+    def valid_roles(cls) -> list:
+        return [role.value for role in cls]
+
 class UserModel(BaseModel):
     uuid: Optional[Union[str, Any]] = Field(default=NOCHANGE)
     user_id: Optional[Union[str, Any]] = Field(default=NOCHANGE)
@@ -40,7 +44,7 @@ class UserModel(BaseModel):
         if not any(values.get(key) for key in req_keys):
             raise ValueError(f'One of the following keys must be provided: {req_keys}')
         return values
-    
+
     #~ Convert any None values to empty strings
     @model_validator(mode="before")
     @classmethod
@@ -57,19 +61,24 @@ class UserModel(BaseModel):
                 elif field_type == Optional[Dict]:
                     values[field] = {}
         return values
-    
+
     #~ Validate role
     '''
+    #@ Removing for now because I don't want to pass a role every time I update
+    #@ a user.
     @model_validator(mode="before")
     @classmethod
     def validate_role(cls, values):
         values['role'] = values['role'].lower()
         role_val = values.get('role')
-        valid = RoleEnum.is_valid_role(role_val)
-        if not valid:
-            raise ValueError(f"Invalid role {role_val}")
+        try:
+            valid = RoleEnum(role_val)
+        except ValueError as e:
+            raise ValueError(f"Invalid role {role_val}: {e}")
         return values
     '''
+
+    #~ Confirm uuid set
 
 #@##############################################################################
 #@### Role Groups

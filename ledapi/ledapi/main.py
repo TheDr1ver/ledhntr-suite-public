@@ -14,7 +14,8 @@ from ledapi.routes import(
     conman,
     hunter,
     dbadmin,
-    admin
+    admin,
+    slack,
 )
 from ledapi.worker_manager import start_all_workers, stop_all_workers
 
@@ -28,6 +29,7 @@ app.include_router(conman.router, tags=["conman"])
 app.include_router(hunter.router, tags=["hunter"])
 app.include_router(dbadmin.router, tags=["dbadmin"])
 app.include_router(admin.router, tags=["admin"])
+app.include_router(slack.router, tags=["slack"])
 
 #;##############################################################################
 #;### CONTEXT MANAGER
