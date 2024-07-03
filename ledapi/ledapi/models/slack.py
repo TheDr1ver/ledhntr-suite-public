@@ -326,6 +326,42 @@ class SlackAction(BaseModel):
 #@##############################################################################
 #@### Slack Modals
 #@##############################################################################
+def invalid_command_modal(cmd: str = None):
+    return {"type": "modal",
+        "callback_id": "invalid_command",
+        "title": {
+            "type": "plain_text",
+            "text": "Invalid Command"
+        },
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f":no_entry: You have entered an invalid command: {cmd}"
+                }
+            }
+        ]
+    }
+
+def unauthorized_modal():
+    return {"type": "modal",
+        "callback_id": "unauthorized_modal",
+        "title": {
+            "type": "plain_text",
+            "text": "Unauthorized"
+        },
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": ":no_entry: You are not authorized"
+                }
+            }
+        ]
+    }
+
 
 def add_user_modal(
     userval: str = None,

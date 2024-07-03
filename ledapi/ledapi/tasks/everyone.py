@@ -63,6 +63,8 @@ async def list_dbs_task(
     :rtype: List
     """
     _log.debug(f"Getting list of all databases...")
+    _log.debug(f"worker_name: {worker_name}")
+    _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
     all_dbs = []
     temp_plugin = wqm.conf.get(worker_name)['_plugin']
     #. TypeDBClient for whatever reason is "special" and needs to be fully launched fresh
@@ -378,8 +380,8 @@ async def list_dbs(
         final response of job if completed in < 2 seconds.
     :rtype: dict
     """
-    await wqm.check_config() #~ Make sure plugins and configs are loaded properly
     worker_name = await get_available_worker('typedb_client')
+    wqm.check_config(worker_name)
     queue = wqm.conf[worker_name]['queue']
     job = queue.enqueue_call(
         list_dbs_task,
@@ -401,8 +403,8 @@ async def get_news(
     days_back: int = 1,
     user: User = None,
 ):
-    await wqm.check_config() #~ Make sure everything is loaded first
     worker_name = await get_available_worker('typedb_client')
+    wqm.check_config(worker_name)
     queue = wqm.conf[worker_name]['queue']
     _log.debug(f"Adding search_conf job.")
     job = queue.enqueue_call(
@@ -424,8 +426,8 @@ async def search(
     search_obj: SearchObject = None,
     user: User = None,
 ):
-    await wqm.check_config() #~ Make sure everything is loaded first
     worker_name = await get_available_worker('typedb_client')
+    wqm.check_config(worker_name)
     queue = wqm.conf[worker_name]['queue']
     _log.debug(f"Adding search_conf job.")
     job = queue.enqueue_call(

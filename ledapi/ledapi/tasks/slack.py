@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from datetime import datetime, timedelta, timezone
@@ -54,10 +55,14 @@ from ledapi.models import(
     role_hunter,
     role_conman,
     role_everyone,
+    role_public,
+    unauthorized_modal,
+    invalid_command_modal,
 )
 from ledapi.user import User, check_role, dep_check_user_role
 from ledapi.worker_manager import(
-    get_available_worker
+    get_available_worker,
+    poll_job,
 )
 
 # _log.debug(f"PYTHONPATH: {os.environ.get('PYTHONPATH')}")
@@ -121,53 +126,65 @@ async def mojo_debug(
 ):
     _log.debug(f"Running debug endpoint")
     _log.debug(f"mojo: {mojo}")
+    await asyncio.sleep(5)
     return mojo
 
-
-
 #~######################################
-#~ list_dbs() tasks
+#~ slackaction_check_job_status
 #~######################################
-
-'''
-async def clean_queues_task(
-    hours_back: Optional[int] = 24,
+async def slackaction_check_job_status(
+    worker_name: str = None,
+    payload: Dict = None,
     user: User = None,
 ):
-    await wqm.check_config()
-    await redis_manager.check_redis_conn()
-    queues = {}
-    # for queue_name, queue in wqm.queues.items():
-    for worker_name, details in wqm.conf.items():
-        queue = details['queue']
-        queue_name = details['queue'].name
-        queues[queue_name] = {}
-        fin_reg = FinishedJobRegistry(queue_name, connection=redis_manager.syncredis)
-        fail_reg = FailedJobRegistry(queue_name, connection=redis_manager.syncredis)
-        def_reg = DeferredJobRegistry(queue.name, connection=redis_manager.syncredis)
-        registries = [fin_reg, fail_reg, def_reg]
+    _log.debug(f"Processing check_job_status for job {payload['actions'][0]['value']}")
+    _log.debug(f"payload: {pformat(payload)}")
+    _log.debug(f"user: {user.to_dict()}")
+    '''
+    # POST to temp hook
+    POST https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX
+    Content-type: application/json
+    {
+        "text": "Oh hey, this is a marvelous message in a thread!",
+        "response_type": "in_channel",
+        "replace_original": false",
+        "thread_ts": "1234567890"
+    }
 
-        # Delete jobs older than 24 hrs
-        # now = int(datetime.now(timezone.utc).timestamp())
-        # yesterday = now-60*60*24
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_back)
-        # fin_reg.cleanup(timestamp=yesterday)
-        # fail_reg.cleanup(timestamp=yesterday)
-        for reg in registries:
-            job_counter = 0
-            queues[queue_name][reg.name] = {'deleted_jobs': 0}
-            for job_id in reg.get_job_ids():
-                job = Job.fetch(job_id, connection=redis_manager.syncredis)
-                if job.enqueued_at is not None:
-                    job.enqueued_at = job.enqueued_at.replace(tzinfo=timezone.utc)
-                    if job.enqueued_at < cutoff:
-                        job_counter += 1
-                        job.delete_dependents()
-                        job.delete()
-            queues[queue_name][reg.name]['deleted_jobs'] = job_counter
+    # Payload example
+    {'actions': [{'action_id': 'check_job_status',
+                'action_ts': '1720014662.623072',
+                'block_id': 'dPPHl',
+                'text': {'emoji': True,
+                        'text': 'Check Status',
+                        'type': 'plain_text'},
+                'type': 'button',
+                'value': '7798a2da-e28d-4597-8509-ba1f719aa808'}],
+    'api_app_id': '<APPID>',
+    'channel': {'id': '<CHANNELID>', 'name': 'privategroup'},
+    'container': {'channel_id': '<CHANNELID>',
+                'is_ephemeral': True,
+                'message_ts': '1720014619.003200',
+                'type': 'message'},
+    'enterprise': None,
+    'is_enterprise_install': False,
+    'response_url': 'https://hooks.slack.com/actions/<REDACTED>',
+    'state': {'values': {}},
+    'team': {'domain': '<YOURDOMAIN>', 'id': '<YOURTEAM>'},
+    'token': '<YOURTOKEN>',
+    'trigger_id': '7383253119889.2625160776.6187361c3baf56e117c01ccfc990a440',
+    'type': 'block_actions',
+    'user': {'id': '<YOURUSER>',
+            'name': '<YOURUSERNAME>',
+            'team_id': '<YOURTEAM>',
+            'username': '<YOURUSERNAME>'}}
 
-    return queues
-'''
+    '''
+    rez = await poll_job(payload['actions'][0]['value'])
+    _log.debug(f"job_details: {pformat(rez)}")
+    return rez
+
+
 
 #~######################################
 #~ slackaction_open_add_user_modal
@@ -235,12 +252,37 @@ async def mojocmd_conf(
     mojo: MOJOCMD = None,
     user: User = None,
 ):
+    slack_token = wqm.conf[worker_name]['settings']['token']
+    client = WebClient(token=slack_token)
+    cmd = mojo.text.split(' ')[0]
+    resp = None
     opts = {
-        "addme": mojo_addme,
-        "debug": mojo_debug,
+        "addme": (mojo_addme, role_public),
+        "debug": (mojo_debug, role_public),
     }
 
-    resp = await opts[mojo.text.split(' ')[0]](worker_name, mojo, user)
+
+    if cmd in opts:
+        func_perms = opts[cmd]
+
+        try:
+            _log.debug(f"Checking user.role {user.role} against roles: {func_perms[1]}")
+            await check_role(user, func_perms[1])
+        except HTTPException as e:
+            client.views_open(
+                trigger_id=mojo.trigger_id,
+                view=unauthorized_modal()
+            )
+        except Exception as e:
+            raise
+        resp = await func_perms[0](worker_name, mojo, user)
+    else:
+        _log.debug(f"Invalid command: {cmd}")
+        client.views_open(
+            trigger_id=mojo.trigger_id,
+            view=invalid_command_modal(cmd=cmd)
+        )
+
     return resp
 
 async def slackaction_conf(
@@ -249,12 +291,17 @@ async def slackaction_conf(
     user: User = None,
 ):
 
+    slack_token = wqm.conf[worker_name]['settings']['token']
+    client = WebClient(token=slack_token)
+    resp = None
+
     opts = {
         'block_actions':{
-            "open_add_user_modal": (slackaction_open_add_user_modal, role_dbadmin)
+            "open_add_user_modal": (slackaction_open_add_user_modal, role_dbadmin),
+            "check_job_status": (slackaction_check_job_status, role_everyone),
         },
         'view_submission':{
-            'add_user_modal': (slackaction_submit_add_user, role_dbadmin) #do the add-user stuff
+            'add_user_modal': (slackaction_submit_add_user, role_dbadmin), #do the add-user stuff
         }
     }
 
@@ -274,14 +321,21 @@ async def slackaction_conf(
         try:
             await check_role(user, func_perms[1])
         except HTTPException as e:
-            raise
+            client.views_open(
+                trigger_id=payload['trigger_id'],
+                view=unauthorized_modal()
+            )
         except Exception as e:
             raise
         resp = await func_perms[0](worker_name, payload, user)
 
     else:
         _log.error(f"No scenario coded for payload['type']=={payload['type']}")
-        resp = {"response_action": "clear"}
+        # resp = {"response_action": "clear"}
+        client.views_open(
+            trigger_id=payload['trigger_id'],
+            view=invalid_command_modal(cmd=payload['type'])
+        )
     # _log.info(pformat(request))
     return resp
 
@@ -314,7 +368,7 @@ async def mojo_handler(
     mojo: MOJOCMD = None,
     user: User = None,
 ):
-    await wqm.check_config()
+    # ! await wqm.check_config()
     worker_name = await get_available_worker('slackbot')
     queue = wqm.conf[worker_name]['queue']
     _log.debug(f"Enqueuing mojo_handler")
@@ -328,7 +382,7 @@ async def mojo_handler(
         result_ttl=60*60,
     )
 
-    response = await two_sec_grace(worker_name, job.id)
+    response = await two_sec_grace(worker_name, job.id, slack_format=True)
 
     return response
 
@@ -336,7 +390,7 @@ async def action_handler(
     request: Request = None,
     user: User = None,
 ):
-    await wqm.check_config()
+    # ! await wqm.check_config()
     worker_name = await get_available_worker('slackbot')
     queue = wqm.conf[worker_name]['queue']
     _log.debug(f"Enqueuing action_handler")
@@ -359,7 +413,7 @@ async def action_handler(
         result_ttl=60*60,
     )
 
-    response = await two_sec_grace(worker_name, job.id)
+    response = await two_sec_grace(worker_name, job.id, slack_format=True)
 
     return response
 
@@ -367,7 +421,7 @@ async def event_handler(
     request: Request = None,
     user: User = None,
 ):
-    await wqm.check_config()
+    # ! await wqm.check_config()
     worker_name = await get_available_worker('slackbot')
     queue = wqm.conf[worker_name]['queue']
     _log.debug(f"Enqueuing event_handler")
@@ -386,6 +440,6 @@ async def event_handler(
         result_ttl=60*60,
     )
 
-    response = await two_sec_grace(worker_name, job.id)
+    response = await two_sec_grace(worker_name, job.id, slack_format=True)
 
     return response

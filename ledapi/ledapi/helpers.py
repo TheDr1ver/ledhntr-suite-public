@@ -60,6 +60,8 @@ async def handle_response(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=message_400,
             )
+    if '_format_override' in rez and rez['_format_override']:
+        return rez
     response = {
         'message': rez,
         'status_code': status.HTTP_200_OK
@@ -69,6 +71,7 @@ async def handle_response(
 async def two_sec_grace(
     worker_name: str = None,
     job_id: str = None,
+    slack_format: Optional[bool] = False,
 ):
     """Waits 2 seconds for a job to finish before returning job_id
 
@@ -95,7 +98,7 @@ async def two_sec_grace(
     if not last_job.is_finished:
         _log.debug(f"Waiting 2 seconds for {last_job.id} to finish...")
         # for _ in range(4):
-        for _ in range(10):
+        for _ in range(4):
             if not (last_job.is_finished or last_job.is_failed or last_job.is_canceled):
                 await asyncio.sleep(0.5)
                 _log.debug(f"...still waiting... {0.5*_} seconds passed")
@@ -103,7 +106,8 @@ async def two_sec_grace(
                 break
 
     if last_job.is_failed:
-        result['result']=last_job.exc_info
+        # result['result']=last_job.exc_info
+        result['result'] = "Job failed - check error log."
 
     elif not (last_job.is_finished or last_job.is_failed or last_job.is_canceled):
         _log.debug(f"Job still not finished, returning job_id.")
@@ -111,4 +115,30 @@ async def two_sec_grace(
         result['result'] = status
 
     _log.debug(f"Wait result: {result}")
+
+    if slack_format:
+        new_res = {'_format_override': True}
+        if last_job.is_finished:
+            new_res['text'] = result['result']
+        else:
+            # new_res['text'] = f"Job {job_id} is {result['result']}. <CLICK HERE TO CHECK RESULT>"
+            new_res['text'] = f"Job {job_id} is {result['result']}"
+            new_res['blocks'] = [
+                {
+                    'type': 'section',
+                    # "response_type": "ephemeral",
+                    'text': {
+                        'type': 'mrkdwn',
+                        'text': f"Job {job_id} is {result['result']}."
+                    },
+                    'accessory': {
+                        'type': 'button',
+                        'text': {'type': 'plain_text', 'text': 'Check Status'},
+                        'action_id': 'check_job_status',
+                        'value': job_id,
+                    }
+                }
+            ]
+        result = new_res
+
     return result

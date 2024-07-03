@@ -143,8 +143,8 @@ async def slackaction_ep(
         user,
     )
     #& bypass normal endpoint response for slack-formatted response
-    if response['status_code'] == 200:
-        response = response['message']['result']
+    # // if response['status_code'] == 200:
+    # //     response = response['message']['result']
 
     return response
 

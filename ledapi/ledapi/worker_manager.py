@@ -30,6 +30,7 @@ from ledapi.config import(
     conf,
     redis_manager,
     wqm,
+    xterm,
 )
 
 #@##############################################################################
@@ -58,13 +59,13 @@ async def get_worker(worker_name):
     running_worker = None
     await redis_manager.check_redis_conn()
     all_workers = Worker.all(connection=redis_manager.syncredis)
-    if not all_workers:
-        _log.debug(f"NO WORKERS CURRENTLY STARTED")
+    # // if not all_workers:
+        # // _log.debug(f"NO WORKERS CURRENTLY STARTED")
     for worker in all_workers:
-        _log.debug(f"WORKER.NAME: {worker.name} ||| worker_name: {worker_name}")
+        # // _log.debug(f"WORKER.NAME: {worker.name} ||| worker_name: {worker_name}")
         if worker.name == worker_name:
             return worker
-        _log.debug(f"NOT A MATCH")
+        # // _log.debug(f"NOT A MATCH")
 
     _log.debug(f"No worker {worker_name} found!")
     return running_worker
@@ -75,14 +76,14 @@ async def async_worker_process(worker_name):
     redis_sync_client = redis_manager.syncredis
 
     # Check worker queues
-    _log.debug(f"Checking worker queues...")
+    # // _log.debug(f"Checking worker queues...")
     # await wqm.check_queues(worker_name)
-    await wqm.check_config()
-    loaded_queues = [details['queue'] for _, details in wqm.conf.items()]
-    _log.debug(f"Queues: {loaded_queues}")
+    await wqm.check_config(worker_name)
+    # // loaded_queues = [details['queue'] for _, details in wqm.conf.items()]
+    # // _log.debug(f"Queues: {loaded_queues}")
 
     # Check for existing workers
-    _log.debug(f"Checking for existing workers {worker_name}...")
+    # // _log.debug(f"Checking for existing workers {worker_name}...")
     worker = await get_worker(worker_name)
     if worker:
         _log.debug(f"FOUND EXISTING WORKER {worker_name}")
@@ -93,13 +94,14 @@ async def async_worker_process(worker_name):
             pass
         return worker
 
-    _log.debug(f"No existing workers found. Starting new process.")
+    _log.debug(f"Worker {worker_name} not found. Starting new process.")
     # with Connection(redis_pool.sync_client):
     with Connection(redis_sync_client):
-        _log.debug(f"Starting worker {worker_name}")
+        # // _log.debug(f"Starting worker {worker_name}")
         # worker = Worker([wqm.queues[worker_name]], name=f"{worker_name}")
         worker = Worker([wqm.conf[worker_name]['queue']], name=worker_name)
-        _log.debug(f"worker: {worker} (if shutting down this might be boolean)")
+        # // _log.debug(f"worker: {worker} (if shutting down this might be boolean)")
+        _log.debug(f"WORKER STATE: {worker.state}")
         await worker.work()
 
 def worker_process(worker_name):
@@ -111,25 +113,25 @@ def worker_process(worker_name):
 
 
 async def start_worker(worker_name):
-    _log.debug(f"Starting worker {worker_name}...")
+    # // _log.debug(f"Starting worker {worker_name}...")
     if await get_worker(worker_name):
         if worker_name not in worker_processes:
-            _log.debug(f"Found running worker {worker_name} in Redis that wasn't in processes.")
-            _log.debug(f"Adding worker {worker_name} to running processes...")
+            # // _log.debug(f"Found running worker {worker_name} in Redis that wasn't in processes.")
+            # // _log.debug(f"Adding worker {worker_name} to running processes...")
             process = Process(target=worker_process, args=(worker_name,))
             process.start()
             worker_processes[worker_name] = process.pid
-            msg = f"Existing Worker {worker_name} started new process."
+            msg = f"New PID for pre-existing {worker_name}: {process.pid}."
             _log.debug(msg)
             return msg
 
-    _log.debug(f"Starting new process: {worker_name}")
+    # // _log.debug(f"Starting new process: {worker_name}")
     # process = Process(target=partial(worker_process, worker_name, worker_id))
     process = Process(target=worker_process, args=(worker_name,))
     process.start()
     # worker_processes[worker_name] = process
     worker_processes[worker_name] = process.pid
-    msg = f"New Worker {worker_name} started and added to redis."
+    msg = f"New Worker {worker_name} started: {process.pid}"
     _log.debug(msg)
     return msg
 
@@ -224,10 +226,11 @@ async def start_all_workers():
     responses = {}
     # for worker_name in wqm.queues.keys():
     for worker_name in wqm.conf.keys():
-        _log.debug(f"Looping through {worker_name}...")
+        # // _log.debug(f"Looping through {worker_name}...")
         responses[f"{worker_name}"] = await start_worker(worker_name)
     responses['worker_processes'] = pformat(worker_processes.items())
-    _log.debug(responses)
+    _log.debug(f"{xterm('GREEN')}Startup Worker Status:{xterm('RESET')}")
+    _log.debug(pformat(responses))
     return responses
 
 async def stop_all_workers():
@@ -235,7 +238,8 @@ async def stop_all_workers():
     # for worker_name in wqm.queues.keys():
     for worker_name in wqm.conf.keys():
         responses[f"{worker_name}"] = await stop_worker(worker_name)
-    _log.debug(responses)
+    _log.debug(f"{xterm('RED')}Shutdown Worker Status:{xterm('RESET')}")
+    _log.debug(pformat(responses))
     return responses
 
 
@@ -314,7 +318,7 @@ async def restart_all_workers():
 async def poll_job(job_id):
     _log.debug(f"Polling job_id {job_id}")
     # await wqm.check_queues()
-    await wqm.check_config()
+    await wqm.check_config() #; loads plugin names and queues only if not already loaded
     await redis_manager.check_redis_conn()
     job_details = None
     # for queue_name, queue in wqm.queues.items():

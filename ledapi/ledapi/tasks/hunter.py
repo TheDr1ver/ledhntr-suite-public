@@ -172,9 +172,10 @@ async def run_hunt_conf(
     job_data: Dict = None,
     worker_name: str = "",
 ):
-    await wqm.check_config() #~ Make sure plugins and configs are loaded properly
-    _log.debug(f"#### I'M FLYING, JACK! ####")
-    _log.debug(f"job_data: \n\t {pformat(job_data)}")
+    # // _log.debug(f"#### I'M FLYING, JACK! ####")
+    # // _log.debug(f"job_data: \n\t {pformat(job_data)}")
+    _log.debug(f"worker_name: {worker_name}")
+    await wqm.check_config(worker_name)
     hunt_summary = {}
 
     #~ Get targeted database(s)
@@ -194,7 +195,9 @@ async def run_hunt_conf(
     queue = wqm.conf[worker_name]['queue']
     #! Honestly, this should probably be changed to a separate 'hunt' queue
     #! Doesn't make much sense to be adding it to a HNTR Plugin queue that
-    #! should be dedicated for scanning
+    #! should be dedicated for API requests
+    #! ...
+    #! I've got enough workers at the moment. HNTR Workers will have to do for now.
 
     #~ Run Hunts against all databases selected
     for db_name in all_dbs:
@@ -395,7 +398,7 @@ async def run_hunt(
     Return: return_description
     """
     plugins = []
-    await wqm.check_config() #~ Make sure plugins and configs are loaded properly
+    # ! await wqm.check_config() #~ Make sure plugins and configs are loaded properly
     #* If we don't specify a plugin or explicitly specify 'all' then use all plugins
     if job_data['plugin'] == None or job_data['plugin'].lower() == 'all':
         for worker_name, details in wqm.conf.items():
@@ -404,9 +407,16 @@ async def run_hunt(
     else:
         plugins.append(job_data['plugin'].lower())
 
+    led_plugin_list = led.list_plugins()
     for plugin_name in plugins:
+        #; Make sure we're getting HNTR plugins
+        if plugin_name not in led_plugin_list:
+            continue
+        if led_plugin_list[plugin_name]['classes'][0] != "HNTR":
+            continue
+
         worker_name = await get_available_worker(plugin_name)
-        queue = wqm.conf[worker_name]['queue']
+        queue = wqm.conf[worker_name]['queue'] #; Change this to typedb queue?
 
         job_result = queue.enqueue_call(
             run_hunt_conf,

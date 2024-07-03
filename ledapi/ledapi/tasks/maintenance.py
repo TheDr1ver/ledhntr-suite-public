@@ -64,7 +64,7 @@ async def clean_queues_task(
     hours_back: Optional[int] = 24,
     user: User = None,
 ):
-    await wqm.check_config()
+    # ! await wqm.check_config()
     await redis_manager.check_redis_conn()
     queues = {}
     # for queue_name, queue in wqm.queues.items():
@@ -155,7 +155,7 @@ async def clean_queues(
     hours_back: Optional[int] = 24,
     user: User = None,
 ):
-    await wqm.check_config()
+    # ! await wqm.check_config()
     worker_name = await get_available_worker('maintenance')
     queue = wqm.conf[worker_name]['queue']
     _log.debug(f"Enqueuing cleanup_jobs")

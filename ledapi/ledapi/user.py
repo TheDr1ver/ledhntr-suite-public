@@ -481,6 +481,10 @@ async def check_role(
 )->User:
     """Check the role of the user accessing the API
     """
+    #; when we're using role_public that means it's okay for a non-user to submit
+    #; something - like an addme request
+    if None in roles:
+        return user
     if hasattr(user, 'role') and user.role in roles:
         return user
     _log.error(f"{user.user_id} is not in {roles}")

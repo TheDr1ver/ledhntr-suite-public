@@ -2,6 +2,7 @@ from .auth import (
     # // RoleEnum,
     APIKeyCreate,
     APIKeyRevoke,
+    role_public,
     role_everyone,
     role_conman,
     role_hunter,
@@ -32,4 +33,6 @@ from .slack import(
     SlackEvent,
     SlackAction,
     add_user_modal,
+    unauthorized_modal,
+    invalid_command_modal,
 )

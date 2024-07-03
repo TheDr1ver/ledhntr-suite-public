@@ -30,6 +30,10 @@ from ledapi.tasks import(
     get_news,
 )
 
+from ledapi.worker_manager import(
+    poll_job,
+)
+
 from ledhntr.data_classes import Attribute, Entity, Relation, Thing
 
 router = APIRouter()
@@ -171,6 +175,43 @@ async def list_dbs_ep(
         list_dbs,
         msg_400,
         msg_500,
+    )
+
+    return response
+
+#~ Poll the status of a specific job_id
+@router.get("/poll-job/{job_id}")
+async def poll_job_ep(
+    job_id: str = None,
+    user: User = Depends(dep_check_user_role(role_everyone))
+):
+    '''
+    try:
+        response = await poll_job(job_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed polling job: {e}"
+        )
+    if not response:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No job found with ID {job_id}"
+        )
+    return {
+            "message": response,
+            "status_code": status.HTTP_200_OK,
+        }
+    '''
+    _log.debug(f"Polling job_id {job_id}")
+    msg_400 = f"No job found with ID {job_id}"
+    msg_500 = f"Failed polling job"
+
+    response = await handle_response(
+        poll_job,
+        msg_400,
+        msg_500,
+        job_id
     )
 
     return response

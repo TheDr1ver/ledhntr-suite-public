@@ -37,6 +37,15 @@ class APIKeyRevoke(BaseModel):
 #@### Role Groups
 #@##############################################################################
 
+role_public = [
+    None,
+    RoleEnum.read_only,
+    RoleEnum.conman,
+    RoleEnum.hunter,
+    RoleEnum.dbadmin,
+    RoleEnum.admin,
+]
+
 role_everyone = [
     RoleEnum.read_only,
     RoleEnum.conman,
