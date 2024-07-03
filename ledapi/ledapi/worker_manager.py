@@ -1,4 +1,7 @@
 import asyncio
+import threading
+import os
+import time
 import traceback
 
 from datetime import datetime, timedelta, timezone
@@ -45,6 +48,8 @@ from ledapi.config import(
 def init_manager():
     global worker_processes
     worker_processes = Manager().dict()
+    global scheduler_stop_event
+    scheduler_stop_event = threading.Event()
 
 async def set_worker_status(worker_name, worker_id, status):
     # await redis_manager.redis.set(f"worker_status:{worker_name}:{worker_id}", status, ex=60*60*24*7)
@@ -243,9 +248,35 @@ async def stop_all_workers():
     _log.debug(pformat(responses))
     return responses
 
-async def start_scheduler():
-    await redis_manager.check_redis_conn()
-    scheduler = Scheduler(connection=redis_manager.syncredis)
+#& THIS IS ALL JACKED UP. THIS SCHEDULER IS DUMB AND NEEDS TO BE RETHOUGHT
+#& I MIGHT JUST GO BACK TO THE ORIGINAL VERSION THAT USED A SIMPLE TIMER
+#& FOR MAINTENANCE JOBS
+class CustomScheduler(Scheduler):
+    def run(self):
+        """Starts the scheduler."""
+        self.log.info("Scheduler started with pid %d", os.getpid())
+
+        while True:
+            try:
+                if self.log:
+                    self.log.debug("Checking for scheduled jobs")
+                self.enqueue_jobs()
+                self._remove_old_jobs()
+                self._remove_old_job_results()
+                seconds_until_next_scheduled_run = self.get_seconds_until_next_scheduled_run()
+                if seconds_until_next_scheduled_run == -1:
+                    seconds_until_next_scheduled_run = self.interval
+                if scheduler_stop_event.is_set():
+                    self.log.info("Scheduler stopping...")
+                    break
+                time.sleep(seconds_until_next_scheduled_run)
+            except Exception as e:
+                self.log.error("Scheduler error: %s", e)
+                time.sleep(self.interval)
+
+def schedule_jobs():
+    # await redis_manager.check_redis_conn()
+    scheduler = CustomScheduler(connection=redis_manager.syncredis)
     from ledapi.models import(
         JobSubmission,
     )
@@ -280,11 +311,21 @@ async def start_scheduler():
     # TODO - other maintenance (first/last seen?)
     # TODO - automatically post new domains and IPs to channel
 
-    scheduler.run()
+    while not scheduler_stop_event.is_set():
+        scheduler.run()
+        # await asyncio.sleep(3600) # sleep for an hour before running the scheduler again.
+        scheduler_stop_event.wait(3600)
 
-async def stop_scheduler():
-    await redis_manager.check_redis_conn()
-    scheduler = Scheduler(connection=redis_manager.syncredis)
+def start_scheduler():
+    # asyncio.create_task(schedule_jobs())
+    scheduler_stop_event.clear()
+    scheduler_thread = threading.Thread(target=schedule_jobs, daemon=True)
+    scheduler_thread.start()
+
+def stop_scheduler():
+    scheduler_stop_event.set()
+    # await redis_manager.check_redis_conn()
+    scheduler = CustomScheduler(connection=redis_manager.syncredis)
     for job in scheduler.get_jobs():
         scheduler.cancel(job)
         _log.debug(f"Canceled job: {job.func_name}")

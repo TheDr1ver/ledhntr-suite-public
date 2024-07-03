@@ -61,13 +61,13 @@ async def lifespan(app: FastAPI):
     _log.debug(f"### MAIN ### STARTING ALL WORKERS")
     await start_all_workers()
 
-    _log.debug(f"### MAIN ### STARTING SCHEDULER")
-    await start_scheduler()
+    # _log.debug(f"### MAIN ### STARTING SCHEDULER")
+    # start_scheduler()
 
     yield
 
-    _log.debug(f"### MAIN ### STOPPING SCHEDULER")
-    await stop_scheduler()
+    # _log.debug(f"### MAIN ### STOPPING SCHEDULER")
+    # stop_scheduler()
 
 
     _log.debug(f"### MAIN ### STOPPING ALL WORKERS")

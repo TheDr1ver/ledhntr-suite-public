@@ -236,6 +236,7 @@ async def run_hunt_conf(
         hunt_summary[plugin_name] = {}
         plug_worker = await get_available_worker(plugin_name)
         #~ Get the Queue we're going to use for each HNTR Plugin
+        wqm.check_config(plug_worker)
         queue = wqm.conf[plug_worker]['queue']
 
         #~ Run Hunts against all databases selected
