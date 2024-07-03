@@ -197,7 +197,7 @@ async def run_hunt_conf(
         "completed_at": None,
         "job_result_ids": [],
     }
-
+    _log.debug(f"Processing job data: {pformat(job_data)}")
     #@ Get plugins we want to run
     plugins = []
     led_plugin_list = led.list_plugins()
@@ -231,12 +231,14 @@ async def run_hunt_conf(
         all_dbs.append(job_data['db_name'])
 
     #@ Loop through HNTR plugins queues and databases to run everything
+    _log.debug(f"plugins: {plugins}")
     for plugin_name in plugins:
+        _log.debug(f"Getting worker for {plugin_name}")
+        # await wqm.check_config(plug_worker)
         #~ Get the worker_name
         hunt_summary[plugin_name] = {}
         plug_worker = await get_available_worker(plugin_name)
         #~ Get the Queue we're going to use for each HNTR Plugin
-        wqm.check_config(plug_worker)
         queue = wqm.conf[plug_worker]['queue']
 
         #~ Run Hunts against all databases selected
@@ -499,7 +501,7 @@ async def hunt_handler(
 ):
     worker_name = await get_available_worker('maintenance')
     _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
-    wqm.check_config(worker_name)
+    await wqm.check_config(worker_name)
     _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
     queue = wqm.conf[worker_name]['queue']
     queue: Queue

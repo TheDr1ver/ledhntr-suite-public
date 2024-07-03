@@ -197,6 +197,15 @@ async def get_news_conf(
     days_back: int = 1,
     user: User = None,
 ):
+    '''
+    _log.debug(f"wqm.conf.get({worker_name}): {pformat(wqm.conf.get(worker_name))}")
+    _log.debug(f"ALL CONFIGS")
+    _log.debug(f"{pformat(wqm.conf)}")
+    _log.debug(f"Getting temp plugin from wqm.conf.get({worker_name})")
+    temp_conf = wqm.conf.get(worker_name)
+    _log.debug(f"temp_conf: {temp_conf}")
+    '''
+    #! await wqm.check_config(worker_name)
     temp = wqm.conf.get(worker_name)['_plugin']
     _log.debug(f"temp: {temp}")
     tdb = get_tdb(temp)
@@ -381,7 +390,7 @@ async def list_dbs(
     :rtype: dict
     """
     worker_name = await get_available_worker('typedb_client')
-    wqm.check_config(worker_name)
+    await wqm.check_config(worker_name)
     queue = wqm.conf[worker_name]['queue']
     job = queue.enqueue_call(
         list_dbs_task,
@@ -404,9 +413,12 @@ async def get_news(
     user: User = None,
 ):
     worker_name = await get_available_worker('typedb_client')
-    wqm.check_config(worker_name)
+    await wqm.check_config(worker_name)
     queue = wqm.conf[worker_name]['queue']
-    _log.debug(f"Adding search_conf job.")
+    queue: Queue
+    _log.debug(f"Adding get_news_conf job.")
+    _log.debug(f"worker_name: {worker_name} queue: {queue}")
+    _log.debug(f"wqm.conf[{worker_name}] = {pformat(wqm.conf[worker_name])}")
     job = queue.enqueue_call(
         get_news_conf,
         args=[worker_name, days_back, user],
@@ -427,7 +439,7 @@ async def search(
     user: User = None,
 ):
     worker_name = await get_available_worker('typedb_client')
-    wqm.check_config(worker_name)
+    await wqm.check_config(worker_name)
     queue = wqm.conf[worker_name]['queue']
     _log.debug(f"Adding search_conf job.")
     job = queue.enqueue_call(

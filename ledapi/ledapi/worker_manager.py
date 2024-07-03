@@ -28,7 +28,7 @@ from typing import(
     Optional,
     Union,
 )
-
+from ledhntr.helpers import dumps
 from ledapi.config import(
     _log,
     conf,
@@ -44,6 +44,12 @@ from ledapi.config import(
 #&#######################
 #& INTERNAL FUNCTIONS
 #&#######################
+
+def log_spawn(func):
+    def wrapper(*args, **kwargs):
+        _log.info(f"{xterm('YELLOW')}Spawning pocess for function: {func.__name__}{xterm('RESET')}")
+        return func(*args, **kwargs)
+    return wrapper
 
 def init_manager():
     global worker_processes
@@ -117,7 +123,7 @@ def worker_process(worker_name):
         _log.error(f"Failed to run async worker process {worker_name}: {e}")
         _log.error(f"Traceback: {traceback.format_exc()}")
 
-
+@log_spawn
 async def start_worker(worker_name):
     # // _log.debug(f"Starting worker {worker_name}...")
     if await get_worker(worker_name):
@@ -194,15 +200,23 @@ async def get_available_worker(
 
     chosen_worker_name = None
     chosen_queue = None
+    # await wqm.check_config()
     for worker_name, details in wqm.conf.items():
         #* Pick a queue/worker to use.
         #* If a queue belongs to an idle worker, pick that queue.
         #* If no workers are idle, pick the queue with the least amount of jobs.
+        # // _log.debug(f"looking through wqm.conf")
+        # // _log.debug(f"worker_name: {worker_name}")
+        # // _log.debug(f"details: {pformat(details)}")
+        # // _log.debug(f"wqm")
+        _log.debug(f"{details['_plugin_name']} || {plugin_name}")
         if details['_plugin_name'] != plugin_name:
             continue
 
         queue = details['queue']
+        _log.debug(f"queue: {queue}")
         workers = Worker.all(queue=queue)
+        _log.debug(f"workers: {workers}")
         for w in workers:
             if w.state == 'idle':
                 _log.debug(f"Found idle worker {w.name}. Using queue {queue}.")
@@ -383,6 +397,12 @@ async def get_all_workers(with_jobs: bool = False):
                 'current_job_id': worker.get_current_job_id(),
                 'jobs': jobs,
             })
+    workers.append({'worker_processes': worker_processes})
+    # workers.append({'wqm.conf': dumps(wqm.conf)})
+    _wqm = {}
+    for k, v in wqm.conf.items():
+        _wqm[str(k)] = str(v)
+    workers.append({'wqm.conf': _wqm})
     return workers
 
 async def restart_all_workers():

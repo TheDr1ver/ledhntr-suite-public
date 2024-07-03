@@ -172,8 +172,15 @@ class WorkersQueueManager(object):
             self.conf = {}
 
         led_plugin_list = led.list_plugins()
+        if explicit_worker_name:
+            _log.debug(f"loading explicit confs and plugin for {explicit_worker_name}")
 
+        #! Changing it up again. If it's not an explicit worker, we can load
+        #! everything but the plugin itself. That way we can reference queues
+        #! when other workers are loaded.
         for key in conf['ledapi.workers']:
+            # // _log.debug(f"Loading {key} confs for {explicit_worker_name}")
+            '''
             #* If we pass an explicit worker_name only focus on loading that conf
             #* Otherwise we're going to just load the worker names.
             if explicit_worker_name is None:
@@ -186,8 +193,10 @@ class WorkersQueueManager(object):
                         'settings': {},
                     }
                 continue
+
             if explicit_worker_name and not key.startswith(explicit_worker_name):
                 continue
+            '''
             plugin_name = key.split('.')[0]
             #* Don't load plugin for generic workers that don't have an LEDHNTR Plugin
             if plugin_name in no_plugin_workers:
@@ -195,6 +204,7 @@ class WorkersQueueManager(object):
                 worker_name = f"{plugin_name}.{worker_id}"
                 self.conf[worker_name] = {
                     '_plugin_name': plugin_name,
+                    '_worker_id': worker_id,
                     '_plugin_class': plugin_name,
                     '_plugin': None,
                     'settings': {},
@@ -221,7 +231,14 @@ class WorkersQueueManager(object):
             #. *actual* LEDHNTR Plugins
             if '_plugin' in details:
                 continue
+            #. if the explicit_worker_name isn't specified, we're not going to
+            #. load the plugin, just its queues and configs.
+            if explicit_worker_name and not key.startswith(explicit_worker_name.split('.')[0]):
+                continue
+            if explicit_worker_name is None:
+                continue
             #. Load Plugin modules
+            _log.debug(f"{xterm('RED')}LOADING PLUGIN {details['_plugin_name']} FOR WORKER {key}{xterm('RESET')}")
             plugin = led.load_plugin(details['_plugin_name'], duplicate=True)
             #. Set plugin attributes based on conf file
             for k, v in details['settings'].items():
@@ -366,7 +383,7 @@ class WorkersQueueManager(object):
         self,
         worker_name: Optional[str] = None,
     ):
-        if self.conf is None:
+        if self.conf is None or '_plugin' not in self.conf[worker_name]:
             await self.load_config(worker_name)
             # _log.debug(f"{CYAN}TESTING OUTSIDE load_config(){RESET}")
             # await self.test_confs()
