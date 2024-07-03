@@ -26,10 +26,16 @@ from ledapi.config import(
     get_tdb,
     wqm,
 )
-from ledapi.helpers import result_error_catching
+from ledapi.helpers import(
+    result_error_catching,
+    two_sec_grace,
+)
 from ledapi.user import User
 from ledapi.worker_manager import(
     get_available_worker
+)
+from ledapi.models import(
+    JobSubmission,
 )
 
 #&##############################################################################
@@ -169,16 +175,49 @@ async def add_hunt_results_task(
 #~######################################
 
 async def run_hunt_conf(
-    job_data: Dict = None,
+    job_data: JobSubmission = None,
     worker_name: str = "",
+    user: User = None,
 ):
     # // _log.debug(f"#### I'M FLYING, JACK! ####")
     # // _log.debug(f"job_data: \n\t {pformat(job_data)}")
+    #& The worker here is going to be 'maintenance'
     _log.debug(f"worker_name: {worker_name}")
     await wqm.check_config(worker_name)
     hunt_summary = {}
 
-    #~ Get targeted database(s)
+    job_data = {
+        "db_name": job_data.db_name or user.db_name,
+        "hunt_name": job_data.hunt_name,
+        "plugin": job_data.plugin,
+        "status": "pending",
+        "user_id": user.user_id,
+        "forced": job_data.forced,
+        "submitted_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": None,
+        "job_result_ids": [],
+    }
+
+    #@ Get plugins we want to run
+    plugins = []
+    led_plugin_list = led.list_plugins()
+    #* If we don't specify a plugin or explicitly specify 'all' then use all plugins
+    if job_data['plugin'] == None or job_data['plugin'].lower() == 'all':
+        for _, details in wqm.conf.items():
+            plugin_name = details['_plugin_name']
+            if plugin_name not in plugins:
+                if plugin_name not in led_plugin_list:
+                    #; Ignore invalid plugins like 'maintenance'
+                    continue
+                if led_plugin_list[plugin_name]['classes'][0] != "HNTR":
+                    #; ignore non-HNTR plugins
+                    continue
+                plugins.append(plugin_name)
+    #* otherwise, just use the plugin specified
+    else:
+        plugins.append(job_data['plugin'].lower())
+
+    #@ Get targeted database(s)
     all_dbs = []
     #~ If "all" is passed, get all databases availble
     if job_data['db_name'] == "all":
@@ -191,35 +230,35 @@ async def run_hunt_conf(
     else:
         all_dbs.append(job_data['db_name'])
 
-    #~ Get the Queue we're going to use
-    queue = wqm.conf[worker_name]['queue']
-    #! Honestly, this should probably be changed to a separate 'hunt' queue
-    #! Doesn't make much sense to be adding it to a HNTR Plugin queue that
-    #! should be dedicated for API requests
-    #! ...
-    #! I've got enough workers at the moment. HNTR Workers will have to do for now.
+    #@ Loop through HNTR plugins queues and databases to run everything
+    for plugin_name in plugins:
+        #~ Get the worker_name
+        hunt_summary[plugin_name] = {}
+        plug_worker = await get_available_worker(plugin_name)
+        #~ Get the Queue we're going to use for each HNTR Plugin
+        queue = wqm.conf[plug_worker]['queue']
 
-    #~ Run Hunts against all databases selected
-    for db_name in all_dbs:
-        try:
-            forced = job_data['forced']
-            hunt_name = job_data['hunt_name']
-            hunt_db_job = queue.enqueue_call(
-                run_hunt_job_queue,
-                args=[db_name, worker_name, forced, hunt_name],
-                timeout=60*60*2,
-                result_ttl=60*60*24,
-            )
-        except Exception as e:
-            _log.error(f"Failed running hunt against {db_name}: {e}")
-            _log.error(f"Traceback: {traceback.format_exc()}")
-            continue
+        #~ Run Hunts against all databases selected
+        for db_name in all_dbs:
+            try:
+                forced = job_data['forced']
+                hunt_name = job_data['hunt_name']
+                hunt_db_job = queue.enqueue_call(
+                    run_hunt_job_queue,
+                    args=[db_name, plug_worker, forced, hunt_name],
+                    timeout=60*60*2,
+                    result_ttl=60*60*24,
+                )
+            except Exception as e:
+                _log.error(f"Failed running hunt against {db_name}: {e}")
+                _log.error(f"Traceback: {traceback.format_exc()}")
+                continue
 
-        #* Add summary for this database
-        # hunt_summary[db_name] = bulk_add_results
-        hunt_db_job: Job
-        hunt_summary[db_name] = {}
-        hunt_summary[db_name]['job_id'] = hunt_db_job.id
+            #* Add summary for this database
+            # hunt_summary[db_name] = bulk_add_results
+            hunt_db_job: Job
+            hunt_summary[plugin_name][db_name] = {}
+            hunt_summary[plugin_name][db_name]['job_id'] = hunt_db_job.id
 
     return hunt_summary
 
@@ -387,6 +426,7 @@ async def get_hunts(
 #~ Run a Hunt
 #~###############
 
+'''
 async def run_hunt(
     job_data: Dict = None,
     user: User = None,
@@ -397,6 +437,20 @@ async def run_hunt(
     argument -- description
     Return: return_description
     """
+
+    ''''''
+    job_data = {
+        "job_id": job_id,
+        "db_name": job_data.db_name or user.db_name,
+        "hunt_name": job_data.hunt_name,
+        "plugin": job_data.plugin,
+        "status": "pending",
+        "user_id": user.user_id,
+        "forced": job_data.forced,
+        "submitted_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": None,
+        "job_result_ids": [],
+    }
     plugins = []
     # ! await wqm.check_config() #~ Make sure plugins and configs are loaded properly
     #* If we don't specify a plugin or explicitly specify 'all' then use all plugins
@@ -435,8 +489,30 @@ async def run_hunt(
     # _log.debug(f"job_data: {pformat(job_data)}")
 
     return {"job_ids": job_data['job_result_ids'], "status": "Job submitted"}
+'''
 
+async def hunt_handler(
+    job_data: JobSubmission = None,
+    user: User = None,
+    slack_format: Optional[bool] = False
+):
+    worker_name = await get_available_worker('maintenance')
+    _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
+    wqm.check_config(worker_name)
+    _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
+    queue = wqm.conf[worker_name]['queue']
+    queue: Queue
 
+    job = queue.enqueue_call(
+        run_hunt_conf,
+        args=[job_data, worker_name, user],
+        timeout=60*60,
+        result_ttl=60*60*24,
+    )
+
+    response = await two_sec_grace(worker_name, job.id, slack_format=slack_format)
+
+    return response
 
 
 

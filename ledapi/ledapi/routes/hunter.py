@@ -24,7 +24,8 @@ from ledapi.config import (
 
 from ledapi.tasks import(
     get_hunts,
-    run_hunt,
+    # run_hunt,
+    hunt_handler,
 )
 
 from ledapi.worker_manager import(
@@ -88,9 +89,30 @@ async def get_hunts_ep(
 #~ Submit Hunt Job
 @router.post("/run-hunt")
 async def run_hunt_ep(
-    job: JobSubmission = None,
+    job_data: JobSubmission = None,
     user: User = Depends(dep_check_user_role(role_hunter)),
 ):
+    #& This job is ugly and needs to be reworked to look like the others
+    #& e.g.
+    #& _log.debug(f"Running slack event...")
+    #& _log.debug(f"{pformat(request)}")
+    #& msg_400 = f"Invalid input"
+    #& msg_500 = f"Error running slack event"
+    #&
+    #&
+    #& response = await handle_response(
+    #&     event_handler,
+    #&     msg_400,
+    #&     msg_500,
+    #&     request,
+    #&     user,
+    #& )
+    #&
+    #& _log.debug(f"Sending this to slack:")
+    #& _log.debug(f"{pformat(response)}")
+    #& return response
+
+    '''
     job_id = str(uuid4())
     job_data = {
         "job_id": job_id,
@@ -105,6 +127,7 @@ async def run_hunt_ep(
         "job_result_ids": [],
     }
 
+
     try:
         result = await run_hunt(job_data)
         return result
@@ -115,6 +138,23 @@ async def run_hunt_ep(
             # detail=f"Error submitting job: {e}"
             detail=f"Error submitting job: {e}\n\ntraceback: {traceback.format_exc()}"
         )
+    '''
+    _log.debug(f"Starting hunt")
+    _log.debug(f"{pformat(job_data)}")
+
+    msg_400 = None
+    msg_500 = "Error running hunt stack"
+
+    response = await handle_response(
+        hunt_handler,
+        msg_400,
+        msg_500,
+        job_data,
+        user,
+    )
+
+    _log.debug(f"{pformat(response)}")
+    return response
 
 #~ Check all job statuses
 @router.get("/check-jobs")

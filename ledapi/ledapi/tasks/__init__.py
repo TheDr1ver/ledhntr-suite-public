@@ -1,6 +1,7 @@
 from .hunter import (
     get_hunts,
-    run_hunt,
+    # run_hunt,
+    hunt_handler,
 )
 
 from .everyone import(
