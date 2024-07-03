@@ -17,6 +17,7 @@ from rq.registry import (
     StartedJobRegistry,
     DeferredJobRegistry,
 )
+from rq_scheduler import Scheduler
 # from rq_scheduler import Scheduler
 from typing import(
     Dict,
@@ -242,7 +243,52 @@ async def stop_all_workers():
     _log.debug(pformat(responses))
     return responses
 
+async def start_scheduler():
+    await redis_manager.check_redis_conn()
+    scheduler = Scheduler(connection=redis_manager.syncredis)
+    from ledapi.models import(
+        JobSubmission,
+    )
+    from ledapi.tasks import(
+        hunt_handler,
+    )
+    scheduled_jobs = scheduler.get_jobs()
+    for job in scheduled_jobs:
+        _log.debug(f"{xterm('CYAN')}job.func_name: {job.func_name}{xterm('RESET')}")
+        if job.func_name == "ledapi.tasks.hunter.hunt_handler":
+            break
+    else:
+        # Schedule run_hunts task
+        job_data = JobSubmission()
+        job_data.db_name = 'all'
+        job_data.hunt_name = 'all'
+        job_data.plugin = 'all'
+        job_data.forced = False
 
+        job = scheduler.schedule(
+            scheduled_time=datetime.now(timezone.utc),  # First execution
+            func=hunt_handler,                          # Function to run
+            args=[job_data],
+            # kwargs={},
+            queue_name='maintenance',
+            interval=3600,                              # wait time
+            repeat=None,                                # repeat this number of times
+            result_ttl=3600,                            # timeout for result
+        )
+        _log.debug(f"Scheduled job: {job.func_name}")
+    # TODO - clean_orphaned_attributes
+    # TODO - other maintenance (first/last seen?)
+    # TODO - automatically post new domains and IPs to channel
+
+    scheduler.run()
+
+async def stop_scheduler():
+    await redis_manager.check_redis_conn()
+    scheduler = Scheduler(connection=redis_manager.syncredis)
+    for job in scheduler.get_jobs():
+        scheduler.cancel(job)
+        _log.debug(f"Canceled job: {job.func_name}")
+    return True
 
 #&###########################
 #& API ENDPOINT FUNCTIONS

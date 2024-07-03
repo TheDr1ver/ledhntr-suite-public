@@ -105,7 +105,8 @@ async def mojo_ep(
         mojo,
         user,
     )
-
+    _log.debug(f"Sending this to slack:")
+    _log.debug(f"{pformat(response)}")
     return response
 
 #~##########################
@@ -145,7 +146,8 @@ async def slackaction_ep(
     #& bypass normal endpoint response for slack-formatted response
     # // if response['status_code'] == 200:
     # //     response = response['message']['result']
-
+    _log.debug(f"Sending this to slack:")
+    _log.debug(f"{pformat(response)}")
     return response
 
 #~##########################
@@ -184,7 +186,8 @@ async def slackevent_ep(
         user,
     )
     #& bypass normal endpoint response for slack-formatted response
-    if response['status_code'] == 200:
-        response = response['message']['result']
-
+    # // if response['status_code'] == 200:
+        # // response = response['message']['result']
+    _log.debug(f"Sending this to slack:")
+    _log.debug(f"{pformat(response)}")
     return response

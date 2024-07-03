@@ -17,7 +17,12 @@ from ledapi.routes import(
     admin,
     slack,
 )
-from ledapi.worker_manager import start_all_workers, stop_all_workers
+from ledapi.worker_manager import(
+    start_all_workers,
+    stop_all_workers,
+    start_scheduler,
+    stop_scheduler,
+)
 
 # Set Logger
 # logging.basicConfig(level=logging.DEBUG)
@@ -56,7 +61,14 @@ async def lifespan(app: FastAPI):
     _log.debug(f"### MAIN ### STARTING ALL WORKERS")
     await start_all_workers()
 
+    _log.debug(f"### MAIN ### STARTING SCHEDULER")
+    await start_scheduler()
+
     yield
+
+    _log.debug(f"### MAIN ### STOPPING SCHEDULER")
+    await stop_scheduler()
+
 
     _log.debug(f"### MAIN ### STOPPING ALL WORKERS")
     await stop_all_workers()

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import httpx
 from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, Depends, Query, Request, status
 from pprint import pformat
@@ -28,6 +29,7 @@ from ledhntr.data_classes import(
     Entity,
     Relation,
 )
+from ledhntr.helpers import dumps
 from ledhntr.plugins import (
     HNTRPlugin,
     ConnectorPlugin,
@@ -49,6 +51,7 @@ from ledapi.models import(
     MOJOCMD,
     SlackAction,
     SlackEvent,
+    UserModel,
     add_user_modal,
     role_admin,
     role_dbadmin,
@@ -59,7 +62,7 @@ from ledapi.models import(
     unauthorized_modal,
     invalid_command_modal,
 )
-from ledapi.user import User, check_role, dep_check_user_role
+from ledapi.user import User, check_role, dep_check_user_role, get_user_by_slack_id
 from ledapi.worker_manager import(
     get_available_worker,
     poll_job,
@@ -112,12 +115,13 @@ async def mojo_addme(
     except SlackApiError as e:
         _log.error(f"Error sending message: {e.response['error']}")
 
-    return {
+    rez = {
         "response_type": "ephemeral",
-        "text": f"Request for account received: {mojo.user_id}"
+        "text": f"Request for account received: <@{mojo.user_id}>"
     }
+    _log.debug(f"Returning rez: {rez}")
 
-    return mojo
+    return rez
 
 async def mojo_debug(
     worker_name: str = None,
@@ -180,8 +184,58 @@ async def slackaction_check_job_status(
             'username': '<YOURUSERNAME>'}}
 
     '''
-    rez = await poll_job(payload['actions'][0]['value'])
+    job_id = payload['actions'][0]['value']
+    rez = await poll_job(job_id)
+    if not rez:
+        dumprez = f"job_id {job_id} is expired"
+        blocks = [
+            {
+                'type': 'section',
+                'text': {
+                    'type': 'mrkdwn',
+                    'text': dumprez,
+                },
+            }
+        ]
+    else:
+        dumprez = dumps(rez)
+        blocks = [
+            {
+                'type': 'section',
+                'text': {
+                    'type': 'mrkdwn',
+                    'text': f"```{dumprez}```",
+                },
+            }
+        ]
+        if not rez['status'] == 'finished':
+            blocks[0]['accessory'] = {
+                'type': 'button',
+                'text': {'type': 'plain_text', 'text': 'Check Status'},
+                'action_id': 'check_job_status',
+                'value': job_id,
+            }
     _log.debug(f"job_details: {pformat(rez)}")
+
+    '''
+    slack_token = wqm.conf[worker_name]['settings']['token']
+    client = WebClient(token=slack_token)
+    client.chat_update(
+        channel = payload['channel']['id'],
+        ts = payload['container']['message_ts'],
+        text = rez,
+        blocks = blocks
+    )
+    '''
+    resp_url = payload['response_url']
+    resp_payload = {
+        "response_type": "ephemeral",
+        "text": dumprez,
+        "blocks": blocks
+    }
+    async with httpx.AsyncClient() as client:
+        await client.post(resp_url, json=resp_payload)
+
     return rez
 
 
@@ -231,9 +285,59 @@ async def slackaction_submit_add_user(
     username = user_data['user_block']['username']['value']
     role = user_data['role_block']['role']['selected_option']['value']
     slack_id = user_data['slackid_block']['slack_id']['value']
-    # add_user_to_database(username, role) # TODO
-    _log.debug(f"Adding user {username} with role {role} and slack_id {slack_id} to LEDHNTR Database!")
+    #; Add the user to the DB
+    new_user = await add_user_to_db_task(username, role, slack_id)
+    #; Update the reuest message
+    #. At some point this should also DM the user, but that requires extra permissions
+    #. and I don't have time to mess with it right now.
+    slack_uid = slack_id.split(',')[0]
+    slack_token = wqm.conf[worker_name]['settings']['token']
+    client = WebClient(token=slack_token)
+    client.chat_update(
+        channel = payload['channel']['id'],
+        ts = payload['message']['ts'],
+        text = f"Successfully added new user <@{slack_uid}>",
+        blocks = [
+            {
+                'type': 'section',
+                'text': {
+                    'type': 'mrkdwn',
+                    'text': f"Successfully added new user <@{slack_uid}>",
+                },
+            }
+        ]
+    )
     return {'response_action': 'clear'}
+
+#~######################################
+#~ add_user_to_db task
+#~######################################
+async def add_user_to_db_task(
+    username: str = None,
+    role: str = None,
+    slack_id: str = None,
+)->User:
+    _log.debug(f"Checking if user exists")
+    slack_id = f"({slack_id})"
+    user = User.load_by_property(
+        prop_type="slack_id",
+        prop_value=slack_id,
+    )
+    if user is not None:
+        _log.info(f"Updating existing user {user} slack_id to {slack_id}.")
+        if user.slack_id != slack_id:
+            user.slack_id = slack_id
+            User.update_user(user)
+        return user
+    new_user = UserModel()
+    new_user.user_id = username
+    new_user.role = role
+    new_user.slack_id = slack_id
+    saved_user = User.create_user(new_user)
+    _log.info(f"Added user {pformat(saved_user.to_dict())} to LEDAPI Database!")
+
+    return saved_user
+
 
 
 #&##############################################################################
@@ -283,6 +387,7 @@ async def mojocmd_conf(
             view=invalid_command_modal(cmd=cmd)
         )
 
+    _log.debug(f"Returning resp: {resp}")
     return resp
 
 async def slackaction_conf(
@@ -327,6 +432,7 @@ async def slackaction_conf(
             )
         except Exception as e:
             raise
+        #; Finally run the function
         resp = await func_perms[0](worker_name, payload, user)
 
     else:

@@ -61,6 +61,7 @@ async def handle_response(
                 detail=message_400,
             )
     if '_format_override' in rez and rez['_format_override']:
+        del rez['_format_override']
         return rez
     response = {
         'message': rez,
@@ -114,12 +115,23 @@ async def two_sec_grace(
         status = last_job.get_status()
         result['result'] = status
 
-    _log.debug(f"Wait result: {result}")
+    elif last_job.is_finished:
+        result['result'] = last_job.result
 
     if slack_format:
-        new_res = {'_format_override': True}
+        new_res = {}
         if last_job.is_finished:
-            new_res['text'] = result['result']
+            '''
+            if 'text' in result['result']:
+                new_res['text'] = result['result']['text']
+            else:
+                new_res['text'] = result['result']
+            if 'response_type' in result['result']:
+                new_res['response_type'] = result['result']['response_type']
+            if 'blocks' in result['result']:
+                new_res['blocks'] = result['result']['blocks']
+            '''
+            new_res = result['result']
         else:
             # new_res['text'] = f"Job {job_id} is {result['result']}. <CLICK HERE TO CHECK RESULT>"
             new_res['text'] = f"Job {job_id} is {result['result']}"
@@ -139,6 +151,11 @@ async def two_sec_grace(
                     }
                 }
             ]
-        result = new_res
+        #; sometimes we might not want to send a message, like when drawing modals
+        if new_res is not None:
+            new_res['_format_override']=True
+            result = new_res
+
+    _log.debug(f"Wait result: {result}")
 
     return result

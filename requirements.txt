@@ -3,8 +3,10 @@ uvicorn[standard]
 databases[sqlite]
 redis[asyncio]
 rq
+rq-scheduler
 # required for slackbot
 slack_sdk
+httpx
 psutil
 python-dateutil
 requests

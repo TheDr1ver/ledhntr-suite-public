@@ -469,6 +469,9 @@ async def get_user_by_slack_id(
     if user:
         _log.debug(f"Successfully loaded user {user}")
         return user
+    else:
+        _log.debug(f"Unable to find user with slack_id {slack_id}")
+        return None
     _log.debug(f"Unable to find user with slack_id {slack_id}")
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
