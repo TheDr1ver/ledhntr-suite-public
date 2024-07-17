@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from multiprocessing import Process, Manager
 from pprint import pformat
 
+from fastapi import BackgroundTasks
 import psutil
 import redis as syncredis
 from redis.asyncio.client import Redis
@@ -236,6 +237,9 @@ async def get_available_worker(
                 )
                 chosen_queue = queue
                 chosen_worker_name = worker_name
+    if chosen_worker_name is None:
+        chosen_worker_name = f"{plugin_name}.01"
+        _log.warning(f"chosen worker was 'NONE' so setting to default of {plugin_name}.01")
     _log.debug(f"Picked worker {chosen_worker_name}")
     await wqm.check_config(chosen_worker_name)
     return chosen_worker_name
@@ -351,6 +355,79 @@ def stop_scheduler():
         _log.debug(f"Canceled job: {job.func_name}")
     return True
 '''
+
+#&##############################################################################
+#& MAINTENANCE SCHEDULER
+#& Meant for things like running hunts, cleaning orphaned attributes, etc.
+#&##############################################################################
+
+#* Create an infinite async loop that checks Redis Async for a specific task_time
+#* key. If that task_time key is past the interval set, run the function
+
+async def schedule_task(
+    task_name: callable = None,
+    task_args: List = [],
+    interval_seconds: int = 3600,
+    **kwargs
+):
+    _log.debug(f"{xterm('CYAN')}INITIALIZING, PUNK!{xterm('RESET')}")
+    task_key = f"{task_name.__name__}_run_time"
+    _log.debug(f"{xterm('CYAN')}CHECKING REDIS, PUNK!{xterm('RESET')}")
+    await redis_manager.check_redis_conn()
+    _log.debug(f"{xterm('CYAN')}REDIS CHECKED, PUNK! CHECKING WQM CONFIG!{xterm('RESET')}")
+    await wqm.check_config()
+    _log.debug(f"{xterm('CYAN')}WQM CHECKED, PUNK!{xterm('RESET')}")
+    # queue = wqm.conf.get('maintenance')['queue']
+    # _log.debug(f"wqm.conf: \n{pformat(wqm.conf)}")
+    _log.debug(f"{xterm('CYAN')}GETTING MAINTENANCE WORKER NAME, PUNK!{xterm('RESET')}")
+    worker_name = await get_available_worker('maintenance')
+    _log.debug(f"{xterm('CYAN')}GOT WORKER NAME {worker_name}, PUNK!{xterm('RESET')}")
+    queue = wqm.conf[worker_name]['queue']
+    _log.debug(f"{xterm('CYAN')}GOT QUEUE {queue}, PUNK!{xterm('RESET')}")
+    queue: Queue
+
+    _log.debug(f"{xterm('CYAN')}Checking scheduled task {task_key}...{xterm('RESET')}")
+    next_run_time = await redis_manager.redis.get(task_key)
+    now = datetime.now(timezone.utc)
+    if next_run_time:
+        next_run_time = datetime.fromisoformat(next_run_time.decode())
+        if now >= next_run_time:
+            _log.debug(f"{xterm('GREEN')}{now} > {next_run_time}! Time to run {task_name.__name__}!{xterm('RESET')}")
+            # Enqueue the task
+            queue.enqueue_call(
+                task_name,
+                args=task_args,
+                **kwargs
+            )
+            # Update next runtime
+            next_run_time = now + timedelta(seconds=interval_seconds)
+            await redis_manager.redis.set(task_key, next_run_time.isoformat())
+        else:
+            _log.debug(f"{xterm('RED')}Can't run {task_key} until {next_run_time}{xterm('RESET')}")
+
+    else:
+        # Set initial run time
+        next_run_time = now + timedelta(seconds=interval_seconds)
+        _log.debug(f"{xterm('GREEN')}Running {task_name.__name__} for the first time! {xterm('RESET')}")
+        queue.enqueue_call(
+            task_name,
+            args=task_args,
+            **kwargs
+        )
+        await redis_manager.redis.set(task_key, next_run_time.isoformat())
+        _log.debug(f"{xterm('CYAN')}Next time for {task_name.__name__} set to {next_run_time}{xterm('RESET')}")
+
+async def schedule_bg_task(
+    task_name: callable = None,
+    task_args: list = [],
+    interval_seconds: int = 3600,
+    **kwargs,
+):
+    while True:
+        _log.debug(f"{xterm('BLUE')}Launching schedule_task() with {task_name} {task_args} {interval_seconds} {kwargs}{xterm('RESET')}")
+        await schedule_task(task_name, task_args, interval_seconds, **kwargs)
+        _log.debug(f"{xterm('BLUE')}Sleeping {interval_seconds}{xterm('RESET')}")
+        await asyncio.sleep(interval_seconds)
 
 #&###########################
 #& API ENDPOINT FUNCTIONS

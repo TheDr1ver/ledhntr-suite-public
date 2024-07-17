@@ -1,6 +1,7 @@
+import asyncio
 import logging
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import BackgroundTasks, FastAPI, Depends, HTTPException, status
 from contextlib import asynccontextmanager
 
 from ledapi.config import(
@@ -8,6 +9,10 @@ from ledapi.config import(
     _log,
     redis_manager,
     wqm,
+    xterm,
+)
+from ledapi.tasks import(
+    clean_queues,
 )
 from ledapi.routes import(
     everyone,
@@ -22,6 +27,7 @@ from ledapi.worker_manager import(
     stop_all_workers,
     # start_scheduler,
     # stop_scheduler,
+    schedule_bg_task,
 )
 
 # Set Logger
@@ -43,41 +49,41 @@ app.include_router(slack.router, tags=["slack"])
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Connect to redis
-    '''
-    if redis_manager.redis is None:
-        _log.debug(f"Starting redis_manager")
-        await redis_manager.connect()
-        _log.debug(f"Connection result: {redis_manager.redis}")
-    '''
-    _log.debug(f"### MAIN ### OPENING REDIS CONNECTIONS")
+    _log.debug(f"{xterm('BOLD_RED')}### MAIN ### OPENING REDIS CONNECTIONS{xterm('RESET')}")
     await redis_manager.check_redis_conn()
 
-    # Load WorkersQueueManager
-    # _log.debug(f"### MAIN ### LOADING WORKER QUEUES")
-    # await wqm.check_queues()
-
-    # Build WorkersQueueManager
     # Start plugin workers
-    _log.debug(f"### MAIN ### STARTING ALL WORKERS")
+    _log.debug(f"{xterm('BOLD_RED')}### MAIN ### STARTING ALL WORKERS{xterm('RESET')}")
     await start_all_workers()
 
-    # _log.debug(f"### MAIN ### STARTING SCHEDULER")
-    # start_scheduler()
+    bg_tasks = []
+    _log.debug(f"{xterm('BOLD_RED')}### MAIN ### SCHEDULING clean queue task{xterm('RESET')}")
+    task_clean_queues = asyncio.create_task(schedule_bg_task(
+        task_name=clean_queues,
+        task_args=[24, None],
+        interval_seconds = 3600*24,
+        timeout=60*5,
+        result_ttl=60*60,
+    ))
+    bg_tasks.append(task_clean_queues)
 
     yield
 
-    # _log.debug(f"### MAIN ### STOPPING SCHEDULER")
-    # stop_scheduler()
+    _log.debug(f"{xterm('BOLD_RED')}### MAIN ### CANCELING BACKGROUND TASKS{xterm('RESET')}")
+    for t in bg_tasks:
+        _log.debug(f"Canceling {t}")
+        t.cancel()
 
-
-    _log.debug(f"### MAIN ### STOPPING ALL WORKERS")
+    _log.debug(f"{xterm('BOLD_RED')}### MAIN ### STOPPING ALL WORKERS{xterm('RESET')}")
     await stop_all_workers()
 
     # Disconnect from redis_manager
-    _log.debug(f"### MAIN ### DISCONNECTING FROM REDIS")
+    _log.debug(f"{xterm('BOLD_RED')}### MAIN ### DISCONNECTING FROM REDIS{xterm('RESET')}")
     await redis_manager.disconnect()
 
 app.router.lifespan_context = lifespan
+
+
 
 if __name__ == "__main__":
     import uvicorn, multiprocessing

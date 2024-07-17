@@ -397,6 +397,7 @@ async def list_dbs(
     worker_name = await get_available_worker('typedb_client')
     await wqm.check_config(worker_name)
     queue = wqm.conf[worker_name]['queue']
+    queue: Queue
     job = queue.enqueue_call(
         list_dbs_task,
         args=[worker_name],
