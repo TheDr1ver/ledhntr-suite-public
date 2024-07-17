@@ -178,6 +178,7 @@ class WorkersQueueManager(object):
         #! Changing it up again. If it's not an explicit worker, we can load
         #! everything but the plugin itself. That way we can reference queues
         #! when other workers are loaded.
+        loaded_plugin = None
         for key in conf['ledapi.workers']:
             # // _log.debug(f"Loading {key} confs for {explicit_worker_name}")
             '''
@@ -237,9 +238,16 @@ class WorkersQueueManager(object):
                 continue
             if explicit_worker_name is None:
                 continue
+            #. If we already loaded a plugin for the typedb_client.01 key in the config,
+            #. but we're explicitly wanting to load a plugin for typedb_client.02,
+            #. make sure that typedb_client.01 and .02's plugin object are both the same.
+            if loaded_plugin is not None:
+                self.conf[worker_name]['_plugin'] = loaded_plugin
+                _log.debug(f"{xterm('YELLOW')}USING EXISTING OBJECT {loaded_plugin} FOR WORKER {worker_name}{xterm('RESET')}")
+                continue
             #. Load Plugin modules
-            _log.debug(f"{xterm('RED')}LOADING PLUGIN {details['_plugin_name']} FOR WORKER {key}{xterm('RESET')}")
             plugin = led.load_plugin(details['_plugin_name'], duplicate=True)
+            _log.debug(f"{xterm('RED')}LOADED PLUGIN {plugin} FOR WORKER {worker_name}{xterm('RESET')}")
             #. Set plugin attributes based on conf file
             for k, v in details['settings'].items():
                 if not hasattr(plugin, k):
@@ -250,7 +258,7 @@ class WorkersQueueManager(object):
             self.conf[worker_name]['_plugin_class'] = led_plugin_list[details['_plugin_name']]['classes'][0]
             if self.conf[worker_name]['_plugin_class'] == 'HNTR':
                 plugin._load_api_configs()
-
+            loaded_plugin = plugin #. save for additional workers of the same type
             self.conf[worker_name]['_plugin'] = plugin
         return self.conf
         '''
@@ -383,7 +391,7 @@ class WorkersQueueManager(object):
         self,
         worker_name: Optional[str] = None,
     ):
-        if self.conf is None or '_plugin' not in self.conf[worker_name]:
+        if self.conf is None or worker_name is None or '_plugin' not in self.conf[worker_name]:
             await self.load_config(worker_name)
             # _log.debug(f"{CYAN}TESTING OUTSIDE load_config(){RESET}")
             # await self.test_confs()

@@ -20,8 +20,8 @@ from ledapi.routes import(
 from ledapi.worker_manager import(
     start_all_workers,
     stop_all_workers,
-    start_scheduler,
-    stop_scheduler,
+    # start_scheduler,
+    # stop_scheduler,
 )
 
 # Set Logger

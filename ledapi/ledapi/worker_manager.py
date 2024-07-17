@@ -54,8 +54,8 @@ def log_spawn(func):
 def init_manager():
     global worker_processes
     worker_processes = Manager().dict()
-    global scheduler_stop_event
-    scheduler_stop_event = threading.Event()
+    # global scheduler_stop_event
+    # scheduler_stop_event = threading.Event()
 
 async def set_worker_status(worker_name, worker_id, status):
     # await redis_manager.redis.set(f"worker_status:{worker_name}:{worker_id}", status, ex=60*60*24*7)
@@ -188,7 +188,11 @@ async def get_available_worker(
     plugin_name: str = None,
 )->str:
     """Get Available Workers Based on job_data['plugin']
-
+    #! NOTE - THIS IS BASICALLY USELESS BECAUSE IT DOESN'T MEAN WE'RE ACTUALLY
+    #! TELLING RQ WHICH WORKER TO USE. WHATEVER WORKER IS AVAILABLE IS THE WORKER
+    #! THAT'S GOING TO PICK UP THE NEXT JOB.
+    #! ULTIMATELY GOING TO NEED TO REFACTOR THE WHOLE get_available_worker('plugin')
+    #! -> wqm.check_config(plugin) PIPELINE
     Picks a worker to use based on worker status and queue length.
 
     :param plugin_name: name of the plugin you want to grab
@@ -233,6 +237,7 @@ async def get_available_worker(
                 chosen_queue = queue
                 chosen_worker_name = worker_name
     _log.debug(f"Picked worker {chosen_worker_name}")
+    await wqm.check_config(chosen_worker_name)
     return chosen_worker_name
 
 async def start_all_workers():
@@ -262,6 +267,7 @@ async def stop_all_workers():
     _log.debug(pformat(responses))
     return responses
 
+'''
 #& THIS IS ALL JACKED UP. THIS SCHEDULER IS DUMB AND NEEDS TO BE RETHOUGHT
 #& I MIGHT JUST GO BACK TO THE ORIGINAL VERSION THAT USED A SIMPLE TIMER
 #& FOR MAINTENANCE JOBS
@@ -344,6 +350,7 @@ def stop_scheduler():
         scheduler.cancel(job)
         _log.debug(f"Canceled job: {job.func_name}")
     return True
+'''
 
 #&###########################
 #& API ENDPOINT FUNCTIONS

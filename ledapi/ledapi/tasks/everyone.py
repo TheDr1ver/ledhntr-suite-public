@@ -206,9 +206,14 @@ async def get_news_conf(
     _log.debug(f"temp_conf: {temp_conf}")
     '''
     #! await wqm.check_config(worker_name)
-    temp = wqm.conf.get(worker_name)['_plugin']
-    _log.debug(f"temp: {temp}")
-    tdb = get_tdb(temp)
+    # // temp = wqm.conf.get(worker_name)['_plugin']
+    # // _log.debug(f"Getting wqm config for {worker_name}")
+    # // _log.debug(f"Full wqm config: \n{pformat(wqm.conf)}")
+    # // temp = wqm.conf.get(worker_name)
+    # // _log.debug(f"{worker_name} wqm.conf: \n{pformat(temp)}")
+    # // plugin = temp['_plugin']
+    plugin = wqm.conf.get(worker_name)['_plugin']
+    tdb = get_tdb(plugin)
     tdb: TypeDBClient
 
     results = {

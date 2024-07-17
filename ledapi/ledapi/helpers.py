@@ -8,6 +8,8 @@ from typing import Callable, Optional
 
 from ledapi.config import _log, wqm
 
+from typing import Dict, List, Union, Optional
+
 def result_error_catching(
     result_func: Callable = None,
     detail: str = None,
@@ -152,7 +154,7 @@ async def two_sec_grace(
                 }
             ]
         #; sometimes we might not want to send a message, like when drawing modals
-        if new_res is not None:
+        if isinstance(new_res, Dict):
             new_res['_format_override']=True
             result = new_res
 
