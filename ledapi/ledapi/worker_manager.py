@@ -55,16 +55,12 @@ def log_spawn(func):
 def init_manager():
     global worker_processes
     worker_processes = Manager().dict()
-    # global scheduler_stop_event
-    # scheduler_stop_event = threading.Event()
 
 async def set_worker_status(worker_name, worker_id, status):
-    # await redis_manager.redis.set(f"worker_status:{worker_name}:{worker_id}", status, ex=60*60*24*7)
     await redis_manager.check_redis_conn()
     await redis_manager.redis.set(f"rq:worker:{worker_name}", status, ex=60*60*24*7)
 
 async def clear_worker_status(worker_name):
-    # await redis_manager.redis.delete(f"worker_status:{worker_name}:{worker_id}")
     await redis_manager.check_redis_conn()
     await redis_manager.redis.delete(f"rq:worker:{worker_name}")
 
@@ -72,13 +68,10 @@ async def get_worker(worker_name):
     running_worker = None
     await redis_manager.check_redis_conn()
     all_workers = Worker.all(connection=redis_manager.syncredis)
-    # // if not all_workers:
-        # // _log.debug(f"NO WORKERS CURRENTLY STARTED")
+
     for worker in all_workers:
-        # // _log.debug(f"WORKER.NAME: {worker.name} ||| worker_name: {worker_name}")
         if worker.name == worker_name:
             return worker
-        # // _log.debug(f"NOT A MATCH")
 
     _log.debug(f"No worker {worker_name} found!")
     return running_worker
@@ -89,14 +82,9 @@ async def async_worker_process(worker_name):
     redis_sync_client = redis_manager.syncredis
 
     # Check worker queues
-    # // _log.debug(f"Checking worker queues...")
-    # await wqm.check_queues(worker_name)
     await wqm.check_config(worker_name)
-    # // loaded_queues = [details['queue'] for _, details in wqm.conf.items()]
-    # // _log.debug(f"Queues: {loaded_queues}")
 
     # Check for existing workers
-    # // _log.debug(f"Checking for existing workers {worker_name}...")
     worker = await get_worker(worker_name)
     if worker:
         _log.debug(f"FOUND EXISTING WORKER {worker_name}")
@@ -108,12 +96,8 @@ async def async_worker_process(worker_name):
         return worker
 
     _log.debug(f"Worker {worker_name} not found. Starting new process.")
-    # with Connection(redis_pool.sync_client):
     with Connection(redis_sync_client):
-        # // _log.debug(f"Starting worker {worker_name}")
-        # worker = Worker([wqm.queues[worker_name]], name=f"{worker_name}")
         worker = Worker([wqm.conf[worker_name]['queue']], name=worker_name)
-        # // _log.debug(f"worker: {worker} (if shutting down this might be boolean)")
         _log.debug(f"WORKER STATE: {worker.state}")
         await worker.work()
 
@@ -126,11 +110,8 @@ def worker_process(worker_name):
 
 @log_spawn
 async def start_worker(worker_name):
-    # // _log.debug(f"Starting worker {worker_name}...")
     if await get_worker(worker_name):
         if worker_name not in worker_processes:
-            # // _log.debug(f"Found running worker {worker_name} in Redis that wasn't in processes.")
-            # // _log.debug(f"Adding worker {worker_name} to running processes...")
             process = Process(target=worker_process, args=(worker_name,))
             process.start()
             worker_processes[worker_name] = process.pid
@@ -138,11 +119,8 @@ async def start_worker(worker_name):
             _log.debug(msg)
             return msg
 
-    # // _log.debug(f"Starting new process: {worker_name}")
-    # process = Process(target=partial(worker_process, worker_name, worker_id))
     process = Process(target=worker_process, args=(worker_name,))
     process.start()
-    # worker_processes[worker_name] = process
     worker_processes[worker_name] = process.pid
     msg = f"New Worker {worker_name} started: {process.pid}"
     _log.debug(msg)
@@ -194,6 +172,8 @@ async def get_available_worker(
     #! THAT'S GOING TO PICK UP THE NEXT JOB.
     #! ULTIMATELY GOING TO NEED TO REFACTOR THE WHOLE get_available_worker('plugin')
     #! -> wqm.check_config(plugin) PIPELINE
+    #~ Well.. maybe not entirely useless. Some of the checks are overkill, but
+    #~ it's a decent way to figure out which wqm conf worker_name should be chosen
     Picks a worker to use based on worker status and queue length.
 
     :param plugin_name: name of the plugin you want to grab
@@ -238,24 +218,20 @@ async def get_available_worker(
                 chosen_queue = queue
                 chosen_worker_name = worker_name
     if chosen_worker_name is None:
-        chosen_worker_name = f"{plugin_name}.01"
-        _log.warning(f"chosen worker was 'NONE' so setting to default of {plugin_name}.01")
+        if f"{plugin_name}.01" in wqm.conf:
+            chosen_worker_name = f"{plugin_name}.01"
+            _log.warning(f"chosen worker was 'NONE' so setting to default of {plugin_name}.01")
     _log.debug(f"Picked worker {chosen_worker_name}")
     await wqm.check_config(chosen_worker_name)
     return chosen_worker_name
 
 async def start_all_workers():
-    # _log.debug(f"Initializing Multiprocess manager")
     if not "worker_processes" in globals():
         init_manager()
-    # _log.debug(f"Loading Worker Queues...")
-    # await wqm.check_queues()
     await wqm.check_config()
     _log.debug(f"Starting all workers...")
     responses = {}
-    # for worker_name in wqm.queues.keys():
     for worker_name in wqm.conf.keys():
-        # // _log.debug(f"Looping through {worker_name}...")
         responses[f"{worker_name}"] = await start_worker(worker_name)
     responses['worker_processes'] = pformat(worker_processes.items())
     _log.debug(f"{xterm('GREEN')}Startup Worker Status:{xterm('RESET')}")
@@ -264,100 +240,14 @@ async def start_all_workers():
 
 async def stop_all_workers():
     responses = {}
-    # for worker_name in wqm.queues.keys():
     for worker_name in wqm.conf.keys():
         responses[f"{worker_name}"] = await stop_worker(worker_name)
     _log.debug(f"{xterm('RED')}Shutdown Worker Status:{xterm('RESET')}")
     _log.debug(pformat(responses))
     return responses
 
-'''
-#& THIS IS ALL JACKED UP. THIS SCHEDULER IS DUMB AND NEEDS TO BE RETHOUGHT
-#& I MIGHT JUST GO BACK TO THE ORIGINAL VERSION THAT USED A SIMPLE TIMER
-#& FOR MAINTENANCE JOBS
-class CustomScheduler(Scheduler):
-    def run(self):
-        """Starts the scheduler."""
-        self.log.info("Scheduler started with pid %d", os.getpid())
-
-        while True:
-            try:
-                if self.log:
-                    self.log.debug("Checking for scheduled jobs")
-                self.enqueue_jobs()
-                self._remove_old_jobs()
-                self._remove_old_job_results()
-                seconds_until_next_scheduled_run = self.get_seconds_until_next_scheduled_run()
-                if seconds_until_next_scheduled_run == -1:
-                    seconds_until_next_scheduled_run = self.interval
-                if scheduler_stop_event.is_set():
-                    self.log.info("Scheduler stopping...")
-                    break
-                time.sleep(seconds_until_next_scheduled_run)
-            except Exception as e:
-                self.log.error("Scheduler error: %s", e)
-                time.sleep(self.interval)
-
-def schedule_jobs():
-    # await redis_manager.check_redis_conn()
-    scheduler = CustomScheduler(connection=redis_manager.syncredis)
-    from ledapi.models import(
-        JobSubmission,
-    )
-    from ledapi.tasks import(
-        hunt_handler,
-    )
-    scheduled_jobs = scheduler.get_jobs()
-    for job in scheduled_jobs:
-        _log.debug(f"{xterm('CYAN')}job.func_name: {job.func_name}{xterm('RESET')}")
-        if job.func_name == "ledapi.tasks.hunter.hunt_handler":
-            break
-    else:
-        # Schedule run_hunts task
-        job_data = JobSubmission()
-        job_data.db_name = 'all'
-        job_data.hunt_name = 'all'
-        job_data.plugin = 'all'
-        job_data.forced = False
-
-        job = scheduler.schedule(
-            scheduled_time=datetime.now(timezone.utc),  # First execution
-            func=hunt_handler,                          # Function to run
-            args=[job_data],
-            # kwargs={},
-            queue_name='maintenance',
-            interval=3600,                              # wait time
-            repeat=None,                                # repeat this number of times
-            result_ttl=3600,                            # timeout for result
-        )
-        _log.debug(f"Scheduled job: {job.func_name}")
-    # TODO - clean_orphaned_attributes
-    # TODO - other maintenance (first/last seen?)
-    # TODO - automatically post new domains and IPs to channel
-
-    while not scheduler_stop_event.is_set():
-        scheduler.run()
-        # await asyncio.sleep(3600) # sleep for an hour before running the scheduler again.
-        scheduler_stop_event.wait(3600)
-
-def start_scheduler():
-    # asyncio.create_task(schedule_jobs())
-    scheduler_stop_event.clear()
-    scheduler_thread = threading.Thread(target=schedule_jobs, daemon=True)
-    scheduler_thread.start()
-
-def stop_scheduler():
-    scheduler_stop_event.set()
-    # await redis_manager.check_redis_conn()
-    scheduler = CustomScheduler(connection=redis_manager.syncredis)
-    for job in scheduler.get_jobs():
-        scheduler.cancel(job)
-        _log.debug(f"Canceled job: {job.func_name}")
-    return True
-'''
-
 #&##############################################################################
-#& MAINTENANCE SCHEDULER
+#& AUTOMATION SCHEDULER
 #& Meant for things like running hunts, cleaning orphaned attributes, etc.
 #&##############################################################################
 
@@ -365,69 +255,103 @@ def stop_scheduler():
 #* key. If that task_time key is past the interval set, run the function
 
 async def schedule_task(
-    task_name: callable = None,
+    task_func: callable = None,
     task_args: List = [],
     interval_seconds: int = 3600,
     **kwargs
 ):
-    _log.debug(f"{xterm('CYAN')}INITIALIZING, PUNK!{xterm('RESET')}")
-    task_key = f"{task_name.__name__}_run_time"
-    _log.debug(f"{xterm('CYAN')}CHECKING REDIS, PUNK!{xterm('RESET')}")
-    await redis_manager.check_redis_conn()
-    _log.debug(f"{xterm('CYAN')}REDIS CHECKED, PUNK! CHECKING WQM CONFIG!{xterm('RESET')}")
-    await wqm.check_config()
-    _log.debug(f"{xterm('CYAN')}WQM CHECKED, PUNK!{xterm('RESET')}")
-    # queue = wqm.conf.get('maintenance')['queue']
-    # _log.debug(f"wqm.conf: \n{pformat(wqm.conf)}")
-    _log.debug(f"{xterm('CYAN')}GETTING MAINTENANCE WORKER NAME, PUNK!{xterm('RESET')}")
-    worker_name = await get_available_worker('maintenance')
-    _log.debug(f"{xterm('CYAN')}GOT WORKER NAME {worker_name}, PUNK!{xterm('RESET')}")
-    queue = wqm.conf[worker_name]['queue']
-    _log.debug(f"{xterm('CYAN')}GOT QUEUE {queue}, PUNK!{xterm('RESET')}")
-    queue: Queue
+    """schedules a task to be run in the background at an interval
 
-    _log.debug(f"{xterm('CYAN')}Checking scheduled task {task_key}...{xterm('RESET')}")
+    :param task_func: API funciton for the task you wish to run, defaults to None
+    :type task_func: callable, required
+    :param task_args: List of arguments to pass the API function, defaults to []
+    :type task_args: List, required
+    :param interval_seconds: How often the task should be re-run, defaults to 3600
+    :type interval_seconds: int, required
+
+    :return: Number of seconds to sleep before checking task again
+    :rtype: int
+    """
+    task_key = f"{task_func.__name__}_run_time"
+    await redis_manager.check_redis_conn()
+    await wqm.check_config()
+    worker_name = await get_available_worker('maintenance')
+    queue: Queue = wqm.conf[worker_name]['queue']
+
     next_run_time = await redis_manager.redis.get(task_key)
     now = datetime.now(timezone.utc)
     if next_run_time:
         next_run_time = datetime.fromisoformat(next_run_time.decode())
         if now >= next_run_time:
-            _log.debug(f"{xterm('GREEN')}{now} > {next_run_time}! Time to run {task_name.__name__}!{xterm('RESET')}")
-            # Enqueue the task
+            _log.debug(f"{xterm('GREEN')}{now} > {next_run_time}! Time to run {task_func.__name__}!{xterm('RESET')}")
+            #* Enqueue the task
             queue.enqueue_call(
-                task_name,
+                task_func,
                 args=task_args,
                 **kwargs
             )
-            # Update next runtime
+            #* Update next runtime
             next_run_time = now + timedelta(seconds=interval_seconds)
             await redis_manager.redis.set(task_key, next_run_time.isoformat())
         else:
             _log.debug(f"{xterm('RED')}Can't run {task_key} until {next_run_time}{xterm('RESET')}")
-
     else:
-        # Set initial run time
+        #* Set initial run time
         next_run_time = now + timedelta(seconds=interval_seconds)
-        _log.debug(f"{xterm('GREEN')}Running {task_name.__name__} for the first time! {xterm('RESET')}")
+        _log.debug(f"{xterm('GREEN')}Running {task_func.__name__} for the first time! {xterm('RESET')}")
         queue.enqueue_call(
-            task_name,
+            task_func,
             args=task_args,
             **kwargs
         )
         await redis_manager.redis.set(task_key, next_run_time.isoformat())
-        _log.debug(f"{xterm('CYAN')}Next time for {task_name.__name__} set to {next_run_time}{xterm('RESET')}")
+        _log.debug(f"{xterm('CYAN')}Next time for {task_func.__name__} set to {next_run_time}{xterm('RESET')}")
+
+    #; sleep_secs should make sure the task runs again 1 second after it's due.
+    sleep_secs = (next_run_time - now).total_seconds() + 1
+    return sleep_secs
 
 async def schedule_bg_task(
-    task_name: callable = None,
+    task_func: callable = None,
     task_args: list = [],
     interval_seconds: int = 3600,
     **kwargs,
 ):
     while True:
-        _log.debug(f"{xterm('BLUE')}Launching schedule_task() with {task_name} {task_args} {interval_seconds} {kwargs}{xterm('RESET')}")
-        await schedule_task(task_name, task_args, interval_seconds, **kwargs)
-        _log.debug(f"{xterm('BLUE')}Sleeping {interval_seconds}{xterm('RESET')}")
-        await asyncio.sleep(interval_seconds)
+        sleep_secs = interval_seconds
+        _log.debug(
+            f"{xterm('BLUE')}Scheduling {task_func.__name__} with "
+            f"{task_args} {interval_seconds} {kwargs}{xterm('RESET')}"
+        )
+        try:
+            sleep_secs = await schedule_task(task_func, task_args, interval_seconds, **kwargs)
+        except Exception as e:
+            _log.error(f"{xterm('RED')}Error running {task_func.__name__}: {e} {xterm('RESET')}")
+        _log.debug(
+            f"{xterm('BLUE')}Sleeping {sleep_secs} seconds ({sleep_secs/60/60:.2f} "
+            f"hours) before checking {task_func.__name__} again {xterm('RESET')}"
+        )
+        await asyncio.sleep(sleep_secs)
+
+#~##############################
+#~ Reset all Schedule Times
+#~##############################
+
+async def reset_schedules(
+    bg_tasks: Optional[List[asyncio.Task]] = None,
+    task_names: Optional[List[str]] = None,
+):
+    await redis_manager.check_redis_conn()
+    if bg_tasks:
+        for bgt in bg_tasks:
+            task_key = f"{bgt.get_name()}_run_time"
+            await redis_manager.redis.delete(task_key)
+            _log.info(f"Cleared Schedule for {task_key}")
+    if task_names:
+        for tn in task_names:
+            task_key = f"{tn}_run_time"
+            await redis_manager.redis.delete(task_key)
+            _log.info(f"Cleared Schedule for {task_key}")
 
 #&###########################
 #& API ENDPOINT FUNCTIONS

@@ -28,8 +28,14 @@ def xterm(color: str = None):
         "BOLD_BLUE": "\033[1;34m",
         "CYAN": "\033[36m",
         "BOLD_CYAN": "\033[1;36m",
+        "MAGENTA": "\033[35m",
+        "BOLD_MAGENTA": "\033[1;35m",
+        "WHITE": "\033[37m",
+        "BOLD_WHITE": "\033[1;37m",
+        "BLACK": "\033[30m",
+        "BOLD_BLACK": "\033[1;30m"
     }
-    return colors[color]
+    return colors.get(color, "\033[0m")
 
 
 #@##############################################################################
@@ -203,13 +209,14 @@ class WorkersQueueManager(object):
             if plugin_name in no_plugin_workers:
                 worker_id = key.split('.')[1]
                 worker_name = f"{plugin_name}.{worker_id}"
-                self.conf[worker_name] = {
-                    '_plugin_name': plugin_name,
-                    '_worker_id': worker_id,
-                    '_plugin_class': plugin_name,
-                    '_plugin': None,
-                    'settings': {},
-                }
+                if worker_name not in self.conf:
+                    self.conf[worker_name] = {
+                        '_plugin_name': plugin_name,
+                        '_worker_id': worker_id,
+                        '_plugin_class': plugin_name,
+                        '_plugin': None,
+                        'settings': {},
+                    }
             elif plugin_name not in led_plugin_list.keys():
                 _log.debug(f"{plugin_name} is not a valid plugin")
                 continue
@@ -223,8 +230,9 @@ class WorkersQueueManager(object):
             #; Load settings
             if key.startswith(worker_name):
                 setting = key.split('.')[2]
-                if setting not in self.conf[worker_name]:
-                    self.conf[worker_name]['settings'][setting] = await self.parse_value(conf['ledapi.workers'][key])
+                if setting not in self.conf[worker_name]['settings']:
+                    set_value = await self.parse_value(conf['ledapi.workers'][key])
+                    self.conf[worker_name]['settings'][setting] = set_value
 
             details = self.conf[worker_name]
             #; we explicitly set _plugin = None for no_plugin_workers[]
@@ -247,7 +255,7 @@ class WorkersQueueManager(object):
                 continue
             #. Load Plugin modules
             plugin = led.load_plugin(details['_plugin_name'], duplicate=True)
-            _log.debug(f"{xterm('RED')}LOADED PLUGIN {plugin} FOR WORKER {worker_name}{xterm('RESET')}")
+            _log.debug(f"{xterm('GREEN')}LOADED PLUGIN {plugin} FOR WORKER {worker_name}{xterm('RESET')}")
             #. Set plugin attributes based on conf file
             for k, v in details['settings'].items():
                 if not hasattr(plugin, k):
@@ -261,88 +269,6 @@ class WorkersQueueManager(object):
             loaded_plugin = plugin #. save for additional workers of the same type
             self.conf[worker_name]['_plugin'] = plugin
         return self.conf
-        '''
-        #! BREAK BREAK
-        #~ if worker_name (e.g. typedb_client.01) is passed, only load those confs
-        if worker_name is not None:
-            plugin_name = worker_name.split('.')[0]
-            if plugin_name in no_plugin_workers:
-                self.conf[worker_name] = {
-                    '_plugin_name': plugin_name,
-                    '_plugin_class': plugin_name,
-                    '_plugin': None,
-                    'settings': {},
-                }
-            if worker_name not in self.conf:
-                self.conf[worker_name] = {
-                    '_plugin_name': plugin_name,
-                    '_worker_id': key.split('.')[1],
-                    'settings': {},
-                }
-
-        #~ Otherwise we're gonna load everything
-        else:
-            for key in conf['ledapi.workers']:
-                plugin_name = key.split('.')[0]
-                if plugin_name not in led.list_plugins().keys():
-                    # Don't load plugin for generic workers that don't have an LEDHNTR Plugin
-                    if plugin_name in no_plugin_workers:
-                        worker_id = key.split('.')[1]
-                        worker_name = f"{plugin_name}.{worker_id}"
-                        self.conf[worker_name] = {
-                            '_plugin_name': plugin_name,
-                            '_plugin_class': plugin_name,
-                            '_plugin': None,
-                            'settings': {},
-                        }
-                        continue
-                    _log.debug(f"{plugin_name} is not a valid plugin")
-                    continue
-                worker_name = f"{key.split('.')[0]}.{key.split('.')[1]}"
-                if worker_name not in self.conf:
-                    self.conf[worker_name] = {
-                        '_plugin_name': plugin_name,
-                        '_worker_id': key.split('.')[1],
-                        'settings': {},
-                    }
-                #; Load settings
-                if key.startsith(worker_name):
-                    setting = key.split('.')[2]
-                    if setting not in self.conf[worker_name]:
-                        self.conf[worker_name]['settings'][setting] = await self.parse_value(conf['ledapi.workers'][key])
-
-        #~ Get settings for each worker
-        safe_dict = copy.deepcopy(self.conf)
-        for worker_name, details in safe_dict.items():
-            for key in conf['ledapi.workers']:
-                if key.startswith(worker_name):
-                    # _log.debug(f"Splitting key {key} into {key.split('.')}")
-                    setting = key.split('.')[2]
-                    if setting not in self.conf[worker_name]:
-                        self.conf[worker_name]['settings'][setting] = await self.parse_value(conf['ledapi.workers'][key])
-
-        #~ Load Plugin Modules For Each Worker
-        safe_dict = copy.deepcopy(self.conf)
-        for worker_name, details in safe_dict.items():
-            # self.conf[worker_name]['_plugin'] = led.load_plugin(details['_plugin_name'], duplicate=True)
-            if not '_plugin' in details: #; we explicitly set _plugin = None for maintenance
-                plugin = led.load_plugin(details['_plugin_name'], duplicate=True)
-                for k, v in details['settings'].items():
-                    if not hasattr(plugin, k):
-                        _log.debug(f"plugin {plugin} has no attribute {k}")
-                        continue
-                    #! FFS STOP DOING THIS!!! plugin.k = v
-                    setattr(plugin, k, v)
-                    # // _log.debug(f"Set {worker_name} {plugin}.{k} to {v}")
-                    # // _log.debug(f"{RED}CONFIRMED{RESET}: k: {k} v: {plugin.k}")
-                #* Reload API Configs
-                led_plugin_list = led.list_plugins()
-                self.conf[worker_name]['_plugin_class'] = led_plugin_list[details['_plugin_name']]['classes'][0]
-                if self.conf[worker_name]['_plugin_class'] == 'HNTR':
-                    plugin._load_api_configs()
-
-                self.conf[worker_name]['_plugin'] = plugin
-        '''
 
     async def test_confs(
         self,

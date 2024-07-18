@@ -6,7 +6,7 @@ from fastapi import HTTPException, status
 from rq.job import Job
 from typing import Callable, Optional
 
-from ledapi.config import _log, wqm
+from ledapi.config import _log, wqm, xterm
 
 from typing import Dict, List, Union, Optional
 
@@ -121,6 +121,7 @@ async def two_sec_grace(
         result['result'] = last_job.result
 
     if slack_format:
+        _log.debug(f"{xterm('YELLOW')}Using Slack Format{xterm('X')}")
         new_res = {}
         if last_job.is_finished:
             '''
@@ -134,6 +135,7 @@ async def two_sec_grace(
                 new_res['blocks'] = result['result']['blocks']
             '''
             new_res = result['result']
+            _log.debug(f"{xterm('YELLOW')}job is finished. result: {new_res}{xterm('X')}")
         else:
             # new_res['text'] = f"Job {job_id} is {result['result']}. <CLICK HERE TO CHECK RESULT>"
             new_res['text'] = f"Job {job_id} is {result['result']}"
@@ -156,7 +158,25 @@ async def two_sec_grace(
         #; sometimes we might not want to send a message, like when drawing modals
         if isinstance(new_res, Dict):
             new_res['_format_override']=True
-            result = new_res
+        if new_res is None or new_res is True:
+            '''
+            new_res = {
+                'text': f"Successfully executed job {job_id}: {result['result']}",
+                'blocks': [
+                    {
+                        'type': 'section',
+                        'text': {
+                            'type': 'mrkdwn',
+                            'text': f"Successfully executed job `{job_id}`: {result['result']}",
+                        }
+                    }
+                ],
+                '_format_override': True
+            }
+            '''
+            new_res = {'_format_override': True}
+
+        result = new_res
 
     _log.debug(f"Wait result: {result}")
 

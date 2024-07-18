@@ -12,7 +12,10 @@ from ledapi.config import(
     xterm,
 )
 from ledapi.tasks import(
+    check_automation_schedules,
     clean_queues,
+    start_automations,
+    stop_automations,
 )
 from ledapi.routes import(
     everyone,
@@ -56,23 +59,18 @@ async def lifespan(app: FastAPI):
     _log.debug(f"{xterm('BOLD_RED')}### MAIN ### STARTING ALL WORKERS{xterm('RESET')}")
     await start_all_workers()
 
-    bg_tasks = []
     _log.debug(f"{xterm('BOLD_RED')}### MAIN ### SCHEDULING clean queue task{xterm('RESET')}")
-    task_clean_queues = asyncio.create_task(schedule_bg_task(
-        task_name=clean_queues,
-        task_args=[24, None],
-        interval_seconds = 3600*24,
-        timeout=60*5,
-        result_ttl=60*60,
-    ))
-    bg_tasks.append(task_clean_queues)
+    bg_tasks = await start_automations()
+
+    await check_automation_schedules(
+        bg_tasks,
+        bot_workers = ['slackbot']
+    )
 
     yield
 
     _log.debug(f"{xterm('BOLD_RED')}### MAIN ### CANCELING BACKGROUND TASKS{xterm('RESET')}")
-    for t in bg_tasks:
-        _log.debug(f"Canceling {t}")
-        t.cancel()
+    await stop_automations(bg_tasks)
 
     _log.debug(f"{xterm('BOLD_RED')}### MAIN ### STOPPING ALL WORKERS{xterm('RESET')}")
     await stop_all_workers()

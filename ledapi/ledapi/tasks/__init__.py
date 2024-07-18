@@ -10,12 +10,16 @@ from .everyone import(
     get_news,
 )
 
-from .maintenance import(
-    clean_queues,
-)
-
 from .slack import(
     action_handler,
     event_handler,
     mojo_handler,
+    slack_post_message,
+)
+
+from .automate import(
+    check_automation_schedules,
+    clean_queues,
+    start_automations,
+    stop_automations,
 )

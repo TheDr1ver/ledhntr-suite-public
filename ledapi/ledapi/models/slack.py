@@ -34,6 +34,8 @@ class MOJOCMD(BaseModel):
     is_enterprise_install: bool = False
     response_url: str = None
     trigger_id: str = None
+    slackbot_token: str = None
+    admin_channel: str = None
 
 class SlackEvent(BaseModel):
     token: str = None

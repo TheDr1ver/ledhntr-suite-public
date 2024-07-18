@@ -78,16 +78,42 @@ from typedb_client import TypeDBClient
 #&##############################################################################
 
 #~######################################
+#~ Post Message
+#~######################################
+async def slack_post_message(
+    slack_token: str = None,
+    channel: str = None,
+    text: str = None,
+    blocks: List[Dict] = [],
+):
+    _log.debug(f"Posting {text} to {channel}")
+
+    client=WebClient(token=slack_token)
+    try:
+        response = client.chat_postMessage(
+            channel=channel,
+            text=text,
+            blocks=blocks,
+        )
+    except SlackApiError as e:
+        _log.error(f"Error sending message {e.response['error']}")
+        return False
+
+    _log.debug(f"Successful post! {response}")
+    return True
+
+
+#~######################################
 #~ Parse MOJO CMDs
 #~######################################
 async def mojo_addme(
-    worker_name: str = None,
     mojo: MOJOCMD = None,
     user: User = None,
 ):
     _log.debug(f"Processing addme comand")
     _log.debug(f"mojo: {mojo}")
 
+    '''
     admin_channel = "#mojo-dev"
     slack_token = wqm.conf[worker_name]['settings']['token']
     client = WebClient(token=slack_token)
@@ -115,6 +141,35 @@ async def mojo_addme(
     except SlackApiError as e:
         _log.error(f"Error sending message: {e.response['error']}")
 
+    '''
+    channel = "#mojo-dev"
+    # slack_token = wqm.conf[worker_name]['settings']['token']
+    slack_token = mojo.slackbot_token
+    text = f"User <@{mojo.user_id}> has requested an account."
+    blocks = [
+        {
+            'type': 'section',
+            'text': {
+                'type': 'mrkdwn',
+                'text': f"User <@{mojo.user_id}> has requested an account."
+            },
+            'accessory': {
+                'type': 'button',
+                'text': {'type': 'plain_text', 'text': 'Add User'},
+                'action_id': 'open_add_user_modal',
+                'value': f"{mojo.user_name},{mojo.user_id},{mojo.team_id}",
+            }
+        }
+    ]
+
+    await slack_post_message(
+        slack_token,
+        channel,
+        text,
+        blocks,
+    )
+
+
     rez = {
         "response_type": "ephemeral",
         "text": f"Request for account received: <@{mojo.user_id}>"
@@ -124,7 +179,6 @@ async def mojo_addme(
     return rez
 
 async def mojo_debug(
-    worker_name: str = None,
     mojo: MOJOCMD = None,
     user: User = None,
 ):
@@ -132,6 +186,88 @@ async def mojo_debug(
     _log.debug(f"mojo: {mojo}")
     await asyncio.sleep(5)
     return mojo
+
+async def mojo_clear_schedules(
+    mojo: MOJOCMD = None,
+    user: User = None,
+):
+    await redis_manager.check_redis_conn()
+    #! extract pattern from MOJO command
+    pattern = "*_run_time"
+    cursor = '0'
+    text_lines = []
+    while cursor != 0:
+        cursor, keys = await redis_manager.redis.scan(cursor=cursor, match=pattern)
+        for key in keys:
+            try:
+                await redis_manager.redis.delete(key)
+                text = f"<@{mojo.user_id}> successfully deleted schedule key: `{key.decode('utf-8')}`"
+                text_lines.append(text)
+                _log.debug(text)
+            except Exception as e:
+                _log.error(f"Failed removing key {key}")
+                continue
+
+    text = "\n".join(text_lines)
+    blocks = []
+    for line in text_lines:
+        block_section = {
+            'type': 'section',
+            'text': {
+                'type': 'mrkdwn',
+                'text': line,
+            }
+        }
+        blocks.append(block_section)
+    await slack_post_message(
+        mojo.slackbot_token,
+        f"#{mojo.admin_channel}",
+        text,
+        blocks,
+    )
+
+async def mojo_check_schedules(
+    mojo: MOJOCMD = None,
+    user: User = None,
+):
+    await redis_manager.check_redis_conn()
+    pattern = "*_run_time"
+    cursor = '0'
+    text_lines = [f"<@{mojo.user_id}> requested next schedule times..."]
+    while cursor != 0:
+        cursor, keys = await redis_manager.redis.scan(cursor=cursor, match=pattern)
+        for key in keys:
+            try:
+                next_run_time = await redis_manager.redis.get(key)
+                if next_run_time:
+                    next_run_time = datetime.fromisoformat(next_run_time.decode())
+                    text = f"`{key.decode('utf-8')}`: `{next_run_time}`"
+                    text_lines.append(text)
+                else:
+                    text = f"`{key.decode('utf-8')}`: NOT SCHEDULED"
+                    text_lines.append(text)
+
+            except Exception as e:
+                _log.error(f"Failed getting value for {key}")
+                continue
+
+    text = "\n".join(text_lines)
+    blocks = []
+    for line in text_lines:
+        block_section = {
+            'type': 'section',
+            'text': {
+                'type': 'mrkdwn',
+                'text': line,
+            }
+        }
+        blocks.append(block_section)
+    await slack_post_message(
+        mojo.slackbot_token,
+        f"#{mojo.admin_channel}",
+        text,
+        blocks,
+    )
 
 #~######################################
 #~ slackaction_check_job_status
@@ -348,21 +484,33 @@ async def add_user_to_db_task(
 #&##############################################################################
 
 #~######################################
-#~ get_news config
+#~ mojo_cmd config
 #~######################################
 
 async def mojocmd_conf(
-    worker_name: str = None,
     mojo: MOJOCMD = None,
     user: User = None,
 ):
-    slack_token = wqm.conf[worker_name]['settings']['token']
-    client = WebClient(token=slack_token)
+    client = WebClient(token=mojo.slackbot_token)
     cmd = mojo.text.split(' ')[0]
     resp = None
     opts = {
         "addme": (mojo_addme, role_public),
         "debug": (mojo_debug, role_public),
+        #; mojo clear-schedules
+        #~ worker_manager.reset_schedules()
+        "clear-schedules": (mojo_clear_schedules, role_admin),
+        "check-schedules": (mojo_check_schedules, role_everyone),
+        #; mojo news
+        #. "news": (mojo_news, role_everyone),
+        #; mojo hunt db=all plugin=all forced=True
+        #. "hunt": (mojo_hunt, role_hunter)
+        #; mojo enrich db=all plugin=all forced=True
+        #. "enrich": (mojo_enrich, role_hunter)
+        #; mojo status worker=censys.01
+        #; mojo status job=<jobid>
+        #. "status": (mojo_status, role_everyone)
+        #. "search": (mojo_search, role_hunter)
     }
 
 
@@ -379,7 +527,7 @@ async def mojocmd_conf(
             )
         except Exception as e:
             raise
-        resp = await func_perms[0](worker_name, mojo, user)
+        resp = await func_perms[0](mojo, user)
     else:
         _log.debug(f"Invalid command: {cmd}")
         client.views_open(
@@ -477,13 +625,17 @@ async def mojo_handler(
     # ! await wqm.check_config()
     worker_name = await get_available_worker('slackbot')
     queue = wqm.conf[worker_name]['queue']
+    slack_token = wqm.conf[worker_name]['settings']['token']
+    mojo.admin_channel = wqm.conf[worker_name]['settings']['admin_channel']
+    mojo.slackbot_token = slack_token
+
     _log.debug(f"Enqueuing mojo_handler")
     _log.debug(f"mojo: {mojo}")
     _log.debug(f"user: {user}")
 
     job = queue.enqueue_call(
         mojocmd_conf,
-        args=[worker_name, mojo, user],
+        args=[mojo, user],
         timeout=60*5,
         result_ttl=60*60,
     )

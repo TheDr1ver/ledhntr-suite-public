@@ -12,7 +12,7 @@ from fastapi import (
     Query,
     Request
 )
-
+from fastapi.responses import Response
 from ledapi.user import(
     User,
     dep_check_user_role,
@@ -43,6 +43,7 @@ from ledapi.tasks import(
 )
 
 from ledhntr.data_classes import Attribute, Entity, Relation, Thing
+from ledhntr.helpers import dumps
 
 router = APIRouter()
 
@@ -105,8 +106,11 @@ async def mojo_ep(
         mojo,
         user,
     )
+
     _log.debug(f"Sending this to slack:")
     _log.debug(f"{pformat(response)}")
+    if not response:
+        return Response(status_code=204)
     return response
 
 #~##########################
