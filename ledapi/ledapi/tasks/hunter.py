@@ -25,6 +25,7 @@ from ledapi.config import(
     led,
     get_tdb,
     wqm,
+    xterm,
 )
 from ledapi.helpers import(
     result_error_catching,
@@ -65,11 +66,12 @@ async def find_active_hunts_task(
     :return: All active hunts for the given plugin in the DB
     :rtype: Dict
     """
+    _log.setLevel('INFO')
     _log.debug(f"Finding active hunts...")
     tdb = get_tdb()
     tdb.db_name = db_name
     #* Find active hunts
-    hntr_plugin = wqm.conf.get(hntr_worker_name)['_plugin']
+    hntr_plugin:HNTRPlugin = wqm.conf.get(hntr_worker_name)['_plugin']
     try:
         all_active_hunts = hntr_plugin.find_active_hunts(tdb, ignore_freq=forced)
         #* Narrow it down to only one hunt if we've explicitly provided a name
@@ -87,6 +89,7 @@ async def find_active_hunts_task(
         _log.error(f"Traceback: {traceback.format_exc()}")
         tdb.close_client()
         raise Exception
+    _log.setLevel('DEBUG')
     return active_hunts
 
 #TODO RUN HUNT JOB2 - LOAD CACHED HUNTS FROM DISK - DEPENDS ON JOB1 SUCCESS
@@ -98,6 +101,7 @@ async def run_hunts_task(
     #TODO cached_hunts: Dict = None,
 ):
     # while not active_hunts.is_finished:
+    _log.setLevel('INFO')
     queue = wqm.conf.get(hntr_worker_name)['queue']
     last_job = queue.fetch_job(active_hunts_id)
     while not last_job.is_finished:
@@ -118,6 +122,7 @@ async def run_hunts_task(
         _log.error(f"Traceback: {traceback.format_exc()}")
         raise Exception
 
+    _log.setLevel('DEBUG')
     return hunt_results
 
 #TODO RUN HUNT JOB4 - CACHE HUNT RESULTS TO DISK - DEPENDS ON JOB3 SUCCESS
@@ -128,6 +133,7 @@ async def add_hunt_results_task(
     db_name: str = None,
     hunt_results_id: str = None,
 ):
+    _log.setLevel('INFO')
     queue = wqm.conf.get(hntr_worker_name)['queue']
     last_job = queue.fetch_job(hunt_results_id)
     while not last_job.is_finished:
@@ -135,7 +141,7 @@ async def add_hunt_results_task(
         time.sleep(1)
     hunt_results = last_job.result
     _log.debug(f"Adding hunt_results...")
-    hntr_plugin = wqm.conf.get(hntr_worker_name)['_plugin']
+    hntr_plugin:HNTRPlugin = wqm.conf.get(hntr_worker_name)['_plugin']
     tdb = get_tdb()
     tdb.db_name = db_name
     try:
@@ -156,12 +162,15 @@ async def add_hunt_results_task(
                         stats[hunt_name]['entities']+=1
                     elif isinstance(thing, Relation):
                         stats[hunt_name]['relations']+=1
-        msg = f"Succesfully finished hunts: \n{pformat(stats)}"
+        msg = f"{xterm('GREEN')}Succesfully finished hunts: \n{pformat(stats)}{xterm('X')}"
     except Exception as e:
         msg = f"Error adding hunt results: {e}"
         _log.error(msg)
         _log.error(f"Traceback: {traceback.format_exc()}")
     tdb.close_client()
+    _log.setLevel('DEBUG')
+    _log.debug(msg)
+    # // _log.debug(f"{xterm('YELLOW')}{pformat(hunt_results)}{xterm('X')}")
     return msg
 
 #TODO RUN HUNT JOB6 - RUN ENRICHMENTS - DEPENDS ON JOB5 SUCCESS
@@ -288,7 +297,7 @@ async def run_hunt_job_queue(
     bulk_add_results = await add_hunt_results(worker_name, db_name, hunt_results)
     return bulk_add_results
     """
-
+    _log.setLevel('INFO')
     result = {
         "active_hunts": None,
         "hunt_results": None,
@@ -356,6 +365,7 @@ async def run_hunt_job_queue(
     #TODO every hour on their own anyway.
 
     #@ Return all subsequent job_ids
+    _log.setLevel('DEBUG')
     return result
 
 #&##############################################################################
