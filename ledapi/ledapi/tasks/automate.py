@@ -48,6 +48,7 @@ from ledapi.models import(
 from ledapi.tasks import(
     hunt_handler,
     slack_post_message,
+    get_news_conf,
 )
 from ledapi.user import User
 from ledapi.worker_manager import(
@@ -192,6 +193,121 @@ async def auto_hunt_conf(
     _log.debug(f"response: \n{pformat(response)}")
     return True
 
+#~##############################
+#~ post_news config
+#~##############################
+
+async def post_news(
+    hours_back: int = 24,
+    verbose: bool = False,
+    bot_workers: List[str] = [],
+    channel: str = "#mojo-dev", # TODO - Get rid of this and roll it into a ConnectorPlugin
+):
+    bot_post_funcs = {
+        'slackbot': slack_post_message,
+    }
+
+    text_lines = []
+
+    interesting_things = [
+        'domain',
+        'hostname',
+        'ip',
+        'jarm',
+        'ja3s',
+        'ssl',
+        'http',
+    ]
+
+    news_results = await get_news_conf(hours_back)
+    _log.debug(f"{xterm('CYAN')}{pformat(news_results)}{xterm('X')}")
+    new_things = news_results.get('new_things')
+    if not new_things:
+        return None
+    if verbose:
+        for bot in bot_workers:
+            if bot not in bot_post_funcs:
+                _log.error(f"No handler specified for {bot}")
+                continue
+            bot_worker_name = await get_available_worker(bot)
+            # // _log.debug(f"{xterm('CYAN')}{bot_worker_name} configs: \n{pformat(wqm.conf[bot_worker_name])}{xterm('X')}")
+            token = wqm.conf[bot_worker_name]['settings']['token']
+            #; This is something else that should be specific to the chat
+            #; plugin, but again... MVP... just trying to get it out the door.
+            text = f"```{news_results.get('result').get('count')}```"
+            blocks = [
+                {
+                    'type': 'section',
+                    'text': {
+                        'type': 'mrkdwn',
+                        'text': f"```{new_things}```",
+                    }
+                }
+            ]
+            await bot_post_funcs[bot](
+                token,
+                channel,
+                text,
+                blocks,
+            )
+        return True
+
+    for db, thing_types in new_things.items():
+        text_lines.append(f"*{db}*")
+        for tt, entries in thing_types.items():
+            if tt in interesting_things:
+                text_lines.append(f"_{tt}_")
+            for e in entries:
+                for keyval, attributes in e.items():
+                    text_lines.append(f"```{keyval}")
+                    for label, values in attributes.items():
+                        text_lines.append(f"\t{label}")
+                        for value in values:
+                            text_lines.append(f"\t\t{value}")
+                    text_lines.append(f"```")
+
+    for bot in bot_workers:
+        if bot not in bot_post_funcs:
+            _log.error(f"No handler specified for {bot}")
+            continue
+        bot_worker_name = await get_available_worker(bot)
+        # // _log.debug(f"{xterm('CYAN')}{bot_worker_name} configs: \n{pformat(wqm.conf[bot_worker_name])}{xterm('X')}")
+        token = wqm.conf[bot_worker_name]['settings']['token']
+        #; This is something else that should be specific to the chat
+        #; plugin, but again... MVP... just trying to get it out the door.
+        text = "\n".join(text_lines)
+        blocks = []
+        '''
+        for line in text_lines:
+            block_section = {
+                'type': 'section',
+                'text': {
+                    'type': 'mrkdwn',
+                    'text': line,
+                }
+            }
+            blocks.append(block_section)
+        '''
+        blocks = [
+            {
+                'type': 'section',
+                'text': {
+                    'type': 'mrkdwn',
+                    'text': text,
+                }
+            }
+        ]
+
+        await bot_post_funcs[bot](
+            token,
+            channel,
+            text,
+            blocks,
+        )
+
+    return True
+
+
 #&##############################################################################
 #& MAIN WRAPPER
 #&##############################################################################
@@ -268,7 +384,6 @@ async def check_automation_schedules(
             blocks,
         )
 
-
 #~##############################
 #~ Launch all Background Tasks
 #~##############################
@@ -299,19 +414,20 @@ async def start_automations():
             #; Every 24 hours we're going to clean the queues
             'interval_seconds': 3600*24,
         },
+        #@ Run Hunts
         {
             'task_func': auto_hunt_conf,
             'task_args': ['all', 'all', 'all', False, 60*60, 60*60*24],
             #; Every 15 min we're gonna check to run auto_hunts again
             'interval_seconds': 60*15,
         },
-        #! ADD THIS BACK WHEN WE FIGURE OUT WHY IGNORE_FREQ ISN'T WORKING PROPERLY
-        #! hntr.py _find_active_hunts()
-        #! ln 733?
-        #!
-        #! ohhhhhh this is probably happening b/c I don't have the last_seen
-        #! attributes properly populating yet. They'll need to populate in a
-        #! scheduled background job too.
+        #TODO @ Run Enrichments
+        #TODO @ POST the news
+        {
+            'task_func': post_news,
+            'task_args': [1, False, ['slackbot']],
+            'interval_seconds': 3600,
+        },
     ]
 
     for at in all_tasks:

@@ -8,6 +8,7 @@ from .everyone import(
     list_dbs,
     search,
     get_news,
+    get_news_conf, # used for automation
 )
 
 from .slack import(

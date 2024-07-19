@@ -164,13 +164,28 @@ async def add_hunt_results_task(
                         stats[hunt_name]['relations']+=1
         msg = f"{xterm('GREEN')}Succesfully finished hunts: \n{pformat(stats)}{xterm('X')}"
     except Exception as e:
-        msg = f"Error adding hunt results: {e}"
+        msg = f"{xterm('RED')}Error adding hunt results: {e}{xterm('X')}"
         _log.error(msg)
         _log.error(f"Traceback: {traceback.format_exc()}")
+    #~ Convert Hostname to Domain
+    try:
+        tdb.convert_hostname_to_domain()
+    except Exception as e:
+        msg += f"\n{xterm('RED')}Error converting hostname to domain: {e}{xterm('X')}"
+        _log.error(e)
+        _log.error(f"Traceback: {traceback.format_exc()}")
+    #~ Update first/last seen
     try:
         tdb.super_update_first_last_seen()
     except Exception as e:
-        msg += f"\nError updating first/last-seen times: {e}"
+        msg += f"\n{xterm('RED')}Error updating first/last-seen times: {e}{xterm('X')}"
+        _log.error(e)
+        _log.error(f"Traceback: {traceback.format_exc()}")
+    #~ Purge abandoned attributes
+    try:
+        tdb.purge_abandoned_attributes()
+    except Exception as e:
+        msg += f"\n{xterm('RED')}Error purging abandoned attributes: {e}{xterm('X')}"
         _log.error(e)
         _log.error(f"Traceback: {traceback.format_exc()}")
     tdb.close_client()
@@ -290,7 +305,7 @@ async def run_hunt_job_queue(
     #. worker/plugin. Once I have Job1 and 3 functionality inside the TypeDB_Client
     #. and Job2 functionality inside the HNTR plugin it will speed things up.
     #. As such, I'm going to submit them to separate jobs in the queue for now
-    #. knowing that at a later date I'll have Queue1 for TypeDB-only stuff and 
+    #. knowing that at a later date I'll have Queue1 for TypeDB-only stuff and
     #. Queue2 for HNTR/{worker_name}-only stuff and they will be better distributed.
     """
     active_hunts = await find_active_hunts(

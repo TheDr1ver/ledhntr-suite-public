@@ -42,6 +42,7 @@ from ledapi.config import(
     get_tdb,
     redis_manager,
     wqm,
+    xterm,
 )
 from ledapi.helpers import (
     two_sec_grace,
@@ -66,6 +67,9 @@ from ledapi.user import User, check_role, dep_check_user_role, get_user_by_slack
 from ledapi.worker_manager import(
     get_available_worker,
     poll_job,
+)
+from ledapi.tasks import(
+    get_news_conf,
 )
 
 # _log.debug(f"PYTHONPATH: {os.environ.get('PYTHONPATH')}")
@@ -186,6 +190,123 @@ async def mojo_debug(
     _log.debug(f"mojo: {mojo}")
     await asyncio.sleep(5)
     return mojo
+
+#! DEBUG TESTING
+async def mojo_post_news(
+    mojo: MOJOCMD = None,
+    user: User = None,
+):
+    _log.debug(f"Running POST NEWS")
+    hours_back = int(mojo.text.split(' ')[1])
+    verbose = False
+    bot_workers=['slackbot']
+    channel = "#mojo-dev"
+
+    bot_post_funcs = {
+        'slackbot': slack_post_message,
+    }
+
+    text_lines = []
+
+    interesting_things = [
+        'domain',
+        'hostname',
+        'ip',
+        'jarm',
+        'ja3s',
+        'ssl',
+        'http',
+    ]
+
+    news_results = await get_news_conf(hours_back)
+    _log.debug(f"{xterm('CYAN')}{pformat(news_results)}{xterm('X')}")
+    new_things = news_results.get('new_things')
+    if not new_things:
+        return None
+    if verbose:
+        for bot in bot_workers:
+            if bot not in bot_post_funcs:
+                _log.error(f"No handler specified for {bot}")
+                continue
+            bot_worker_name = await get_available_worker(bot)
+            # // _log.debug(f"{xterm('CYAN')}{bot_worker_name} configs: \n{pformat(wqm.conf[bot_worker_name])}{xterm('X')}")
+            token = wqm.conf[bot_worker_name]['settings']['token']
+            #; This is something else that should be specific to the chat
+            #; plugin, but again... MVP... just trying to get it out the door.
+            text = f"```{news_results.get('result').get('count')}```"
+            blocks = [
+                {
+                    'type': 'section',
+                    'text': {
+                        'type': 'mrkdwn',
+                        'text': f"```{new_things}```",
+                    }
+                }
+            ]
+            await bot_post_funcs[bot](
+                token,
+                channel,
+                text,
+                blocks,
+            )
+        return True
+
+    for db, thing_types in new_things.items():
+        text_lines.append(f"*{db}*")
+        for tt, entries in thing_types.items():
+            if tt in interesting_things:
+                text_lines.append(f"_{tt}_")
+            for e in entries:
+                for keyval, attributes in e.items():
+                    text_lines.append(f"```{keyval}")
+                    for label, values in attributes.items():
+                        text_lines.append(f"\t{label}")
+                        for value in values:
+                            text_lines.append(f"\t\t{value}")
+                    text_lines.append(f"```")
+
+    for bot in bot_workers:
+        if bot not in bot_post_funcs:
+            _log.error(f"No handler specified for {bot}")
+            continue
+        bot_worker_name = await get_available_worker(bot)
+        # // _log.debug(f"{xterm('CYAN')}{bot_worker_name} configs: \n{pformat(wqm.conf[bot_worker_name])}{xterm('X')}")
+        token = wqm.conf[bot_worker_name]['settings']['token']
+        #; This is something else that should be specific to the chat
+        #; plugin, but again... MVP... just trying to get it out the door.
+        text = "\n".join(text_lines)
+        blocks = []
+        '''
+        for line in text_lines:
+            block_section = {
+                'type': 'section',
+                'text': {
+                    'type': 'mrkdwn',
+                    'text': line,
+                }
+            }
+            blocks.append(block_section)
+        '''
+        blocks = [
+            {
+                'type': 'section',
+                'text': {
+                    'type': 'mrkdwn',
+                    'text': text,
+                }
+            }
+        ]
+
+        await bot_post_funcs[bot](
+            token,
+            channel,
+            text,
+            blocks,
+        )
+
+    _log.debug(f"BLOCKS:")
+    _log.debug(f"{xterm('CYAN')}{pformat(blocks)}{xterm('X')}")
+    return True
 
 async def mojo_clear_schedules(
     mojo: MOJOCMD = None,
@@ -501,6 +622,7 @@ async def mojocmd_conf(
         #~ worker_manager.reset_schedules()
         "clear-schedules": (mojo_clear_schedules, role_admin),
         "check-schedules": (mojo_check_schedules, role_everyone),
+        "da-news": (mojo_post_news, role_everyone),
         #; mojo news
         #. "news": (mojo_news, role_everyone),
         #; mojo hunt db=all plugin=all forced=True

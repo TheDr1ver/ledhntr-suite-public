@@ -62,6 +62,9 @@ async def lifespan(app: FastAPI):
     _log.debug(f"{xterm('BOLD_RED')}### MAIN ### SCHEDULING clean queue task{xterm('RESET')}")
     bg_tasks = await start_automations()
 
+    #. Once slackbot is rolled into its own LEDHNTR Plugin this entry should
+    #. effectively be turned into "init_bots" and each bot will have their own
+    #. initialization routine.
     await check_automation_schedules(
         bg_tasks,
         bot_workers = ['slackbot']

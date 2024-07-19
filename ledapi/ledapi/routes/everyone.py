@@ -269,12 +269,12 @@ async def search_ep(
 #~ Get News
 @router.get("/news")
 async def news_ep(
-    days_back: Optional[int] = Query(1, description="Number of days back to consider something 'new'"),
+    hours_back: Optional[int] = Query(24, description="Number of days back to consider something 'new'"),
     user: User = Depends(dep_check_user_role(role_everyone))
 ):
     """Get the new stuff. Optionally specify days_back if you want something older than 24 hrs
     """
-    _log.debug(f"Getting things newer than {days_back} days...")
+    _log.debug(f"Getting things newer than {hours_back} days...")
     # msg_400 = f"No results found" #; this isn't exactly "Bad request"
     msg_500 = f"Error fetching databases"
 
@@ -282,7 +282,7 @@ async def news_ep(
         get_news,
         None,
         msg_500,
-        days_back,
+        hours_back,
         user,
     )
 

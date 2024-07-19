@@ -70,8 +70,7 @@ async def list_dbs_task(
     #. TypeDBClient for whatever reason is "special" and needs to be fully launched fresh
     #. at runtime, so we'll load a new version of it, copy the ['_plugin'] settings,
     #. and start fresh.
-    plugin = get_tdb(temp_plugin)
-    plugin: TypeDBClient
+    plugin: TypeDBClient = get_tdb(temp_plugin)
     dbs = plugin.get_all_dbs()
 
     for db in dbs:
@@ -110,11 +109,11 @@ async def search_task(
 
 async def news_task(
     tdb: TypeDBClient = None,
-    days_back: int = 1,
+    hours_back: int = 24,
     so: Union[Entity,Relation] = None,
     results: Dict = {},
 ):
-    min_date = datetime.now(timezone.utc) - timedelta(days=days_back)
+    min_date = datetime.now(timezone.utc) - timedelta(hours=hours_back)
 
     all_dbs = []
     dbs = result_error_catching(tdb.get_all_dbs, "Failed to fetch databases")
@@ -193,28 +192,13 @@ async def news_task(
 #~######################################
 
 async def get_news_conf(
-    worker_name: str = None,
-    days_back: int = 1,
+    # // worker_name: str = None,
+    hours_back: int = 24,
     user: User = None,
 ):
-    '''
-    _log.debug(f"wqm.conf.get({worker_name}): {pformat(wqm.conf.get(worker_name))}")
-    _log.debug(f"ALL CONFIGS")
-    _log.debug(f"{pformat(wqm.conf)}")
-    _log.debug(f"Getting temp plugin from wqm.conf.get({worker_name})")
-    temp_conf = wqm.conf.get(worker_name)
-    _log.debug(f"temp_conf: {temp_conf}")
-    '''
-    #! await wqm.check_config(worker_name)
-    # // temp = wqm.conf.get(worker_name)['_plugin']
-    # // _log.debug(f"Getting wqm config for {worker_name}")
-    # // _log.debug(f"Full wqm config: \n{pformat(wqm.conf)}")
-    # // temp = wqm.conf.get(worker_name)
-    # // _log.debug(f"{worker_name} wqm.conf: \n{pformat(temp)}")
-    # // plugin = temp['_plugin']
-    plugin = wqm.conf.get(worker_name)['_plugin']
-    tdb = get_tdb(plugin)
-    tdb: TypeDBClient
+    # // plugin = wqm.conf.get(worker_name)['_plugin']
+    # // tdb:TypeDBClient = get_tdb(plugin)
+    tdb:TypeDBClient = get_tdb()
 
     results = {
         'new_things':{},
@@ -222,9 +206,9 @@ async def get_news_conf(
     }
 
     so = Entity(label='entity')
-    results = await news_task(tdb, days_back, so, results)
+    results = await news_task(tdb, hours_back, so, results)
     so = Relation(label='relation')
-    results = await news_task(tdb, days_back, so, results)
+    results = await news_task(tdb, hours_back, so, results)
     #; Calc Stats
     for db_name, labels in results['new_things'].items():
         for label, vals in labels.items():
@@ -415,7 +399,7 @@ async def list_dbs(
 #~##########################
 
 async def get_news(
-    days_back: int = 1,
+    hours_back: int = 24,
     user: User = None,
 ):
     worker_name = await get_available_worker('typedb_client')
@@ -427,7 +411,8 @@ async def get_news(
     _log.debug(f"wqm.conf[{worker_name}] = {pformat(wqm.conf[worker_name])}")
     job = queue.enqueue_call(
         get_news_conf,
-        args=[worker_name, days_back, user],
+        # args=[worker_name, hours_back, user],
+        args=[hours_back, user],
         timeout=60*5,
         result_ttl=60*60,
     )
