@@ -167,6 +167,12 @@ async def add_hunt_results_task(
         msg = f"Error adding hunt results: {e}"
         _log.error(msg)
         _log.error(f"Traceback: {traceback.format_exc()}")
+    try:
+        tdb.super_update_first_last_seen()
+    except Exception as e:
+        msg += f"\nError updating first/last-seen times: {e}"
+        _log.error(e)
+        _log.error(f"Traceback: {traceback.format_exc()}")
     tdb.close_client()
     _log.setLevel('DEBUG')
     _log.debug(msg)

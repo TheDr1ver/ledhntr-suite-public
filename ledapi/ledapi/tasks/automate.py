@@ -299,12 +299,12 @@ async def start_automations():
             #; Every 24 hours we're going to clean the queues
             'interval_seconds': 3600*24,
         },
-        #! {
-        #!     'task_func': auto_hunt_conf,
-        #!     'task_args': ['all', 'all', 'all', False, 60*60, 60*60*24],
-        #!     #; Every 15 min we're gonna check to run auto_hunts again
-        #!     'interval_seconds': 60*15,
-        #! },
+        {
+            'task_func': auto_hunt_conf,
+            'task_args': ['all', 'all', 'all', False, 60*60, 60*60*24],
+            #; Every 15 min we're gonna check to run auto_hunts again
+            'interval_seconds': 60*15,
+        },
         #! ADD THIS BACK WHEN WE FIGURE OUT WHY IGNORE_FREQ ISN'T WORKING PROPERLY
         #! hntr.py _find_active_hunts()
         #! ln 733?
