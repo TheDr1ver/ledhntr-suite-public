@@ -3695,12 +3695,48 @@ class TypeDBClient(ConnectorPlugin):
         dateseen = Attribute(label="date-seen", value=None)
         blank_ent = self.ledid_del(Entity(label="entity", has=[dateseen]))
         blank_rel = self.ledid_del(Relation(label="relation", has=[dateseen]))
-        #~ Find ents/rels
-        ents = self.find_things(things=blank_ent, limit_get=True, search_mode='lite', include_meta_attrs=True)
-        rels = self.find_things(things=blank_rel, limit_get=True, search_mode='lite', include_meta_attrs=True)
-        all_ents_rels = ents + rels
 
-        _log.debug(f"Fouund {len(all_ents_rels)} ents and rels!")
+        #~ Find ents/rels missing "last-seen"
+        not_mod = [('last-seen', '$ls')]
+        ents = self.find_things(
+            things=blank_ent,
+            not_mod=not_mod,
+            limit_get=True,
+            search_mode='lite',
+            include_meta_attrs=True,
+        )
+        rels = self.find_things(
+            things=blank_rel,
+            not_mod=not_mod,
+            limit_get=True,
+            search_mode='lite',
+            include_meta_attrs=True,
+        )
+        no_last_seen = ents + rels
+        _log.debug(f"{len(no_last_seen)} ents and relations with NO last-seen date!")
+
+        #~ Find ents/rels where $date-seen > $last-seen
+        comp_mod = [('date-seen', '>', '$last-seen')]
+        ents = self.find_things(
+            things=blank_ent,
+            comp_mod=comp_mod,
+            limit_get=True,
+            search_mode='lite',
+            include_meta_attrs=True,
+        )
+        rels = self.find_things(
+            things=blank_rel,
+            comp_mod=comp_mod,
+            limit_get=True,
+            search_mode='lite',
+            include_meta_attrs=True,
+        )
+        new_last_seen = ents + rels
+        _log.debug(f"{len(new_last_seen)} ents and relations with NEW last-seen date!")
+
+        all_ents_rels = no_last_seen + new_last_seen
+
+        _log.debug(f"Fouund {len(all_ents_rels)} total ents and rels!")
 
         for obj in all_ents_rels:
             self.update_first_last_seen(obj)
