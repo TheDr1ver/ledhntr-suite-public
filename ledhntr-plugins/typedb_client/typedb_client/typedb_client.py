@@ -1682,7 +1682,7 @@ class TypeDBClient(ConnectorPlugin):
         #@ because when I tested it with a simple test class that only used clients
         #@ it seemed to work okay.
         #@
-        #@ In retrospect it's probably because I'm trying to use a TypeDBClient 
+        #@ In retrospect it's probably because I'm trying to use a TypeDBClient
         #@ object spawned in process A via process B.
         #& TO FIX IT I PROBABLY NEED TO RUN CHECK_CLIENT BEFORE EVERY DB OPERATION
         #& AND NEED TO REMOVE self.client = create_client() FROM THE INIT!!!
@@ -2028,6 +2028,7 @@ class TypeDBClient(ConnectorPlugin):
         db_name: Optional[str] = '',
         limit_get: Optional[bool] = True,
         comp_mod: Optional[List[Tuple[Attribute, str, Union[float, int, str, datetime]]]] = [],
+        not_mod: Optional[List[Tuple[Attribute, str, Union[float, int, str, datetime]]]] = [],
         or_mod: Optional[Dict] = {},
         sort_mod: Optional[Dict] = {},
         search_mode: Optional[str] = "full",
@@ -2060,7 +2061,13 @@ class TypeDBClient(ConnectorPlugin):
                 $entity has date-seen $date-seen;
                 $entity has last-seen $last-seen;
                 $date-seen > $last-seen;
-
+        :param not_mod: If set, uses a NOT pattern when searching for things.
+            Example: not_mod = [('last-seen', '$ls')]
+            Would translate to:
+            match
+                $entity isa entity;
+                not {$entity has last-seen $ls;};
+            Effectively returning all entities that don't have a last-seen value.
         :param or_mod: If set, generates 'or' text disjunction patterns.
             format: {
                 'label': 'hunt-name',
@@ -2182,6 +2189,7 @@ class TypeDBClient(ConnectorPlugin):
         _log.debug(f"Searching for things {things}")
         _log.debug(f"limit_get={limit_get}")
         _log.debug(f"comp_mod: {pformat(comp_mod)}")
+        _log.debug(f"not_mod: {pformat(not_mod)}")
         _log.debug(f"or_mod: {pformat(or_mod)}")
         _log.debug(f"sort_mod: {pformat(sort_mod)}")
         final_query = False
@@ -2195,6 +2203,7 @@ class TypeDBClient(ConnectorPlugin):
                 thing,
                 limit_get=limit_get,
                 comp_mod=comp_mod,
+                not_mod=not_mod,
                 or_mod=or_mod,
                 sort_mod=sort_mod,
             )
@@ -2521,6 +2530,32 @@ class TypeDBClient(ConnectorPlugin):
 
         return tql
 
+    def get_query_not_mod(
+        self,
+        thing_var: str = '',
+        not_mod: Optional[List[Tuple[Attribute, str, Union[float, int, str, datetime]]]] = [],
+        thing_counter: Optional[int] = 0,
+    ):
+        _log = self.logger
+        _log.debug(f'Processing not_mod {not_mod}')
+        tql = ''
+        if not isinstance(not_mod, list):
+            not_mod = [not_mod]
+        for nm in not_mod:
+            if not len(nm) == 2:
+                _log.error(
+                    f"not_mod requires exactly 2 arguments - type "
+                    f"and (value or $label)"
+                )
+                continue
+            if not nm[1].startswith('$'):
+                fmt_val = self.format_value_query(nm[1])
+                tql += f" not {{{thing_var} has {nm[0]} {fmt_val};}};"
+            else:
+                nm1 = nm[1].lstrip('$')
+                tql += f" not {{{thing_var} has {nm[0]} $notmod_{nm1}_{thing_counter};}};"
+        return tql
+
     def get_query_or_mod(
         self,
         thing_var: str = '',
@@ -2687,6 +2722,7 @@ class TypeDBClient(ConnectorPlugin):
         thing_counter: int = 0,
         limit_get: Optional[bool] = True,
         comp_mod: Optional[List[Tuple[Attribute, str, Union[float, int, str, datetime]]]] = [],
+        not_mod: Optional[List[Tuple[Attribute, str, Union[float, int, str, datetime]]]] = [],
         or_mod: Optional[Dict] = {},
         sort_mod: Optional[Dict] = {},
     ):
@@ -2706,6 +2742,13 @@ class TypeDBClient(ConnectorPlugin):
             match
                 $entity isa entity, has date-seen $date-seen;
                 $date-seen > 20240608T00:00:00Z;
+        :param not_mod: If set, uses a NOT pattern when searching for things.
+            Example: not_mod = [('last-seen', '$ls')]
+            Would translate to:
+            match
+                $entity isa entity;
+                not {$entity has last-seen $ls;};
+            Effectively returning all entities that don't have a last-seen value.
         :param or_mod: If set, generates 'or' text disjunction patterns.
             format: {
                 'label': 'hunt-name',
@@ -2870,6 +2913,14 @@ class TypeDBClient(ConnectorPlugin):
             tql += ";"
 
         thing_var = f"${thing.label}_{thing.counter}"
+
+        if not_mod:
+            tql += self.get_query_not_mod(
+                thing_var = thing_var,
+                not_mod=not_mod,
+                thing_counter=thing.counter,
+            )
+
         if or_mod:
             tql += self.get_query_or_mod(
                 thing_var = thing_var,
@@ -3644,6 +3695,7 @@ class TypeDBClient(ConnectorPlugin):
         dateseen = Attribute(label="date-seen", value=None)
         blank_ent = self.ledid_del(Entity(label="entity", has=[dateseen]))
         blank_rel = self.ledid_del(Relation(label="relation", has=[dateseen]))
+        #~ Find ents/rels
         ents = self.find_things(things=blank_ent, limit_get=True, search_mode='lite', include_meta_attrs=True)
         rels = self.find_things(things=blank_rel, limit_get=True, search_mode='lite', include_meta_attrs=True)
         all_ents_rels = ents + rels
