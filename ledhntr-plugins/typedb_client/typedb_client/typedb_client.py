@@ -574,7 +574,7 @@ class TypeDBClient(ConnectorPlugin):
             target_thing = old_thing,
         )
 
-        _log.info(f"Adding {attr} to {old_thing}...")
+        _log.debug(f"Adding {attr} to {old_thing}...")
         answers = self.db_query(myquery, tx, save_tx=False)
         try:
             result_query = self.process_query_answers(
@@ -1960,7 +1960,7 @@ class TypeDBClient(ConnectorPlugin):
             target_thing = old_thing,
         )
 
-        _log.info(f"Removing {attr} from {old_thing}...")
+        _log.debug(f"Removing {attr} from {old_thing}...")
         answers = self.db_query(myquery, tx, save_tx=False)
         try:
             result_query = self.process_query_answers(
@@ -2004,7 +2004,7 @@ class TypeDBClient(ConnectorPlugin):
             target_thing = old_thing,
         )
 
-        _log.info(f"Removing {role}: {player} from {old_thing}...")
+        _log.debug(f"Removing {role}: {player} from {old_thing}...")
         answers = self.db_query(myquery, tx, save_tx=False)
         try:
             result_query = self.process_query_answers(
