@@ -2548,7 +2548,7 @@ class TypeDBClient(ConnectorPlugin):
                     f"and (value or $label)"
                 )
                 continue
-            if not nm[1].startswith('$'):
+            if not str(nm[1]).startswith('$'):
                 fmt_val = self.format_value_query(nm[1])
                 tql += f" not {{{thing_var} has {nm[0]} {fmt_val};}};"
             else:
@@ -2621,7 +2621,7 @@ class TypeDBClient(ConnectorPlugin):
                 )
                 continue
             tql += f" {thing_var} has {cm[0]} $compmod_{cm[0]}_{thing_counter};"
-            if not cm[2].startswith('$'):
+            if not str(cm[2]).startswith('$'):
                 fmt_val = self.format_value_query(cm[2])
                 tql += f" $compmod_{cm[0]}_{thing_counter} {cm[1]} {fmt_val};"
             else:
