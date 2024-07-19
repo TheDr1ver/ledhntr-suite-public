@@ -197,7 +197,11 @@ async def mojo_post_news(
     user: User = None,
 ):
     _log.debug(f"Running POST NEWS")
-    hours_back = int(mojo.text.split(' ')[1])
+    mojo_split = mojo.text.split(' ')
+    if len(mojo_split) > 1:
+        hours_back = int(mojo.text.split(' ')[1])
+    else:
+        hours_back = 1
     verbose = False
     bot_workers=['slackbot']
     channel = "#mojo-dev"
@@ -239,6 +243,7 @@ async def mojo_post_news(
                     'type': 'section',
                     'text': {
                         'type': 'mrkdwn',
+                        'verbatim': True,
                         'text': f"```{new_things}```",
                     }
                 }
@@ -252,18 +257,31 @@ async def mojo_post_news(
         return True
 
     for db, thing_types in new_things.items():
+        if not thing_types:
+            continue
+        interesting = False
+        for tt in thing_types.keys():
+            if tt in interesting_things:
+                interesting = True
+                break
+            else:
+                _log.debug(f"{xterm('CYAN')}{tt} not in {interesting_things}{xterm('X')}")
+        if not interesting:
+            continue
         text_lines.append(f"*{db}*")
         for tt, entries in thing_types.items():
             if tt in interesting_things:
-                text_lines.append(f"_{tt}_")
-            for e in entries:
-                for keyval, attributes in e.items():
-                    text_lines.append(f"```{keyval}")
-                    for label, values in attributes.items():
-                        text_lines.append(f"\t{label}")
-                        for value in values:
-                            text_lines.append(f"\t\t{value}")
-                    text_lines.append(f"```")
+                text_lines.append(f"*Type: {tt}*")
+                for e in entries:
+                    for keyval, attributes in e.items():
+                        text_lines.append(f"```{keyval}")
+                        for label, values in attributes.items():
+                            text_lines.append(f"\t{label}")
+                            for value in values:
+                                text_lines.append(f"\t\t{value}")
+                        text_lines.append(f"```")
+            else:
+                _log.debug(f"{tt} not in {interesting_things}")
 
     for bot in bot_workers:
         if bot not in bot_post_funcs:
@@ -274,6 +292,8 @@ async def mojo_post_news(
         token = wqm.conf[bot_worker_name]['settings']['token']
         #; This is something else that should be specific to the chat
         #; plugin, but again... MVP... just trying to get it out the door.
+        if not text_lines:
+            text_lines = [f"No news from the last {hours_back} hours."]
         text = "\n".join(text_lines)
         blocks = []
         '''
@@ -292,6 +312,7 @@ async def mojo_post_news(
                 'type': 'section',
                 'text': {
                     'type': 'mrkdwn',
+                    'verbatim': True,
                     'text': text,
                 }
             }

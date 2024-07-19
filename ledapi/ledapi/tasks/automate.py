@@ -241,6 +241,7 @@ async def post_news(
                     'text': {
                         'type': 'mrkdwn',
                         'text': f"```{new_things}```",
+                        'verbatim': True,
                     }
                 }
             ]
@@ -253,18 +254,29 @@ async def post_news(
         return True
 
     for db, thing_types in new_things.items():
-        text_lines.append(f"*{db}*")
-        for tt, entries in thing_types.items():
+        if not thing_types:
+            continue
+        interesting = False
+        for tt in thing_types.items():
             if tt in interesting_things:
-                text_lines.append(f"_{tt}_")
-            for e in entries:
-                for keyval, attributes in e.items():
-                    text_lines.append(f"```{keyval}")
-                    for label, values in attributes.items():
-                        text_lines.append(f"\t{label}")
-                        for value in values:
-                            text_lines.append(f"\t\t{value}")
-                    text_lines.append(f"```")
+                interesting = True
+                break
+        if not interesting:
+            continue
+        text_lines.append(f"*{db}*")
+        for tt, entries in thing_types.keys():
+            if tt in interesting_things:
+                text_lines.append(f"*Type: {tt}*")
+                for e in entries:
+                    for keyval, attributes in e.items():
+                        text_lines.append(f"```{keyval}")
+                        for label, values in attributes.items():
+                            text_lines.append(f"\t{label}")
+                            for value in values:
+                                text_lines.append(f"\t\t{value}")
+                        text_lines.append(f"```")
+            else:
+                _log.debug(f"{tt} not in {interesting_things}")
 
     for bot in bot_workers:
         if bot not in bot_post_funcs:
@@ -293,6 +305,7 @@ async def post_news(
                 'type': 'section',
                 'text': {
                     'type': 'mrkdwn',
+                    'verbatim': True,
                     'text': text,
                 }
             }
