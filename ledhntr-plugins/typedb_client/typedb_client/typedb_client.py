@@ -2049,8 +2049,18 @@ class TypeDBClient(ConnectorPlugin):
             An example of it being set would be [('date-seen', '>', '20240608T00:00:00Z')]
             This would effectively change your down-stream search to something like:
             match
-                $entity isa entity, has date-seen $date-seen;
+                $entity isa entity;
+                $entity has date-seen $date-seen;
                 $date-seen > 20240608T00:00:00Z;
+            Alternatively, you can specify a label name as the 3rd parameter to
+            compare two attributes against each other. The label needs to start with $
+            For example: [('date-seen', '>', '$last-seen')] would translate to:
+            match
+                $entity isa entity;
+                $entity has date-seen $date-seen;
+                $entity has last-seen $last-seen;
+                $date-seen > $last-seen;
+
         :param or_mod: If set, generates 'or' text disjunction patterns.
             format: {
                 'label': 'hunt-name',
@@ -2572,12 +2582,17 @@ class TypeDBClient(ConnectorPlugin):
             if not len(cm) == 3:
                 _log.error(
                     f"comp_mod requires exactly 3 arguments - type, "
-                    f"comparison, and value"
+                    f"comparison, and (value or $label)"
                 )
                 continue
             tql += f" {thing_var} has {cm[0]} $compmod_{cm[0]}_{thing_counter};"
-            fmt_val = self.format_value_query(cm[2])
-            tql += f" $compmod_{cm[0]}_{thing_counter} {cm[1]} {fmt_val};"
+            if not cm[2].startswith('$'):
+                fmt_val = self.format_value_query(cm[2])
+                tql += f" $compmod_{cm[0]}_{thing_counter} {cm[1]} {fmt_val};"
+            else:
+                cm2 = cm[2].lstrip('$')
+                tql += f" {thing_var} has {cm2} $compmod_{cm2}_{thing_counter};"
+                tql += f" $compmod_{cm[0]}_{thing_counter} {cm[1]} $compmod_{cm2}_{thing_counter};"
         return tql
 
 
