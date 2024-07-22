@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Union
 
 import redis as syncredis
 from redis.asyncio.client import Redis
-from rq import Queue, Worker, Connection
+from rq import Queue, Worker, Connection, get_current_job
 from rq.job import Job
 from rq.registry import (
     FailedJobRegistry,
@@ -60,8 +60,8 @@ from ledapi.models import(
     role_conman,
     role_everyone,
     role_public,
-    unauthorized_modal,
-    invalid_command_modal,
+    # unauthorized_modal,
+    # invalid_command_modal,
 )
 from ledapi.user import User, check_role, dep_check_user_role, get_user_by_slack_id
 from ledapi.worker_manager import(
@@ -73,7 +73,7 @@ from ledapi.tasks import(
 )
 
 # _log.debug(f"PYTHONPATH: {os.environ.get('PYTHONPATH')}")
-from typedb_client import TypeDBClient
+from slack_client import SlackClient
 
 #&##############################################################################
 #& INTERNAL - TASKS/SUBTASK EXECUTION
@@ -202,8 +202,8 @@ async def mojo_post_news(
         hours_back = int(mojo.text.split(' ')[1])
     else:
         hours_back = 1
-    verbose = False
-    bot_workers=['slackbot']
+    verbose = True
+    bot_workers=['slack_client']
     channel = "#mojo-dev"
 
     bot_post_funcs = {
@@ -226,34 +226,32 @@ async def mojo_post_news(
     _log.debug(f"{xterm('CYAN')}{pformat(news_results)}{xterm('X')}")
     new_things = news_results.get('new_things')
     if not new_things:
+        _log.debug(f"{xterm('YELLOW')}no new things found..{xterm('X')}")
         return None
+
+    worker_name = get_current_job().worker_name
+    _log.debug(f"{xterm('BLUE')}Current name: {worker_name}")
+    await wqm.check_config(worker_name)
+    _log.debug(f"wqm.conf[{worker_name}] = {pformat(wqm.conf[worker_name])}{xterm('X')}")
+    plugin:SlackClient = wqm.conf[worker_name]['_plugin']
+
+    _log.debug(f"{xterm('YELLOW')}plugin: {plugin}")
+    _log.debug(f"plugin dict: {pformat(plugin.__dict__)}")
+    _log.debug(f"plugin.token: {plugin.token}")
+    _log.debug(f"plugin.client: {plugin.client}{xterm('X')}")
+
     if verbose:
-        for bot in bot_workers:
-            if bot not in bot_post_funcs:
-                _log.error(f"No handler specified for {bot}")
-                continue
-            bot_worker_name = await get_available_worker(bot)
-            # // _log.debug(f"{xterm('CYAN')}{bot_worker_name} configs: \n{pformat(wqm.conf[bot_worker_name])}{xterm('X')}")
-            token = wqm.conf[bot_worker_name]['settings']['token']
-            #; This is something else that should be specific to the chat
-            #; plugin, but again... MVP... just trying to get it out the door.
-            text = f"```{news_results.get('result').get('count')}```"
-            blocks = [
-                {
-                    'type': 'section',
-                    'text': {
-                        'type': 'mrkdwn',
-                        'verbatim': True,
-                        'text': f"```{new_things}```",
-                    }
-                }
-            ]
-            await bot_post_funcs[bot](
-                token,
-                channel,
-                text,
-                blocks,
-            )
+        #; This is something else that should be specific to the chat
+        #; plugin, but again... MVP... just trying to get it out the door.?
+        text = f"```{new_things}```"
+
+        await plugin.post_message(
+            channel=plugin.admin_channel,
+            text=text,
+            blocks=None,
+            blocks_verbatim=True,
+        )
+
         return True
 
     for db, thing_types in new_things.items():
@@ -267,6 +265,7 @@ async def mojo_post_news(
             else:
                 _log.debug(f"{xterm('CYAN')}{tt} not in {interesting_things}{xterm('X')}")
         if not interesting:
+            _log.debug(f"{xterm('YELLOW')}nothing interesting found.{xterm('X')}")
             continue
         text_lines.append(f"*{db}*")
         for tt, entries in thing_types.items():
@@ -283,50 +282,50 @@ async def mojo_post_news(
             else:
                 _log.debug(f"{tt} not in {interesting_things}")
 
-    for bot in bot_workers:
-        if bot not in bot_post_funcs:
-            _log.error(f"No handler specified for {bot}")
-            continue
-        bot_worker_name = await get_available_worker(bot)
-        # // _log.debug(f"{xterm('CYAN')}{bot_worker_name} configs: \n{pformat(wqm.conf[bot_worker_name])}{xterm('X')}")
-        token = wqm.conf[bot_worker_name]['settings']['token']
-        #; This is something else that should be specific to the chat
-        #; plugin, but again... MVP... just trying to get it out the door.
-        if not text_lines:
-            text_lines = [f"No news from the last {hours_back} hours."]
-        text = "\n".join(text_lines)
-        blocks = []
-        '''
-        for line in text_lines:
-            block_section = {
-                'type': 'section',
-                'text': {
-                    'type': 'mrkdwn',
-                    'text': line,
-                }
-            }
-            blocks.append(block_section)
-        '''
-        blocks = [
-            {
-                'type': 'section',
-                'text': {
-                    'type': 'mrkdwn',
-                    'verbatim': True,
-                    'text': text,
-                }
-            }
-        ]
 
-        await bot_post_funcs[bot](
-            token,
-            channel,
-            text,
-            blocks,
-        )
 
-    _log.debug(f"BLOCKS:")
-    _log.debug(f"{xterm('CYAN')}{pformat(blocks)}{xterm('X')}")
+
+    #; This is something else that should be specific to the chat
+    #; plugin, but again... MVP... just trying to get it out the door.
+    if not text_lines:
+        text_lines = [f"No news from the last {hours_back} hours."]
+    text = "\n".join(text_lines)
+    blocks = []
+    '''
+    for line in text_lines:
+        block_section = {
+            'type': 'section',
+            'text': {
+                'type': 'mrkdwn',
+                'text': line,
+            }
+        }
+        blocks.append(block_section)
+
+    blocks = [
+        {
+            'type': 'section',
+            'text': {
+                'type': 'mrkdwn',
+                'verbatim': True,
+                'text': text,
+            }
+        }
+    ]
+
+    await bot_post_funcs[bot](
+        token,
+        channel,
+        text,
+        blocks,
+    )
+    '''
+    await plugin.post_message(
+        channel=plugin.admin_channel,
+        text=text,
+        blocks=None,
+        blocks_verbatim=True,
+    )
     return True
 
 async def mojo_clear_schedules(
@@ -415,7 +414,6 @@ async def mojo_check_schedules(
 #~ slackaction_check_job_status
 #~######################################
 async def slackaction_check_job_status(
-    worker_name: str = None,
     payload: Dict = None,
     user: User = None,
 ):
@@ -522,41 +520,46 @@ async def slackaction_check_job_status(
 #~ slackaction_open_add_user_modal
 #~######################################
 async def slackaction_open_add_user_modal(
-    worker_name: str = None,
     payload: Dict = None,
-    # user: User = Depends(check_role(role_dbadmin)),
-    # user: User = Depends(dep_check_user_role(role_dbadmin))
     user: User = None,
-):
+)->None:
     _log.debug(f"Processing open_add_user_modal")
     _log.debug(f"payload: {payload}")
     _log.debug(f"user: {user.to_dict()}")
 
+    worker_name = get_current_job().worker_name
+    await wqm.check_config(worker_name)
+    plugin:SlackClient = wqm.conf[worker_name]['_plugin']
+
     # user = await check_role(user, role_dbadmin)
 
-    admin_channel = "#mojo-dev" #; this isn't called here but I'm leaving it as a
+    #; // admin_channel = "#mojo-dev"
+    #; this isn't called here but I'm leaving it as a
     #; reminder that I can pull it from the payload if I want it dynamic.
 
-    slack_token = wqm.conf[worker_name]['settings']['token']
-    client = WebClient(token=slack_token)
+    # // slack_token = wqm.conf[worker_name]['settings']['token']
+    # // client = WebClient(token=slack_token)
 
     action = payload['actions'][0]
 
     # open the modal
-    response = client.views_open(
+    response = await plugin.client.views_open(
         trigger_id=payload['trigger_id'],
         view=add_user_modal(action['value'])
     )
+    return None
 
 #~######################################
 #~ slackaction_submit_add_user
 #~######################################
 async def slackaction_submit_add_user(
-    worker_name: str = None,
     payload: Dict = None,
-    # user: User = Depends(check_role(role_dbadmin)),
     user: User = None,
 ):
+    worker_name = get_current_job().worker_name
+    await wqm.check_config(worker_name)
+    plugin:SlackClient = wqm.conf[worker_name]['_plugin']
+
     _log.debug(f"Adding user to database...")
     _log.debug(f"payload: {payload}")
     user_data = payload['view']['state']['values']
@@ -565,12 +568,13 @@ async def slackaction_submit_add_user(
     slack_id = user_data['slackid_block']['slack_id']['value']
     #; Add the user to the DB
     new_user = await add_user_to_db_task(username, role, slack_id)
-    #; Update the reuest message
+    #; Update the request message
     #. At some point this should also DM the user, but that requires extra permissions
     #. and I don't have time to mess with it right now.
     slack_uid = slack_id.split(',')[0]
-    slack_token = wqm.conf[worker_name]['settings']['token']
-    client = WebClient(token=slack_token)
+    # // slack_token = wqm.conf[worker_name]['settings']['token']
+    # // client = WebClient(token=slack_token)
+    '''
     client.chat_update(
         channel = payload['channel']['id'],
         ts = payload['message']['ts'],
@@ -584,6 +588,22 @@ async def slackaction_submit_add_user(
                 },
             }
         ]
+    )
+    '''
+    blocks = [
+        {
+            'type': 'section',
+            'text': {
+                'type': 'mrkdwn',
+                'text': f"Successfully added new user <@{slack_uid}>",
+            },
+        }
+    ]
+    plugin.update_message(
+        channel = payload['channel']['id'],
+        ts = payload['message']['ts'],
+        text = f"Successfully added user <@{slack_uid}>",
+        # // blocks = blocks,
     )
     return {'response_action': 'clear'}
 
@@ -633,7 +653,9 @@ async def mojocmd_conf(
     mojo: MOJOCMD = None,
     user: User = None,
 ):
-    client = WebClient(token=mojo.slackbot_token)
+    worker_name = get_current_job().worker_name
+    await wqm.check_config(worker_name)
+    plugin:SlackClient = wqm.conf[worker_name]['_plugin']
     cmd = mojo.text.split(' ')[0]
     resp = None
     opts = {
@@ -656,7 +678,6 @@ async def mojocmd_conf(
         #. "search": (mojo_search, role_hunter)
     }
 
-
     if cmd in opts:
         func_perms = opts[cmd]
 
@@ -664,31 +685,31 @@ async def mojocmd_conf(
             _log.debug(f"Checking user.role {user.role} against roles: {func_perms[1]}")
             await check_role(user, func_perms[1])
         except HTTPException as e:
-            client.views_open(
-                trigger_id=mojo.trigger_id,
-                view=unauthorized_modal()
-            )
+            await plugin.unauthorized_resp(trigger_id=mojo.trigger_id)
         except Exception as e:
             raise
-        resp = await func_perms[0](mojo, user)
+        try:
+            resp = await func_perms[0](mojo, user)
+        except Exception as e:
+            _log.error(f"Failed running {func_perms[0]}: {e}")
     else:
         _log.debug(f"Invalid command: {cmd}")
-        client.views_open(
+        await plugin.invalid_command(
             trigger_id=mojo.trigger_id,
-            view=invalid_command_modal(cmd=cmd)
+            cmd=cmd,
         )
 
     _log.debug(f"Returning resp: {resp}")
     return resp
 
 async def slackaction_conf(
-    worker_name: str = None,
     payload: Dict = None,
     user: User = None,
 ):
+    worker_name = get_current_job().worker_name
+    await wqm.check_config(worker_name)
+    plugin:SlackClient = wqm.conf[worker_name]['_plugin']
 
-    slack_token = wqm.conf[worker_name]['settings']['token']
-    client = WebClient(token=slack_token)
     resp = None
 
     opts = {
@@ -701,56 +722,72 @@ async def slackaction_conf(
         }
     }
 
+    if not payload['type'] in opts:
+        _log.error(f"No scenario coded for payload['type'] {payload['type']}")
+        await plugin.invalid_command(
+            trigger_id=payload['trigger_id'],
+            cmd=payload['type'],
+        )
+        return False
 
-    # resp = await opts[mojo['text'].split(' ')[0]](mojo, user)
-    #TODO - This can probably be multiple actions if we're using workflows.
-    #TODO - Going to have to make this a better loop w/ additional sub-jobs
-    #TODO - instead of just referencing the first action.
-    #TODO - I'll probably loop through each action and submit as a new job to the slack queue
-    if payload['type'] == 'block_actions':
-        func_key = payload['actions'][0]['action_id']
-    elif payload['type'] == 'view_submission':
-        func_key = payload['view']['callback_id']
-
-    if payload['type'] in opts:
-        func_perms=opts[payload['type']][func_key]
+    action_ids = await plugin.get_action_ids(payload)
+    #. NOTE - IF USING WORKFLOWS/MULTIPLE ACTION_IDS WE MIGHT NEED TO REVISIT THIS
+    #. TO INCLUDE JOB DEPENDENCIES. THAT WAY THEY DON'T ALL JUST FIRE OFF AT ONCE
+    #. AS OPPOSED TO IN ORDER.
+    #.
+    #. FOR NOW, I'M ONLY USING ONE ACTION_ID AT A TIME SO IT DOESN'T MATTER.
+    resp = []
+    for action_id in action_ids:
+        func_perms = opts[payload['type']][action_id]
         try:
             await check_role(user, func_perms[1])
         except HTTPException as e:
-            client.views_open(
-                trigger_id=payload['trigger_id'],
-                view=unauthorized_modal()
-            )
+            await plugin.unauthorized_resp()
+            return False
         except Exception as e:
             raise
-        #; Finally run the function
-        resp = await func_perms[0](worker_name, payload, user)
+        try:
+            result = await func_perms[0](plugin, payload, user)
+            resp.append(result)
+        except Exception as e:
+            _log.error(f"Failed running {func_perms[0]}: {e}")
 
-    else:
-        _log.error(f"No scenario coded for payload['type']=={payload['type']}")
-        # resp = {"response_action": "clear"}
-        client.views_open(
-            trigger_id=payload['trigger_id'],
-            view=invalid_command_modal(cmd=payload['type'])
-        )
-    # _log.info(pformat(request))
+    #. Will also have to figure out how to properly return a list of responses.
+    #. resp will probably have to be converted to a dict w/ action_id's as the keys.
+    if len(resp) == 1:
+        return resp[0]
     return resp
 
 async def slackevent_conf(
-    worker_name: str = None,
-    request: Dict = None,
+    payload: Dict = None,
     user: User = None,
 ):
+    worker_name = get_current_job().worker_name
+    await wqm.check_config(worker_name)
+    plugin:SlackClient = wqm.conf[worker_name]['_plugin']
     '''
     opts = {
         "addme": mojo_addme,
         "debug": mojo_debug,
     }
     '''
+    resp = None
+
+    opts = {}
+
+    if not payload['type'] in opts:
+        _log.error(f"No scenario coded for payload['type'] {payload['type']}")
+        await plugin.invalid_command(
+            trigger_id=payload['trigger_id'],
+            cmd=payload['type'],
+        )
+        return False
 
     # resp = await opts[mojo['text'].split(' ')[0]](mojo, user)
-    _log.info(pformat(request))
-    return request
+    # _log.info(pformat(request))
+    # return request
+    #TODO - Do stuff with Slack Events
+    return True #; this will be changed to 'response'
 
 
 #&##############################################################################
@@ -766,11 +803,13 @@ async def mojo_handler(
     user: User = None,
 ):
     # ! await wqm.check_config()
-    worker_name = await get_available_worker('slackbot')
+    # // worker_name = await get_available_worker('slackbot')
+    worker_name = await get_available_worker('slack_client')
+    # plugin = wqm.conf[worker_name]['_plugin']
     queue = wqm.conf[worker_name]['queue']
-    slack_token = wqm.conf[worker_name]['settings']['token']
-    mojo.admin_channel = wqm.conf[worker_name]['settings']['admin_channel']
-    mojo.slackbot_token = slack_token
+    # // slack_token = wqm.conf[worker_name]['settings']['token']
+    # // mojo.admin_channel = wqm.conf[worker_name]['settings']['admin_channel']
+    # // mojo.slackbot_token = slack_token
 
     _log.debug(f"Enqueuing mojo_handler")
     _log.debug(f"mojo: {mojo}")
@@ -792,7 +831,9 @@ async def action_handler(
     user: User = None,
 ):
     # ! await wqm.check_config()
-    worker_name = await get_available_worker('slackbot')
+    # // worker_name = await get_available_worker('slackbot')
+    worker_name = await get_available_worker('slack_client')
+    # plugin = wqm.conf[worker_name]['_plugin']
     queue = wqm.conf[worker_name]['queue']
     _log.debug(f"Enqueuing action_handler")
     form = await request.form()
@@ -809,7 +850,7 @@ async def action_handler(
 
     job = queue.enqueue_call(
         slackaction_conf,
-        args=[worker_name, payload, user],
+        args=[payload, user],
         timeout=60*5,
         result_ttl=60*60,
     )
@@ -823,7 +864,9 @@ async def event_handler(
     user: User = None,
 ):
     # ! await wqm.check_config()
-    worker_name = await get_available_worker('slackbot')
+    # // worker_name = await get_available_worker('slackbot')
+    worker_name = await get_available_worker('slack_client')
+    # plugin = wqm.conf[worker_name]['_plugin']
     queue = wqm.conf[worker_name]['queue']
     _log.debug(f"Enqueuing event_handler")
     _log.debug(f"request: {request}")
@@ -836,7 +879,7 @@ async def event_handler(
 
     job = queue.enqueue_call(
         slackevent_conf,
-        args=[worker_name, resp, user],
+        args=[resp, user],
         timeout=60*5,
         result_ttl=60*60,
     )

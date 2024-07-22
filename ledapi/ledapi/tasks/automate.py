@@ -56,6 +56,8 @@ from ledapi.worker_manager import(
     schedule_bg_task,
 )
 
+from slack_client import SlackClient
+
 # _log.debug(f"PYTHONPATH: {os.environ.get('PYTHONPATH')}")
 
 #&##############################################################################
@@ -116,41 +118,6 @@ async def clean_queues_task(
 #&##############################################################################
 
 #~######################################
-#~ get_news config
-#~######################################
-
-'''
-async def get_news_conf(
-    worker_name: str = None,
-    days_back: int = 1,
-    user: User = None,
-):
-    temp = wqm.conf.get(worker_name)['_plugin']
-    _log.debug(f"temp: {temp}")
-    tdb = get_tdb(temp)
-    tdb: TypeDBClient
-
-    results = {
-        'new_things':{},
-        'count': {},
-    }
-
-    so = Entity(label='entity')
-    results = await news_task(tdb, days_back, so, results)
-    so = Relation(label='relation')
-    results = await news_task(tdb, days_back, so, results)
-    #; Calc Stats
-    for db_name, labels in results['new_things'].items():
-        for label, vals in labels.items():
-            if label not in results['count']:
-                results['count'][label]=len(vals)
-            else:
-                results['count'][label]+=len(vals)
-
-    tdb.close_client()
-    return results
-'''
-#~######################################
 #~ auto_hunt config
 #~######################################
 
@@ -200,7 +167,7 @@ async def auto_hunt_conf(
 async def post_news(
     hours_back: int = 24,
     verbose: bool = False,
-    bot_workers: List[str] = [],
+    chat_clients: List[str] = [],
     channel: str = "#mojo-dev", # TODO - Get rid of this and roll it into a ConnectorPlugin
 ):
     bot_post_funcs = {
@@ -224,17 +191,34 @@ async def post_news(
     new_things = news_results.get('new_things')
     if not new_things:
         return None
-    if verbose:
-        for bot in bot_workers:
-            if bot not in bot_post_funcs:
-                _log.error(f"No handler specified for {bot}")
+
+    #; Load the plugins
+    bots = []
+    # // _log.debug(f"{xterm('CYAN')}wqm.conf: {wqm.conf}")
+    for cc in chat_clients:
+        # // _log.debug(f"Checking for client {cc}")
+        for conf, data in wqm.conf.items():
+            '''
+            worker_name = await get_available_worker('maintenance')
+            _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
+            await wqm.check_config(worker_name)
+            _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
+            queue = wqm.conf[worker_name]['queue']
+            queue: Queue
+            '''
+            if not conf.startswith(cc):
+                # // _log.debug(f"{conf} doesn't start with {cc}")
                 continue
-            bot_worker_name = await get_available_worker(bot)
-            # // _log.debug(f"{xterm('CYAN')}{bot_worker_name} configs: \n{pformat(wqm.conf[bot_worker_name])}{xterm('X')}")
-            token = wqm.conf[bot_worker_name]['settings']['token']
+            await wqm.check_config(conf)
+            plugin = wqm.conf[conf]['_plugin']
+            bots.append(plugin)
+
+    if verbose:
+        for bot in bots:
             #; This is something else that should be specific to the chat
             #; plugin, but again... MVP... just trying to get it out the door.
-            text = f"```{news_results.get('result').get('count')}```"
+            text = f"```{new_things}```"
+            '''
             blocks = [
                 {
                     'type': 'section',
@@ -245,12 +229,21 @@ async def post_news(
                     }
                 }
             ]
+
             await bot_post_funcs[bot](
                 token,
                 channel,
                 text,
                 blocks,
             )
+            '''
+            if isinstance(bot, SlackClient):
+                await bot.post_message(
+                    channel = bot.admin_channel,
+                    text = text,
+                    blocks = None,
+                    blocks_verbatim=True,
+                )
         return True
 
     for db, thing_types in new_things.items():
@@ -278,45 +271,15 @@ async def post_news(
             else:
                 _log.debug(f"{tt} not in {interesting_things}")
 
-    for bot in bot_workers:
-        if bot not in bot_post_funcs:
-            _log.error(f"No handler specified for {bot}")
-            continue
-        bot_worker_name = await get_available_worker(bot)
-        # // _log.debug(f"{xterm('CYAN')}{bot_worker_name} configs: \n{pformat(wqm.conf[bot_worker_name])}{xterm('X')}")
-        token = wqm.conf[bot_worker_name]['settings']['token']
-        #; This is something else that should be specific to the chat
-        #; plugin, but again... MVP... just trying to get it out the door.
+    for bot in bots:
         text = "\n".join(text_lines)
-        blocks = []
-        '''
-        for line in text_lines:
-            block_section = {
-                'type': 'section',
-                'text': {
-                    'type': 'mrkdwn',
-                    'text': line,
-                }
-            }
-            blocks.append(block_section)
-        '''
-        blocks = [
-            {
-                'type': 'section',
-                'text': {
-                    'type': 'mrkdwn',
-                    'verbatim': True,
-                    'text': text,
-                }
-            }
-        ]
-
-        await bot_post_funcs[bot](
-            token,
-            channel,
-            text,
-            blocks,
-        )
+        if isinstance(bot, SlackClient):
+            await bot.post_message(
+                channel = bot.admin_channel,
+                text = text,
+                blocks = None,
+                blocks_verbatim=True,
+            )
 
     return True
 
@@ -331,15 +294,16 @@ async def post_news(
 
 async def check_automation_schedules(
     bg_tasks: List[asyncio.Task] = [],
-    bot_workers: List[str] = [],
-    channel: str = "#mojo-dev", # TODO - Get rid of this and roll it into a ConnectorPlugin
-):
+    chat_clients: List[str] = [],
+    # // channel: str = "#mojo-dev", # TODO - Get rid of this and roll it into a ConnectorPlugin
+)->None:
+    '''
     bot_post_funcs = {
         'slackbot': slack_post_message,
-    }
+    }'''
 
+    #; build the message
     text_lines = []
-
     for bgt in bg_tasks:
         bgt: asyncio.Task
         task_key = f"{bgt.get_name()}_run_time"
@@ -359,6 +323,56 @@ async def check_automation_schedules(
             text_lines.append(text)
             _log.debug(f"{xterm('RED')}{text}{xterm('RESET')}")
 
+    #; Load the plugins
+    bots = []
+    # // _log.debug(f"{xterm('CYAN')}wqm.conf: {wqm.conf}")
+    for cc in chat_clients:
+        _log.debug(f"Checking for client {cc}")
+        for conf, data in wqm.conf.items():
+            '''
+            worker_name = await get_available_worker('maintenance')
+            _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
+            await wqm.check_config(worker_name)
+            _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
+            queue = wqm.conf[worker_name]['queue']
+            queue: Queue
+            '''
+            if not conf.startswith(cc):
+                _log.debug(f"{conf} doesn't start with {cc}")
+                continue
+            await wqm.check_config(conf)
+            plugin = wqm.conf[conf]['_plugin']
+            bots.append(plugin)
+
+    _log.debug(f"{xterm('CYAN')}Loaded bots {bots}{xterm('X')}")
+    #; Post the messages???...!..?.
+    for bot in bots:
+        text = "\n".join(text_lines)
+        blocks = []
+        if isinstance(bot, SlackClient):
+            for line in text_lines:
+                block_section = {
+                    'type': 'section',
+                    'text': {
+                        'type': 'mrkdwn',
+                        'text': line,
+                    }
+                }
+                blocks.append(block_section)
+        _log.debug(f"Posting message {text} to {bot.admin_channel}")
+        '''
+        _log.debug(f"{xterm('RED')}bot: {bot}")
+        _log.debug(f"channel: {bot.admin_channel}")
+        _log.debug(f"token: {bot.token}")
+        _log.debug(f"client: {bot.client}{xterm('X')}")
+        '''
+        await bot.post_message(
+            channel=bot.admin_channel,
+            text=text,
+            # // blocks=blocks,
+        )
+
+
     # TODO - This is going to need some loving. I think ultimately I'll
     # TODO - have to create each bot as an LEDHNTR Connector Plugin and
     # TODO - make sure they have the same normalized function names going
@@ -369,7 +383,8 @@ async def check_automation_schedules(
     # TODO - individual Chat Connector Plugin.
     # TODO - Right now I'm just going to code it for Slack since that's
     # TODO - what I'm working on for MVP.
-    for bot in bot_workers:
+    '''
+    for bot in chat_plugins:
         if bot not in bot_post_funcs:
             _log.error(f"No handler specified for {bot}")
             continue
@@ -380,15 +395,7 @@ async def check_automation_schedules(
         #; plugin, but again... MVP... just trying to get it out the door.
         text = "\n".join(text_lines)
         blocks = []
-        for line in text_lines:
-            block_section = {
-                'type': 'section',
-                'text': {
-                    'type': 'mrkdwn',
-                    'text': line,
-                }
-            }
-            blocks.append(block_section)
+
 
         await bot_post_funcs[bot](
             token,
@@ -396,6 +403,8 @@ async def check_automation_schedules(
             text,
             blocks,
         )
+    '''
+    return None
 
 #~##############################
 #~ Launch all Background Tasks
@@ -438,7 +447,7 @@ async def start_automations():
         #TODO @ POST the news
         {
             'task_func': post_news,
-            'task_args': [1, False, ['slackbot']],
+            'task_args': [1, False, ['slack_client']],
             'interval_seconds': 3600,
         },
     ]

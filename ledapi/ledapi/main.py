@@ -67,7 +67,7 @@ async def lifespan(app: FastAPI):
     #. initialization routine.
     await check_automation_schedules(
         bg_tasks,
-        bot_workers = ['slackbot']
+        chat_clients = ['slack_client']
     )
 
     yield

@@ -33,6 +33,4 @@ from .slack import(
     SlackEvent,
     SlackAction,
     add_user_modal,
-    unauthorized_modal,
-    invalid_command_modal,
 )

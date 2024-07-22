@@ -328,6 +328,7 @@ class SlackAction(BaseModel):
 #@##############################################################################
 #@### Slack Modals
 #@##############################################################################
+'''
 def invalid_command_modal(cmd: str = None):
     return {"type": "modal",
         "callback_id": "invalid_command",
@@ -346,6 +347,7 @@ def invalid_command_modal(cmd: str = None):
         ]
     }
 
+
 def unauthorized_modal():
     return {"type": "modal",
         "callback_id": "unauthorized_modal",
@@ -363,7 +365,7 @@ def unauthorized_modal():
             }
         ]
     }
-
+'''
 
 def add_user_modal(
     userval: str = None,
