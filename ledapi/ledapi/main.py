@@ -17,6 +17,7 @@ from ledapi.tasks import(
     clean_queues,
     start_automations,
     stop_automations,
+    post_status,
 )
 from ledapi.routes import(
     everyone,
@@ -66,12 +67,25 @@ async def lifespan(app: FastAPI):
     #. Once slackbot is rolled into its own LEDHNTR Plugin this entry should
     #. effectively be turned into "init_bots" and each bot will have their own
     #. initialization routine.
+
+    chat_clients = ['slack_client']
+
     await check_automation_schedules(
         bg_tasks,
-        chat_clients = ['slack_client']
+        chat_clients=chat_clients
+    )
+
+    await post_status(
+        chat_clients=chat_clients,
+        text_lines=[":sunrise: *SERVER HAS FINISHED BOOTING* :sunrise:"]
     )
 
     yield
+
+    await post_status(
+        chat_clients=chat_clients,
+        text_lines=[":rotating_light: *SERVER SHUTTING DOWN* :rotating_light:"]
+    )
 
     _log.debug(f"{xterm('BOLD_RED')}### MAIN ### CANCELING BACKGROUND TASKS{xterm('RESET')}")
     await stop_automations(bg_tasks)

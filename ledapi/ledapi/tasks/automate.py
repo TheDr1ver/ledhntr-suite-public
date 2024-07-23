@@ -297,18 +297,17 @@ async def check_automation_schedules(
     chat_clients: List[str] = [],
     # // channel: str = "#mojo-dev", # TODO - Get rid of this and roll it into a ConnectorPlugin
 )->None:
-    '''
-    bot_post_funcs = {
-        'slackbot': slack_post_message,
-    }'''
 
+    await redis_manager.check_redis_conn()
+    await wqm.check_config()
     #; build the message
     text_lines = []
+
     for bgt in bg_tasks:
         bgt: asyncio.Task
         task_key = f"{bgt.get_name()}_run_time"
-        await redis_manager.check_redis_conn()
-        await wqm.check_config()
+        # // await redis_manager.check_redis_conn()
+        # // await wqm.check_config()
         # worker_name = await get_available_worker('maintenance')
         # queue: Queue = wqm.conf[worker_name]['queue']
 
@@ -323,20 +322,12 @@ async def check_automation_schedules(
             text_lines.append(text)
             _log.debug(f"{xterm('RED')}{text}{xterm('RESET')}")
 
+    '''
     #; Load the plugins
     bots = []
-    # // _log.debug(f"{xterm('CYAN')}wqm.conf: {wqm.conf}")
     for cc in chat_clients:
         _log.debug(f"Checking for client {cc}")
         for conf, data in wqm.conf.items():
-            '''
-            worker_name = await get_available_worker('maintenance')
-            _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
-            await wqm.check_config(worker_name)
-            _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
-            queue = wqm.conf[worker_name]['queue']
-            queue: Queue
-            '''
             if not conf.startswith(cc):
                 _log.debug(f"{conf} doesn't start with {cc}")
                 continue
@@ -345,10 +336,73 @@ async def check_automation_schedules(
             bots.append(plugin)
 
     _log.debug(f"{xterm('CYAN')}Loaded bots {bots}{xterm('X')}")
-    #; Post the messages???...!..?.
+
+    #; Post the messages
     for bot in bots:
         text = "\n".join(text_lines)
         blocks = []
+        if isinstance(bot, SlackClient):
+            for line in text_lines:
+                block_section = {
+                    'type': 'section',
+                    'text': {
+                        'type': 'mrkdwn',
+                        'text': line,
+                    }
+                }
+                blocks.append(block_section)
+        _log.debug(f"Posting message {text} to {bot.admin_channel}")
+        """
+        _log.debug(f"{xterm('RED')}bot: {bot}")
+        _log.debug(f"channel: {bot.admin_channel}")
+        _log.debug(f"token: {bot.token}")
+        _log.debug(f"client: {bot.client}{xterm('X')}")
+        """
+        await bot.post_message(
+            channel=bot.admin_channel,
+            text=text,
+            # // blocks=blocks,
+        )
+    '''
+    await post_status(
+        chat_clients,
+        text_lines= text_lines,
+    )
+
+
+    return None
+
+#~###############################
+#~ Post Statuses to all Chatbots
+#~###############################
+
+async def post_status(
+    chat_clients: List[str] = [],
+    channel: str = None,
+    text_lines: List[str] = [],
+    blocks: List[Dict] = None,
+):
+    await redis_manager.check_redis_conn()
+    await wqm.check_config()
+
+    #; Load the plugins
+    bots = []
+    for cc in chat_clients:
+        _log.debug(f"Checking for client {cc}")
+        for conf, data in wqm.conf.items():
+            if not conf.startswith(cc):
+                _log.debug(f"{conf} doesn't start with {cc}")
+                continue
+            await wqm.check_config(conf)
+            plugin = wqm.conf[conf]['_plugin']
+            bots.append(plugin)
+
+    _log.debug(f"{xterm('CYAN')}Loaded bots {bots}{xterm('X')}")
+
+    #; Post the messages
+    for bot in bots:
+        text = "\n".join(text_lines)
+        #@ Handle SlackClients
         if isinstance(bot, SlackClient):
             for line in text_lines:
                 block_section = {
@@ -366,44 +420,14 @@ async def check_automation_schedules(
         _log.debug(f"token: {bot.token}")
         _log.debug(f"client: {bot.client}{xterm('X')}")
         '''
+        if channel is None:
+            channel=bot.admin_channel
         await bot.post_message(
-            channel=bot.admin_channel,
+            channel=channel,
             text=text,
             # // blocks=blocks,
         )
 
-
-    # TODO - This is going to need some loving. I think ultimately I'll
-    # TODO - have to create each bot as an LEDHNTR Connector Plugin and
-    # TODO - make sure they have the same normalized function names going
-    # TODO - forward. The idea is to make it as simple as possible to have
-    # TODO - multiple chat bots that post messages to different channels
-    # TODO - but considering they all auth differently and handle messages
-    # TODO - differently, there will have to be some normalization for each
-    # TODO - individual Chat Connector Plugin.
-    # TODO - Right now I'm just going to code it for Slack since that's
-    # TODO - what I'm working on for MVP.
-    '''
-    for bot in chat_plugins:
-        if bot not in bot_post_funcs:
-            _log.error(f"No handler specified for {bot}")
-            continue
-        bot_worker_name = await get_available_worker(bot)
-        # // _log.debug(f"{xterm('CYAN')}{bot_worker_name} configs: \n{pformat(wqm.conf[bot_worker_name])}{xterm('X')}")
-        token = wqm.conf[bot_worker_name]['settings']['token']
-        #; This is something else that should be specific to the chat
-        #; plugin, but again... MVP... just trying to get it out the door.
-        text = "\n".join(text_lines)
-        blocks = []
-
-
-        await bot_post_funcs[bot](
-            token,
-            channel,
-            text,
-            blocks,
-        )
-    '''
     return None
 
 #~##############################
