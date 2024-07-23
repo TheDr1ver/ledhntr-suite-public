@@ -81,21 +81,25 @@ def check_client(func):
     @wraps(func)
     async def check_client_wrapper(self, *args, **kwargs):
         _log = self._log
+        '''
         if 'channel' in kwargs and not kwargs['channel'].startswith('#'):
             kwargs['channel'] = f"#{kwargs['channel']}"
         if not self.admin_channel.startswith('#'):
             self.admin_channel = f"#{self.admin_channel}"
         if not self.user_channel.startswith('#'):
             self.user_channel = f"#{self.user_channel}"
+        '''
+        if 'channel' in kwargs and kwargs['channel'].startswith('#'):
+            kwargs['channel'] = kwargs['channel'].lstrip('#')
         if not self.client:
-            _log.debug(f"self.client not defined. Reloading client.")
+            # // _log.debug(f"self.client not defined. Reloading client.")
             self.reload_web_client()
         else:
-            _log.debug(f"self.client set. token: {self.client.token}")
-            _log.debug(f"self.client.auth_test: {await self.client.auth_test()}")
+            _log.debug(f"{xterm('RED')}self.client set.")# token: {self.client.token}")
+            _log.debug(f"self.client.auth_test: {await self.client.auth_test()}{xterm('X')}")
         if not await self.client.auth_test():
             self.reload_web_client()
-        return func(self, *args, **kwargs)
+        return await func(self, *args, **kwargs)
     return check_client_wrapper
 
 class SlackClient(ConnectorPlugin):
@@ -176,8 +180,10 @@ class SlackClient(ConnectorPlugin):
         _log.debug(f"Reloading AsyncWebClient...")
         if not token:
             self.client = AsyncWebClient(token=self.token)
+            _log.debug(f"Explicit token not set. Using self.token") # : {self.token}")
         else:
             self.client = AsyncWebClient(token=token)
+            _log.debug(f"Explicit token set: {token}.")
         return self.client
 
     #&##########################################################################
@@ -295,6 +301,8 @@ class SlackClient(ConnectorPlugin):
         :rtype: Boolean
         """
         _log = self._log
+        if channel.startswith('#'):
+            channel = channel.lstrip('#')
         if blocks is None:
             blocks = [
             {
@@ -314,12 +322,12 @@ class SlackClient(ConnectorPlugin):
                 blocks=blocks,
             )
         except SlackApiError as e:
-            _log.error(f"SlackError sending message {e.response['error']}")
-            '''
-            _log.error(f"Full error: {e}")
+            _log.error(f"{xterm('RED')}SlackError sending message {e.response['error']}")
+            # _log.error(f"Full error: {e}")
             _log.error(f"channel: {channel}")
             _log.error(f"text: {text}")
-            _log.error(f"blocks: {blocks}")
+            _log.error(f"blocks: {pformat(blocks)}{xterm('X')}")
+            '''
             _log.error(f"self.client: {self.client}")
             _log.error(f"self.client.token: {self.client.token}")
             _log.error(f"self.client.auth_test: {await self.client.auth_test()}")
@@ -382,6 +390,40 @@ class SlackClient(ConnectorPlugin):
             return False
 
         _log.debug(f"Successful update!: {pformat(response)}")
+
+    @check_client
+    async def upload_snippet(
+        self,
+        filename:str = None,
+        content:str = None,
+        title: str = None,
+        snippet_type:str = None,
+        channel:str = None,
+        initial_comment: str = None,
+    )->bool:
+        _log = self._log
+        if channel.startswith('#'):
+            channel = channel.lstrip('#')
+        try:
+            response = await self.client.files_upload_v2(
+                channel=channel,
+                content=content,
+                filename=filename,
+                snippet_type=snippet_type,
+                title=title,
+                initial_comment=initial_comment,
+            )
+            _log.debug(f"File {filename} successfully uploaded: {response['file']['permalink']}")
+            return True
+        except SlackApiError as e:
+            _log.error(f"{xterm('RED')}Error uploading snippet: {e}")
+            _log.error(f"filename: {filename}")
+            _log.error(f"content: {content[0:100]}...")
+            _log.error(f"title: {title}")
+            _log.error(f"snippet_type: {snippet_type}")
+            _log.error(f"channel: {channel}")
+            _log.error(f"initial_comment: {initial_comment}{xterm('X')}")
+            raise
 
     #&##########################################################################
     #& INTERACTIVITY
