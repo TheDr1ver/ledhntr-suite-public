@@ -4,12 +4,13 @@ import logging
 from fastapi import BackgroundTasks, FastAPI, Depends, HTTPException, status
 from contextlib import asynccontextmanager
 
+from ledhntr.helpers import xterm
+
 from ledapi.config import(
     led,
     _log,
     redis_manager,
     wqm,
-    xterm,
 )
 from ledapi.tasks import(
     check_automation_schedules,

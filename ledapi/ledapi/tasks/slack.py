@@ -42,11 +42,11 @@ from ledapi.config import(
     get_tdb,
     redis_manager,
     wqm,
-    xterm,
 )
 from ledapi.helpers import (
     two_sec_grace,
-    result_error_catching
+    result_error_catching,
+    xterm,
 )
 from ledapi.models import(
     MOJOCMD,
@@ -226,8 +226,10 @@ async def mojo_post_news(
     _log.debug(f"{xterm('CYAN')}{pformat(news_results)}{xterm('X')}")
     new_things = news_results.get('new_things')
     if not new_things:
-        _log.debug(f"{xterm('YELLOW')}no new things found..{xterm('X')}")
+        _log.debug(f"{xterm('RED')}no new things found..{xterm('X')}")
         return None
+    else:
+        _log.debug(f"{xterm('GREEN')}new_things: {new_things}{xterm('X')}")
 
     worker_name = get_current_job().worker_name
     _log.debug(f"{xterm('BLUE')}Current name: {worker_name}")
@@ -238,6 +240,8 @@ async def mojo_post_news(
     _log.debug(f"{xterm('YELLOW')}plugin: {plugin}")
     _log.debug(f"plugin dict: {pformat(plugin.__dict__)}")
     _log.debug(f"plugin.token: {plugin.token}")
+    _log.debug(f"plugin.client.token: {plugin.client.token}")
+    _log.debug(f"plugin.client.auth_test: {plugin.client.auth_test}")
     _log.debug(f"plugin.client: {plugin.client}{xterm('X')}")
 
     if verbose:
@@ -653,6 +657,8 @@ async def mojocmd_conf(
     mojo: MOJOCMD = None,
     user: User = None,
 ):
+    # TODO - Build self-documenting "help" command out of the values set in
+    # TODO "opts"
     worker_name = get_current_job().worker_name
     await wqm.check_config(worker_name)
     plugin:SlackClient = wqm.conf[worker_name]['_plugin']

@@ -20,12 +20,13 @@ from ledhntr.plugins import (
     AnalyzerPlugin
 )
 
+from ledhntr.helpers import xterm
+
 from ledapi.config import(
     _log,
     led,
     get_tdb,
     wqm,
-    xterm,
 )
 from ledapi.helpers import(
     result_error_catching,

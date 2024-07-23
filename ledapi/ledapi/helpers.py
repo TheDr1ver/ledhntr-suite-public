@@ -6,7 +6,8 @@ from fastapi import HTTPException, status
 from rq.job import Job
 from typing import Callable, Optional
 
-from ledapi.config import _log, wqm, xterm
+from ledhntr.helpers import xterm
+from ledapi.config import _log, wqm
 
 from typing import Dict, List, Union, Optional
 

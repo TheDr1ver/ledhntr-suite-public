@@ -29,13 +29,12 @@ from typing import(
     Optional,
     Union,
 )
-from ledhntr.helpers import dumps
+from ledhntr.helpers import dumps, xterm
 from ledapi.config import(
     _log,
     conf,
     redis_manager,
     wqm,
-    xterm,
 )
 
 #@##############################################################################

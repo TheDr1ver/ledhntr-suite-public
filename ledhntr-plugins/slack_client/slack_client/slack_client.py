@@ -30,7 +30,7 @@ from ledhntr.data_classes import(
 )
 
 from ledhntr.helpers import LEDConfigParser
-from ledhntr.helpers import format_date, dumps
+from ledhntr.helpers import format_date, dumps, xterm
 from ledhntr.plugins.connector import ConnectorPlugin
 
 #&##########################################################################
@@ -90,6 +90,9 @@ def check_client(func):
         if not self.client:
             _log.debug(f"self.client not defined. Reloading client.")
             self.reload_web_client()
+        else:
+            _log.debug(f"self.client set. token: {self.client.token}")
+            _log.debug(f"self.client.auth_test: {await self.client.auth_test()}")
         if not await self.client.auth_test():
             self.reload_web_client()
         return func(self, *args, **kwargs)

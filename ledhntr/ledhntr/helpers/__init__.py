@@ -665,3 +665,31 @@ def parse_schema_file(
             break
 
     return thing_objs
+
+
+#@##############################################################################
+#@ LOGGING TERM COLORS
+#@##############################################################################
+
+def xterm(color: str = None):
+    color = color.upper()
+    colors = {
+        "RESET": "\033[0m",
+        "RED": "\033[31m",
+        "BOLD_RED": "\033[1;31m",
+        "GREEN": "\033[32m",
+        "BOLD_GREEN": "\033[1;32m",
+        "YELLOW": "\033[33m",
+        "BOLD_YELLOW": "\033[1;33m",
+        "BLUE": "\033[34m",
+        "BOLD_BLUE": "\033[1;34m",
+        "CYAN": "\033[36m",
+        "BOLD_CYAN": "\033[1;36m",
+        "MAGENTA": "\033[35m",
+        "BOLD_MAGENTA": "\033[1;35m",
+        "WHITE": "\033[37m",
+        "BOLD_WHITE": "\033[1;37m",
+        "BLACK": "\033[30m",
+        "BOLD_BLACK": "\033[1;30m"
+    }
+    return colors.get(color, "\033[0m")

@@ -29,13 +29,13 @@ from ledhntr.plugins import (
     ConnectorPlugin,
     AnalyzerPlugin
 )
+from ledhntr.helpers import xterm
 from ledapi.config import(
     _log,
     led,
     get_tdb,
     redis_manager,
     wqm,
-    xterm,
 )
 from ledapi.helpers import (
     two_sec_grace,
