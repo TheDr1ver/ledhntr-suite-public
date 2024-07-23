@@ -8,7 +8,7 @@ import redis.asyncio as redis
 import redis as syncredis
 from pprint import pformat
 from redis.asyncio.client import Redis
-from rq import Queue, Worker, Connection
+from rq import Queue, Worker, Connection, get_current_job
 from typing import (Optional, Dict, List)
 
 #@##############################################################################
@@ -298,3 +298,16 @@ class WorkersQueueManager(object):
 
 wqm = WorkersQueueManager()
 # _log.debug(f"wqm: {pformat(wqm.conf)}")#
+
+
+#@##############################################################################
+#@ Simplify getting worker plugin
+#@##############################################################################
+
+async def get_plugin():
+    job_id = get_current_job().id
+    worker_name = get_current_job().worker_name
+    await wqm.check_config(worker_name)
+    plugin = wqm.conf[worker_name]['_plugin']
+    _log.debug(f"{xterm('BLUE')}Job {job_id} worker_name: {worker_name} plugin: {plugin}{xterm('X')}")
+    return plugin
