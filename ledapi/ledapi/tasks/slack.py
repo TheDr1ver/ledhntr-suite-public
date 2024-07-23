@@ -784,10 +784,42 @@ async def slackevent_conf(
         "debug": mojo_debug,
     }
     '''
+    data = json.loads(payload['body'])
+    """
+    # Payload Body:
+
+    {'api_app_id': 'A07A8SAPC0P',
+    'authorizations': [{'enterprise_id': None,
+                        'is_bot': True,
+                        'is_enterprise_install': False,
+                        'team_id': '<TEAM_ID>',
+                        'user_id': '<USER_ID>'}],
+    'context_enterprise_id': None,
+    'context_team_id': '<TEAM_ID>',
+    'event': {'event_ts': '1721766236.002200',
+            'item': {'channel': '<CHANNEL_ITEM>',
+                        'ts': '1721766231.784119',
+                        'type': 'message'},
+            'item_user': '<ITEM_USER>',
+            'reaction': '+1',
+            'type': 'reaction_added',
+            'user': '<USER_ID>'},
+    'event_context': '<EVENT_CONTEXT>',
+    'event_id': '<EVENT_ID>',
+    'event_time': 1721766236,
+    'is_ext_shared_channel': False,
+    'team_id': '<TEAM_ID>',
+    'token': '<TOKEN>',
+    'type': 'event_callback'}
+    """
+    event = data['event']
     resp = None
 
-    opts = {}
+    opts = {
+        # // 'reaction_added': (slackevent_reaction_added, role_conman),
+    }
 
+    '''
     if not payload['type'] in opts:
         _log.error(f"No scenario coded for payload['type'] {payload['type']}")
         await plugin.invalid_command(
@@ -795,10 +827,45 @@ async def slackevent_conf(
             cmd=payload['type'],
         )
         return False
+    '''
+    """
+    _log.debug(f"{xterm('YELLOW')}{pformat(payload)}{xterm('X')}")
+    await plugin.post_message(
+        channel = plugin.admin_channel,
+        text=f"```{pformat(payload)}```",
+    )
+    await plugin.post_message(
+        channel = plugin.admin_channel,
+        text=f"*BODY*",
+    )
 
-    # resp = await opts[mojo['text'].split(' ')[0]](mojo, user)
-    # _log.info(pformat(request))
-    # return request
+    # // _log.debug(f"Attempting to json.loads {payload['body']}")
+    # // _log.debug(payload['body'])
+    # // _log.debug(f"body type: {type(payload['body'])}")
+    # // _log.debug(f"body first bytes: {payload['body'][0:10]}")
+
+
+    body_text = f"```{pformat(data)}```"
+    await plugin.post_message(
+        channel = plugin.admin_channel,
+        text=body_text,
+    )
+    """
+
+    body_text = f"<@{event['user']}> added reaction :{event['reaction']}:"
+    channel = event['item']['channel']
+    thread_ts = event['item']['ts']
+    _log.debug(f"{xterm('YELLOW')}{pformat(data)}{xterm('X')}")
+    _log.debug(f"{xterm('YELLOW')}{pformat(event)}{xterm('X')}")
+    _log.debug(f"Using thread_ts: {thread_ts}")
+    _log.debug(f"{xterm('CYAN')}{pformat(payload)}{xterm('X')}")
+
+    await plugin.post_message(
+        channel=channel,
+        text=body_text,
+        thread_ts=thread_ts,
+    )
+
     #TODO - Do stuff with Slack Events
     return True #; this will be changed to 'response'
 
@@ -877,6 +944,9 @@ async def event_handler(
     resp['headers'] = {key: val for  key, val in request.headers.items()}
     resp['body'] = await request.body()
     resp['body'] = resp['body'].decode('utf-8')
+    # // resp['body-utf8'] = resp['body'].decode('utf-8')
+    # // resp['form'] = await request.form()
+    # // resp['form'] = pformat(resp['form'])
 
     job = queue.enqueue_call(
         slackevent_conf,

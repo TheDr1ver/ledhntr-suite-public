@@ -247,7 +247,8 @@ class SlackClient(ConnectorPlugin):
         :param response_url: Response URL to send payload to, defaults to None
         :type response_url: str, optional
         :param blocks: Block Kit Blocks for pretty messages, defaults to None
-        :type blocks: List, optional
+        :type blocks: List, optional:param blocks_verbatim: Verbatim means blocks won't do things like render links
+        :type blocks_verbatim: boolean
         :param response_type: Response type, ephemeral or in_channel, defaults to "ephemeral"
         :type response_type: Optional[str], optional
         :return: True if message succeeded, False if it failed
@@ -287,6 +288,7 @@ class SlackClient(ConnectorPlugin):
         text: str = None,
         blocks: Optional[List] = None,
         blocks_verbatim: Optional[bool] = False,
+        thread_ts: Optional[str] = None,
         **kwargs
     )->bool:
         """Posts brand new message to a channel
@@ -297,6 +299,10 @@ class SlackClient(ConnectorPlugin):
         :type text: str, optional
         :param blocks: Block Kit blocks for pretty messages, defaults to None
         :type blocks: List, optional
+        :param blocks_verbatim: Verbatim means blocks won't do things like render links
+        :type blocks_verbatim: boolean
+        :param thread_ts: Timestamp of original message, used for starting threads
+        :type thread_ts: str
         :return: True if successful, False if failure
         :rtype: Boolean
         """
@@ -315,17 +321,21 @@ class SlackClient(ConnectorPlugin):
             }
         ]
         _log.debug(f"Posting {text} to {channel}")
+        if thread_ts is not None:
+            thread_ts = str(thread_ts)
         try:
             response = await self.client.chat_postMessage(
                 channel=channel,
                 text=text,
                 blocks=blocks,
+                thread_ts=thread_ts,
             )
         except SlackApiError as e:
             _log.error(f"{xterm('RED')}SlackError sending message {e.response['error']}")
             # _log.error(f"Full error: {e}")
             _log.error(f"channel: {channel}")
             _log.error(f"text: {text}")
+            _log.error(f"thread_ts: {thread_ts}")
             _log.error(f"blocks: {pformat(blocks)}{xterm('X')}")
             '''
             _log.error(f"self.client: {self.client}")

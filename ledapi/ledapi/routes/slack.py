@@ -120,7 +120,7 @@ async def mojo_ep(
 @router.post("/slack/action")
 async def slackaction_ep(
     request: Request,
-    user: User = Depends(dep_check_user_role_by_slack(role_everyone)),
+    # // user: User = Depends(dep_check_user_role_by_slack(role_everyone)),
 ):
     '''
     resp = {'headers': None, 'body': None}
@@ -133,9 +133,17 @@ async def slackaction_ep(
     _log.info(pformat(resp))
     # return await request.json()
     '''
+    try:
+        # user = Depends(dep_check_user_role_by_slack(role_everyone))
+        user = await get_user_by_slack_id(request)
+    except Exception as e:
+        _log.error(f"Unable to load user from slack_id: {e}")
+        user = None #; possibly this is a new user.
+    form = await request.form()
 
     _log.debug(f"Running slack action...")
     _log.debug(f"{pformat(request)}")
+    _log.debug(f"Form: {pformat(form)}")
     msg_400 = f"Invalid input"
     msg_500 = f"Error running slack action"
 
@@ -161,8 +169,16 @@ async def slackaction_ep(
 @router.post("/slack/event")
 async def slackevent_ep(
     request: Request,
-    user: User = Depends(dep_check_user_role_by_slack(role_everyone)),
+    # // user: User = Depends(dep_check_user_role_by_slack(role_everyone)),
 ):
+    """Handle events (emojii etc)
+
+    :param request: request submitted to the endpoint
+    :type request: Request
+    :return: Slack-friendly response
+    :rtype: Dict
+    """
+
     '''
     resp = {'headers': None, 'body': None}
     resp['headers'] = {key: val for  key, val in request.headers.items()}
@@ -176,8 +192,18 @@ async def slackevent_ep(
     return resp
     '''
 
+    try:
+        # user = Depends(dep_check_user_role_by_slack(role_everyone))
+        user = await get_user_by_slack_id(request)
+    except Exception as e:
+        _log.error(f"Unable to load user from slack_id: {e}")
+        user = None #; possibly this is a new user.
+
+    # // form = await request.form()
+
     _log.debug(f"Running slack event...")
     _log.debug(f"{pformat(request)}")
+    # // _log.debug(f"Form: {pformat(form)}")
     msg_400 = f"Invalid input"
     msg_500 = f"Error running slack event"
 

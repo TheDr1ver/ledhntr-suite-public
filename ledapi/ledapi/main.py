@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime, timezone
 
 from fastapi import BackgroundTasks, FastAPI, Depends, HTTPException, status
 from contextlib import asynccontextmanager
@@ -77,14 +78,14 @@ async def lifespan(app: FastAPI):
 
     await post_status(
         chat_clients=chat_clients,
-        text_lines=[":sunrise: *SERVER HAS FINISHED BOOTING* :sunrise:"]
+        text_lines=[f":sunrise: *SERVER UP* `{datetime.now(timezone.utc)}` :sunrise:"]
     )
 
     yield
 
     await post_status(
         chat_clients=chat_clients,
-        text_lines=[":rotating_light: *SERVER SHUTTING DOWN* :rotating_light:"]
+        text_lines=[f":rotating_light: *SERVER DOWN* `{datetime.now(timezone.utc)}` :rotating_light:"]
     )
 
     _log.debug(f"{xterm('BOLD_RED')}### MAIN ### CANCELING BACKGROUND TASKS{xterm('RESET')}")
