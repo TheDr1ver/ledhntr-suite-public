@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import json
 import os
@@ -42,6 +43,7 @@ from ledapi.config import(
     get_tdb,
     redis_manager,
     wqm,
+    get_plugin,
 )
 from ledapi.helpers import (
     two_sec_grace,
@@ -110,6 +112,61 @@ async def slack_post_message(
 #~######################################
 #~ Parse MOJO CMDs
 #~######################################
+
+async def mojo_parse_cmd(
+    cmd: str = None,
+):
+    parser = argparse.ArgumentParser(description="MOJO - a Slack tool for interacting with LEDHNTR")
+    subparsers = parser.add_subparsers(dest='cmd', help="Available commands")
+
+    #@ Define sub-parsers
+    news = subparsers.add_parser('news', help="Get the latest findings from any given database.")
+    search = subparsers.add_parser('search', help="Search information in the LEDHNTR databases and external APIs.")
+
+    #@ Handle 'search' arguments
+    search.add_argument('pos', nargs='*', help='Positional arguments: [label value verbose]')
+    search.add_argument('--label', type=str, help="Label to search for (e.g. ip)")
+    search.add_argument('--value', type=str, help="Value eto search for (e.g. 192.168.1.100)")
+    search.add_argument('--verbose', action='store_true', help="Enable verbose output")
+
+    #@ Handle 'news' arguments
+    news.add_argument('pos', nargs="*", help='Positional arguments: [days_back database verbose]')
+    news.add_argument('--days_back', type=int, default=1, help="Number of days back to retrieve news")
+    news.add_argument('--hours_back', type=int, help="Number of hours back to retrieve news (overrides days_back if set)")
+    news.add_argument('--database', type=str, help="Database to use for news retrieval (defaults to 'all')")
+    news.add_argument('--verbose', action='store_true', help="Enable verbose output")
+
+    args = parser.parse_args(cmd.split())
+
+    #. Process positional arguments for 'search'
+    if args.cmd == 'search':
+        if args.pos:
+            if args.label is None:
+                args.label = args.pos[0]
+            if len(args.pos) > 1:
+                args.value = args.pos[1]
+            if len(args.pos) > 2:
+                args.verbose = args.pos[2].lower() in ['true', '1', 'yes', 'verbose']
+
+    #. Process positional arguments for 'news'
+    if args.cmd == 'news':
+        if args.pos:
+            #; if a positional argumet is passed, assume we're feeding it hours-back.
+            args.days_back = int(args.pos[0])
+            if len(args.pos) > 1:
+                args.database = args.pos[1]
+            if len(args.pos) > 2:
+                args.verbose = args.pos[2].lower() in ['true', '1', 'yes', 'verbose']
+        #. check overrides
+        if args.hours_back is None:
+            args.hours_back = 24*args.days_back
+
+    _log.debug(f"{xterm('GREEN')}Parsed args: {pformat(vars(args))}{xterm('X')}")
+    return args
+
+#~######################################
+#~ Addme
+#~######################################
 async def mojo_addme(
     mojo: MOJOCMD = None,
     user: User = None,
@@ -146,6 +203,8 @@ async def mojo_addme(
         _log.error(f"Error sending message: {e.response['error']}")
 
     '''
+    #; Old method
+    '''
     channel = "#mojo-dev"
     # slack_token = wqm.conf[worker_name]['settings']['token']
     slack_token = mojo.slackbot_token
@@ -181,6 +240,24 @@ async def mojo_addme(
     _log.debug(f"Returning rez: {rez}")
 
     return rez
+    '''
+
+    text = f"User <@{mojo.user_id}> has requested an account."
+    blocks = [
+        {
+            'type': 'section',
+            'text': {
+                'type': 'mrkdwn',
+                'text': f"User <@{mojo.user_id}> has requested an account."
+            },
+            'accessory': {
+                'type': 'button',
+                'text': {'type': 'plain_text', 'text': 'Add User'},
+                'action_id': 'open_add_user_modal',
+                'value': f"{mojo.user_name},{mojo.user_id},{mojo.team_id}",
+            }
+        }
+    ]
 
 async def mojo_debug(
     mojo: MOJOCMD = None,
@@ -191,24 +268,16 @@ async def mojo_debug(
     await asyncio.sleep(5)
     return mojo
 
-#! DEBUG TESTING
 async def mojo_post_news(
     mojo: MOJOCMD = None,
     user: User = None,
 ):
     _log.debug(f"Running POST NEWS")
-    mojo_split = mojo.text.split(' ')
-    if len(mojo_split) > 1:
-        hours_back = int(mojo.text.split(' ')[1])
-    else:
-        hours_back = 1
-    verbose = True
-    bot_workers=['slack_client']
-    channel = "#mojo-dev"
-
-    bot_post_funcs = {
-        'slackbot': slack_post_message,
-    }
+    try:
+        args = await mojo_parse_cmd(mojo.text)
+    except SystemExit as e:
+        _log.error(f"{xterm('RED')}Error parsing cmd: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
 
     text_lines = []
 
@@ -222,39 +291,38 @@ async def mojo_post_news(
         'http',
     ]
 
-    news_results = await get_news_conf(hours_back)
-    _log.debug(f"{xterm('CYAN')}{pformat(news_results)}{xterm('X')}")
+    news_results = await get_news_conf(args.hours_back)
+    #; _log.debug(f"{xterm('CYAN')}{pformat(news_results)}{xterm('X')}")
     new_things = news_results.get('new_things')
     if not new_things:
-        _log.debug(f"{xterm('RED')}no new things found..{xterm('X')}")
+        _log.debug(f"{xterm('YELLOW')}no new things found..{xterm('X')}")
         return None
-    else:
-        _log.debug(f"{xterm('GREEN')}new_things: {new_things}{xterm('X')}")
+    #; else:
+    #;     _log.debug(f"{xterm('GREEN')}new_things: {new_things}{xterm('X')}")
 
-    worker_name = get_current_job().worker_name
-    _log.debug(f"{xterm('BLUE')}Current name: {worker_name}")
-    await wqm.check_config(worker_name)
-    _log.debug(f"wqm.conf[{worker_name}] = {pformat(wqm.conf[worker_name])}{xterm('X')}")
-    plugin:SlackClient = wqm.conf[worker_name]['_plugin']
+    plugin:SlackClient = await get_plugin()
 
-    _log.debug(f"{xterm('YELLOW')}plugin: {plugin}")
-    _log.debug(f"plugin dict: {pformat(plugin.__dict__)}")
-    _log.debug(f"plugin.token: {plugin.token}")
-    _log.debug(f"plugin.client.token: {plugin.client.token}")
-    _log.debug(f"plugin.client.auth_test: {plugin.client.auth_test}")
-    _log.debug(f"plugin.client: {plugin.client}{xterm('X')}")
-
-    if verbose:
+    if args.verbose:
         #; This is something else that should be specific to the chat
-        #; plugin, but again... MVP... just trying to get it out the door.?
+        #; plugin, but again... MVP... just trying to get it out the door.
         text = f"```{new_things}```"
-
-        await plugin.post_message(
-            channel=plugin.admin_channel,
-            text=text,
-            blocks=None,
-            blocks_verbatim=True,
-        )
+        _log.debug(f"{xterm('CYAN')}Posting {text} to {plugin.admin_channel}...{xterm('X')}")
+        try:
+            await plugin.upload_snippet(
+                filename=f"{datetime.now(timezone.utc)}_news.json",
+                content=dumps(new_things),
+                title=f"{datetime.now(timezone.utc)}_news.json",
+                snippet_type="json",
+                #; channel=plugin.admin_channel, #; maybe channel_id is required?
+                #; maybe it's because the channel started with #??
+                #@ winner! needed to strip the # from the channel name.
+                channel=mojo.channel_id,
+                initial_comment="MOJO News Dump",
+            )
+        except Exception as e:
+            _log.error(f"{xterm('RED')}Failed posting message: {e}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        _log.debug(f"MOJOCMD: {pformat(mojo)}")
 
         return True
 
@@ -286,50 +354,24 @@ async def mojo_post_news(
             else:
                 _log.debug(f"{tt} not in {interesting_things}")
 
-
-
-
     #; This is something else that should be specific to the chat
     #; plugin, but again... MVP... just trying to get it out the door.
     if not text_lines:
-        text_lines = [f"No news from the last {hours_back} hours."]
+        text_lines = [f"No news from the last {args.hours_back} hours."]
     text = "\n".join(text_lines)
     blocks = []
-    '''
-    for line in text_lines:
-        block_section = {
-            'type': 'section',
-            'text': {
-                'type': 'mrkdwn',
-                'text': line,
-            }
-        }
-        blocks.append(block_section)
-
-    blocks = [
-        {
-            'type': 'section',
-            'text': {
-                'type': 'mrkdwn',
-                'verbatim': True,
-                'text': text,
-            }
-        }
-    ]
-
-    await bot_post_funcs[bot](
-        token,
-        channel,
-        text,
-        blocks,
-    )
-    '''
-    await plugin.post_message(
-        channel=plugin.admin_channel,
-        text=text,
-        blocks=None,
-        blocks_verbatim=True,
-    )
+    try:
+        await plugin.post_message(
+            # channel=plugin.admin_channel,
+            channel=mojo.channel_name,
+            text=text,
+            blocks=None,
+            blocks_verbatim=True,
+        )
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed posting message..: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+    _log.debug(f"MOJOCMD: {pformat(mojo)}")
     return True
 
 async def mojo_clear_schedules(
@@ -366,7 +408,7 @@ async def mojo_clear_schedules(
         blocks.append(block_section)
     await slack_post_message(
         mojo.slackbot_token,
-        f"#{mojo.admin_channel}",
+        mojo.admin_channel,
         text,
         blocks,
     )
@@ -409,7 +451,7 @@ async def mojo_check_schedules(
         blocks.append(block_section)
     await slack_post_message(
         mojo.slackbot_token,
-        f"#{mojo.admin_channel}",
+        mojo.admin_channel,
         text,
         blocks,
     )
@@ -497,16 +539,6 @@ async def slackaction_check_job_status(
             }
     _log.debug(f"job_details: {pformat(rez)}")
 
-    '''
-    slack_token = wqm.conf[worker_name]['settings']['token']
-    client = WebClient(token=slack_token)
-    client.chat_update(
-        channel = payload['channel']['id'],
-        ts = payload['container']['message_ts'],
-        text = rez,
-        blocks = blocks
-    )
-    '''
     resp_url = payload['response_url']
     resp_payload = {
         "response_type": "ephemeral",
@@ -531,23 +563,17 @@ async def slackaction_open_add_user_modal(
     _log.debug(f"payload: {payload}")
     _log.debug(f"user: {user.to_dict()}")
 
-    worker_name = get_current_job().worker_name
-    await wqm.check_config(worker_name)
-    plugin:SlackClient = wqm.conf[worker_name]['_plugin']
-
-    # user = await check_role(user, role_dbadmin)
+    plugin:SlackClient = await get_plugin()
 
     #; // admin_channel = "#mojo-dev"
     #; this isn't called here but I'm leaving it as a
     #; reminder that I can pull it from the payload if I want it dynamic.
 
-    # // slack_token = wqm.conf[worker_name]['settings']['token']
-    # // client = WebClient(token=slack_token)
 
     action = payload['actions'][0]
 
     # open the modal
-    response = await plugin.client.views_open(
+    await plugin.client.views_open(
         trigger_id=payload['trigger_id'],
         view=add_user_modal(action['value'])
     )
@@ -560,9 +586,7 @@ async def slackaction_submit_add_user(
     payload: Dict = None,
     user: User = None,
 ):
-    worker_name = get_current_job().worker_name
-    await wqm.check_config(worker_name)
-    plugin:SlackClient = wqm.conf[worker_name]['_plugin']
+    plugin:SlackClient = await get_plugin()
 
     _log.debug(f"Adding user to database...")
     _log.debug(f"payload: {payload}")
@@ -578,22 +602,6 @@ async def slackaction_submit_add_user(
     slack_uid = slack_id.split(',')[0]
     # // slack_token = wqm.conf[worker_name]['settings']['token']
     # // client = WebClient(token=slack_token)
-    '''
-    client.chat_update(
-        channel = payload['channel']['id'],
-        ts = payload['message']['ts'],
-        text = f"Successfully added new user <@{slack_uid}>",
-        blocks = [
-            {
-                'type': 'section',
-                'text': {
-                    'type': 'mrkdwn',
-                    'text': f"Successfully added new user <@{slack_uid}>",
-                },
-            }
-        ]
-    )
-    '''
     blocks = [
         {
             'type': 'section',
@@ -657,11 +665,10 @@ async def mojocmd_conf(
     mojo: MOJOCMD = None,
     user: User = None,
 ):
-    # TODO - Build self-documenting "help" command out of the values set in
-    # TODO "opts"
-    worker_name = get_current_job().worker_name
-    await wqm.check_config(worker_name)
-    plugin:SlackClient = wqm.conf[worker_name]['_plugin']
+    # TODO - Build self-documenting "help" command
+    # TODO - This can probably be done using the argparse module in mojo_parse_cmd()
+
+    plugin:SlackClient = await get_plugin()
     cmd = mojo.text.split(' ')[0]
     resp = None
     opts = {
@@ -671,22 +678,25 @@ async def mojocmd_conf(
         #~ worker_manager.reset_schedules()
         "clear-schedules": (mojo_clear_schedules, role_admin),
         "check-schedules": (mojo_check_schedules, role_everyone),
-        "da-news": (mojo_post_news, role_everyone),
-        #; mojo news
-        #. "news": (mojo_news, role_everyone),
-        #; mojo hunt db=all plugin=all forced=True
+        "news": (mojo_post_news, role_everyone),
+        #; mojo add_db 20240723_MyNewDB
+        #. "add_db": (mojo_add_db, role_dbadmin)
+        #; mojo add_hunt #; launches modal
+        #. "add_hunt": (mojo_add_hunt, role_hunter)
+        #; mojo hunt --db=all --plugin=all --forced=True
         #. "hunt": (mojo_hunt, role_hunter)
-        #; mojo enrich db=all plugin=all forced=True
+        #; mojo enrich --db=all --plugin=all --forced=True
         #. "enrich": (mojo_enrich, role_hunter)
-        #; mojo status worker=censys.01
-        #; mojo status job=<jobid>
+        #; mojo status --worker=censys.01
+        #; mojo status --job=<jobid>
         #. "status": (mojo_status, role_everyone)
+        #; mojo search ip 192.168.1.100
+        #; mojo search --label=ip --value=192.168.1.100 --database=all --verbose
         #. "search": (mojo_search, role_hunter)
     }
 
     if cmd in opts:
         func_perms = opts[cmd]
-
         try:
             _log.debug(f"Checking user.role {user.role} against roles: {func_perms[1]}")
             await check_role(user, func_perms[1])
@@ -698,6 +708,7 @@ async def mojocmd_conf(
             resp = await func_perms[0](mojo, user)
         except Exception as e:
             _log.error(f"Failed running {func_perms[0]}: {e}")
+            # // _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
     else:
         _log.debug(f"Invalid command: {cmd}")
         await plugin.invalid_command(
@@ -712,9 +723,7 @@ async def slackaction_conf(
     payload: Dict = None,
     user: User = None,
 ):
-    worker_name = get_current_job().worker_name
-    await wqm.check_config(worker_name)
-    plugin:SlackClient = wqm.conf[worker_name]['_plugin']
+    plugin:SlackClient = await get_plugin()
 
     resp = None
 
@@ -768,9 +777,7 @@ async def slackevent_conf(
     payload: Dict = None,
     user: User = None,
 ):
-    worker_name = get_current_job().worker_name
-    await wqm.check_config(worker_name)
-    plugin:SlackClient = wqm.conf[worker_name]['_plugin']
+    plugin:SlackClient = await get_plugin()
     '''
     opts = {
         "addme": mojo_addme,
@@ -808,14 +815,8 @@ async def mojo_handler(
     mojo: MOJOCMD = None,
     user: User = None,
 ):
-    # ! await wqm.check_config()
-    # // worker_name = await get_available_worker('slackbot')
     worker_name = await get_available_worker('slack_client')
-    # plugin = wqm.conf[worker_name]['_plugin']
     queue = wqm.conf[worker_name]['queue']
-    # // slack_token = wqm.conf[worker_name]['settings']['token']
-    # // mojo.admin_channel = wqm.conf[worker_name]['settings']['admin_channel']
-    # // mojo.slackbot_token = slack_token
 
     _log.debug(f"Enqueuing mojo_handler")
     _log.debug(f"mojo: {mojo}")
@@ -836,10 +837,7 @@ async def action_handler(
     request: Request = None,
     user: User = None,
 ):
-    # ! await wqm.check_config()
-    # // worker_name = await get_available_worker('slackbot')
     worker_name = await get_available_worker('slack_client')
-    # plugin = wqm.conf[worker_name]['_plugin']
     queue = wqm.conf[worker_name]['queue']
     _log.debug(f"Enqueuing action_handler")
     form = await request.form()
@@ -869,10 +867,7 @@ async def event_handler(
     request: Request = None,
     user: User = None,
 ):
-    # ! await wqm.check_config()
-    # // worker_name = await get_available_worker('slackbot')
     worker_name = await get_available_worker('slack_client')
-    # plugin = wqm.conf[worker_name]['_plugin']
     queue = wqm.conf[worker_name]['queue']
     _log.debug(f"Enqueuing event_handler")
     _log.debug(f"request: {request}")
