@@ -33,4 +33,6 @@ from .slack import(
     SlackEvent,
     SlackAction,
     add_user_modal,
+    new_hits,
+    update_thing_modal,
 )

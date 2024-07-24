@@ -138,6 +138,7 @@ async def news_task(
         for thing in things:
             simple_attrs = {}
             skip_me = ['date-seen', 'ledid']
+            simple_attrs['iid'] = thing.iid
             for attr in thing.has:
                 if attr.label in skip_me:
                     continue
@@ -154,29 +155,6 @@ async def news_task(
                 results['new_things'][db_name][ent['label']] = [{ent['value']: ent['attrs']}]
             else:
                 results['new_things'][db_name][ent['label']].append({ent['value']: ent['attrs']})
-        '''
-        for thing in things:
-            dd_attr = thing.get_attributes(label='date-discovered')[0]
-            if isinstance(dd_attr.value, datetime) and dd_attr.value >= min_date:
-                simple_attrs = {}
-                skip_me = ['date-seen', 'ledid']
-                for attr in thing.has:
-                    if attr.label in skip_me:
-                        continue
-                    # y = {attr.label: attr.value}
-                    # simple_attrs.append(y)
-                    if attr.label not in simple_attrs:
-                        simple_attrs[attr.label] = [attr.value]
-                    else:
-                        simple_attrs[attr.label].append(attr.value)
-                x = {'label': thing.label, 'value': thing.keyval, 'attrs':simple_attrs}
-                rez.append(x)
-        for ent in rez:
-            if ent['label'] not in results['new_things'][db_name]:
-                results['new_things'][db_name][ent['label']] = [{ent['value']: ent['attrs']}]
-            else:
-                results['new_things'][db_name][ent['label']].append({ent['value']: ent['attrs']})
-        '''
 
     return results
 

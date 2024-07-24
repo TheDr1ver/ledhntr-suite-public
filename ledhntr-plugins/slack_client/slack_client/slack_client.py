@@ -34,6 +34,163 @@ from ledhntr.helpers import format_date, dumps, xterm
 from ledhntr.plugins.connector import ConnectorPlugin
 
 #&##########################################################################
+#& HELPER FUNCTIONS
+#&##########################################################################
+
+_log: logging.Logger = logging.getLogger('ledhntr')
+
+#~#########################################
+#~ Block Kit Helpers
+#~#########################################
+
+# TODO - Build classes for all rich_text objects:
+# TODO - rich_text_section, rich_text_list, rich_text_preformatted, rich_text_quote
+# TODO - Build out comprehensive Section session as well
+
+def block_context(
+    elements: List[tuple] = None,
+    block_id: Optional[str] = None,
+):
+    """Generates Context Block Kit Block
+
+    Given a list of tuples for elements, generates a context block.
+
+    Element tuples can be for text or image elements.
+
+    Example text tuple: ('mrkdwn', 'Location: **Dogpatch**, True)
+        this sets 'type', 'text', and 'verbatim' values
+
+    Example image tuple: ('image', 'https://example.com/favicon.png', 'favicon')
+        this sets 'type', 'image_url', and 'alt_text'
+
+    Example Slack file image: ('image', 'F0123456', 'slack file object')
+        this uses a Slack file for the image.
+
+    :param elements: List of tuples to include in the block, defaults to None
+    :type elements: List[tuple], optional
+    :param block_id: unique ID for this block
+    :type block_id: str, optional
+    :return: Context dictionary
+    :rtype: Dict
+    """
+    block = {
+        "type": "context",
+        "elements": [],
+    }
+    if not block_id is None:
+        block['block_id'] = block_id
+    for element in elements:
+        if len(element) < 2:
+            _log.error(
+                f"{xterm('RED')}Each element requires at least two tuple values."
+                f" Received: {element}{xterm('X')}"
+            )
+            continue
+        if element[0] == "image":
+            e = {
+                "type": "image",
+            }
+            if not element[1].startswith('http'):
+                e['slack_file'] = {'id': element[1]}
+            elif element[1].startswith('https://files.slack.com/'):
+                e['slack_file'] = {'url': element[1]}
+            else:
+                e['image_url'] = element[1]
+            if len(element) > 2:
+                e['alt_text'] = element[2]
+        elif element[0] == 'plain_text':
+            e = {
+                "type": "plain_text",
+                'text': element[2],
+                "emoji": True,
+            }
+        elif element[0] == "mrkdwn":
+            e = {
+                'type': 'mrkdwn',
+                'text': element[1],
+            }
+            if len(element) > 2:
+                e['verbatim'] = element[2]
+        else:
+            _log.error(
+                f"{xterm('RED')}{element[0]} must be image, mrkdwn, or "
+                f"plain_text.{xterm('X')}"
+            )
+            continue
+        block['elements'].append(e)
+
+    return block
+
+def block_divider():
+    return {
+        "type": "divider"
+    }
+
+def block_header(
+    header: str = None,
+    block_id: Optional[str] = None,
+):
+    """Generates a Header Block
+
+    :param header: plain_text header content, defaults to None
+    :type header: str, optional
+    :param block_id: unique identifier for this block, defaults to None
+    :type block_id: Optional[str], optional
+    :return: block to be used in block_kit
+    :rtype: Dict
+    """
+    block = {
+        "type": "header",
+        "text": {
+            "type": "plain_text",
+            "text": header,
+            "emoji": True,
+        }
+    }
+    if not block_id is None:
+        block['block_id'] = block_id
+
+    return block
+
+def get_con_format(key: int = None):
+    confidence_formats = {
+        -1: ":x: False-Positive",
+        0: ":question: Unknown",
+        1: ":thinking_face: Low",
+        2: ":slightly_smiling_face: Medium",
+        3: ":dart: High",
+    }
+    return confidence_formats[key]
+
+def get_date(date: datetime = None):
+    if date is None:
+        date = datetime.now(timezone.utc)
+    epoch = int(date.timestamp())
+    slack_format = f"<!date^{epoch}^{{date_num}} {{time_secs}}|{date}>"
+    return slack_format
+
+def get_link_formats():
+    link_formats = {
+        'domain': {
+            'Censys': "https://search.censys.io/search?resource=hosts&sort=RELEVANCE&per_page=25&virtual_hosts=EXCLUDE&q=%22{value}%22",
+            'Shodan': "https://www.shodan.io/search?query=hostname%3A{value}",
+            "URLScan": "https://urlscan.io/search/#domain%3A{value}",
+            'VT': "https://www.virustotal.com/gui/domain/{value}",
+        },
+        'ip': {
+            'Censys': "https://search.censys.io/hosts/{value}",
+            'Shodan': "https://www.shodan.io/host/{value}",
+            'URLScan': "https://urlscan.io/search/#ip%3A{value}",
+            'VT': "https://www.virustotal.com/gui/ip-address/{value}",
+
+        },
+    }
+    #; Duplicate values for similar entities
+    link_formats['hostname'] = link_formats['domain']
+    return link_formats
+
+
+#&##########################################################################
 #& COMMON MODAL LAYOUTS
 #&##########################################################################
 
@@ -434,6 +591,23 @@ class SlackClient(ConnectorPlugin):
             _log.error(f"channel: {channel}")
             _log.error(f"initial_comment: {initial_comment}{xterm('X')}")
             raise
+
+    @check_client
+    async def views_open(
+        self,
+        trigger_id: str = None,
+        view: List = None,
+    )->None:
+        try:
+            await self.client.views_open(
+                trigger_id=trigger_id,
+                view=view
+            )
+        except SlackApiError as e:
+            raise
+        except Exception as e:
+            raise
+        return None
 
     #&##########################################################################
     #& INTERACTIVITY

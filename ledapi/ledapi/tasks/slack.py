@@ -56,12 +56,14 @@ from ledapi.models import(
     SlackEvent,
     UserModel,
     add_user_modal,
+    new_hits,
     role_admin,
     role_dbadmin,
     role_hunter,
     role_conman,
     role_everyone,
     role_public,
+    update_thing_modal,
     # unauthorized_modal,
     # invalid_command_modal,
 )
@@ -76,6 +78,7 @@ from ledapi.tasks import(
 
 # _log.debug(f"PYTHONPATH: {os.environ.get('PYTHONPATH')}")
 from slack_client import SlackClient
+from typedb_client import TypeDBClient
 
 #&##############################################################################
 #& INTERNAL - TASKS/SUBTASK EXECUTION
@@ -337,8 +340,16 @@ async def mojo_post_news(
             else:
                 _log.debug(f"{xterm('CYAN')}{tt} not in {interesting_things}{xterm('X')}")
         if not interesting:
-            _log.debug(f"{xterm('YELLOW')}nothing interesting found.{xterm('X')}")
+            _log.debug(f"{xterm('YELLOW')}nothing interesting found in {db}.{xterm('X')}")
             continue
+        data = {db: thing_types}
+        #; Generate pretty blocks with buttons.
+        try:
+            blocks = new_hits(data)
+            _log.debug(f"{xterm('CYAN')}Generated blocks: \n{pformat(blocks)}{xterm('X')}")
+        except Exception as e:
+            _log.error(f"{xterm('RED')}Failed generating blocks: {e}{xterm('X')}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
         text_lines.append(f"*{db}*")
         for tt, entries in thing_types.items():
             if tt in interesting_things:
@@ -354,24 +365,23 @@ async def mojo_post_news(
             else:
                 _log.debug(f"{tt} not in {interesting_things}")
 
-    #; This is something else that should be specific to the chat
-    #; plugin, but again... MVP... just trying to get it out the door.
-    if not text_lines:
-        text_lines = [f"No news from the last {args.hours_back} hours."]
-    text = "\n".join(text_lines)
-    blocks = []
-    try:
-        await plugin.post_message(
-            # channel=plugin.admin_channel,
-            channel=mojo.channel_name,
-            text=text,
-            blocks=None,
-            blocks_verbatim=True,
-        )
-    except Exception as e:
-        _log.error(f"{xterm('RED')}Failed posting message..: {e}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
-    _log.debug(f"MOJOCMD: {pformat(mojo)}")
+        if not text_lines:
+            text_lines = [f"No news from the last {args.hours_back} hours from {db}."]
+        text = "\n".join(text_lines)
+        if not blocks:
+            blocks = None
+        try:
+            await plugin.post_message(
+                # channel=plugin.admin_channel,
+                channel=mojo.channel_id,
+                text=text,
+                blocks=blocks,
+                blocks_verbatim=True,
+            )
+        except Exception as e:
+            _log.error(f"{xterm('RED')}Failed posting message..: {e}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        _log.debug(f"MOJOCMD: {pformat(mojo)}")
     return True
 
 async def mojo_clear_schedules(
@@ -457,9 +467,111 @@ async def mojo_check_schedules(
     )
 
 #~######################################
+#~ slackation_set_confidence_modal
+#~######################################
+
+async def slackation_set_confidence_modal(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+):
+    _log.debug(f"Opening set_confidence modal...")
+    # // _log.debug(f"{xterm('YELLOW')}{pformat(payload)}{xterm('X')}")#
+    _log.debug(f"Sending trigger_id {payload['trigger_id']}")
+    '''
+    mymodal = {
+        "type": "modal",
+        "callback_id": "set_confidence_submit",
+        "title": {"type": "plain_text", "text": "Update Thing"},
+        "submit": {"type": "plain_text", "text": "Submit"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": update_thing_modal(payload),
+    }'''
+    mymodal = update_thing_modal(payload)
+    _log.debug(f"{xterm('CYAN')}view modal:\n{pformat(mymodal)}{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}modal type: {type(mymodal)}{xterm('X')}")
+    try:
+        await plugin.views_open(
+            trigger_id=payload['trigger_id'],
+            # // view=update_thing_modal(payload),
+            view = mymodal,
+        )
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed opening modal: {e}{xterm('X')}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        return False
+
+    return True
+
+#~######################################
+#~ slackaction_set_confidence
+#~######################################
+
+async def slackaction_set_confidence(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+):
+    _log.debug(f"Setting confidence...")
+    _log.debug(f"{xterm('YELLOW')}{pformat(payload)}{xterm('X')}")
+    value_str = payload['actions'][0]['selected_option']['value']
+    db_name = value_str.split('|')[0]
+    iid = value_str.split('|')[1]
+    value = value_str.split('|')[2]
+
+    so = Entity(label='entity')
+    so.iid = iid
+    tdb:TypeDBClient = get_tdb()
+    tdb.db_name = db_name
+
+    _log.debug(f"Looking for existing thing...")
+    try:
+        rez = tdb.find_things(so)
+        _log.debug(f"Found things{rez}")
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed finding thing {so}: {e}{xterm('X')}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+    existing_thing = rez[0]
+    _log.debug(f"Existing thing: {existing_thing}")
+    if existing_thing.get_attributes('confidence'):
+        _log.debug(f"Old confidence: {existing_thing.get_attributes('confidence')[0].value}")
+    _log.debug(f"Replacing confidence with {value}...")
+    try:
+        tdb.replace_attribute(existing_thing, Attribute(label='confidence', value=int(value)))
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed replacing attribute on {existing_thing}: {e}{xterm('X')}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+    _log.debug(f"Looking for updated thing...")
+    try:
+        updated_thing = tdb.find_things(so)[0]
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed finding thing {so}: {e}{xterm('X')}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+    _log.debug(f"{xterm('GREEN')}New confidence: {updated_thing.get_attributes('confidence')[0].value}{xterm('X')}")
+
+    #TODO - update original message with new confidence and alert group that a user changed it.
+
+    return True
+
+#~######################################
+#~ update_thing_submit
+#~######################################
+
+async def update_thing_submit(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+):
+    _log.debug(f"Updating all thing properties...")
+    _log.debug(f"{xterm('YELLOW')}{pformat(payload)}{xterm('X')}")
+
+    return True
+
+#~######################################
 #~ slackaction_check_job_status
 #~######################################
 async def slackaction_check_job_status(
+    plugin: SlackClient = None,
     payload: Dict = None,
     user: User = None,
 ):
@@ -556,14 +668,13 @@ async def slackaction_check_job_status(
 #~ slackaction_open_add_user_modal
 #~######################################
 async def slackaction_open_add_user_modal(
+    plugin: SlackClient = None,
     payload: Dict = None,
     user: User = None,
 )->None:
     _log.debug(f"Processing open_add_user_modal")
     _log.debug(f"payload: {payload}")
     _log.debug(f"user: {user.to_dict()}")
-
-    plugin:SlackClient = await get_plugin()
 
     #; // admin_channel = "#mojo-dev"
     #; this isn't called here but I'm leaving it as a
@@ -577,12 +688,13 @@ async def slackaction_open_add_user_modal(
         trigger_id=payload['trigger_id'],
         view=add_user_modal(action['value'])
     )
-    return None
+    return True
 
 #~######################################
 #~ slackaction_submit_add_user
 #~######################################
 async def slackaction_submit_add_user(
+    plugin: SlackClient = None,
     payload: Dict = None,
     user: User = None,
 ):
@@ -731,9 +843,16 @@ async def slackaction_conf(
         'block_actions':{
             "open_add_user_modal": (slackaction_open_add_user_modal, role_dbadmin),
             "check_job_status": (slackaction_check_job_status, role_everyone),
+            #. role_everyone can open the dialog, but only con_man can change the confidence
+            "set_confidence_modal": (slackation_set_confidence_modal, role_everyone),
+            "set_confidence": (slackaction_set_confidence, role_everyone),
         },
         'view_submission':{
             'add_user_modal': (slackaction_submit_add_user, role_dbadmin), #do the add-user stuff
+            # // #. slackaction_update_thing() lets you set confidence, add notes and tags
+            # // #; 'update_thing': (slackation_update_thing, role_conman),
+            #. slackaction_set_confidence()
+            "update_thing_submit": (update_thing_submit, role_conman)
         }
     }
 

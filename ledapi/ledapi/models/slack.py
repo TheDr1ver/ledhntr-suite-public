@@ -12,9 +12,20 @@ from ledapi.config import(
     _log,
     get_tdb,
     wqm,
+    xterm,
 )
 
 from ledapi.models import RoleEnum
+from slack_client import (
+    block_context,
+    block_divider,
+    block_header,
+    get_con_format,
+    get_date,
+    get_link_formats,
+)
+
+from typedb_client import TypeDBClient
 
 #@##############################################################################
 #@### Pydantic API models
@@ -420,3 +431,338 @@ def add_user_modal(
             },
         ],
     }
+
+def new_hits(
+    data: Dict = {},
+):
+    _log.debug(f"Building new_hits block")
+    '''
+        {
+        "blocks": [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": ":collision: NEW HITS [My_DB]",
+                    "emoji": true
+                }
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": "<!date^1721825208^{date_num} {time_secs}|2024-07-24>"
+                    }
+                ]
+            },
+            {
+                "type": "divider"
+            },
+            {
+                "type": "rich_text",
+                "elements": [
+                    {
+                        "type": "rich_text_section",
+                        "elements": [
+                            {
+                                "type": "text",
+                                "text": "DOMAINS",
+                                "style": {
+                                    "bold": true
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "`example.com`\nVT | Censys | Shodan",
+                    "verbatim": true
+                },
+                "accessory": {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": ":fire: High",
+                        "emoji": true
+                    },
+                    "value": "click_me_123",
+                    "action_id": "button-action"
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "`example2.com`\nVT | Censys | Shodan",
+                    "verbatim": true
+                },
+                "accessory": {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": ":shrug: Unknown",
+                        "emoji": true
+                    },
+                    "value": "click_me_123",
+                    "action_id": "button-action"
+                }
+            }
+        ]
+    }
+    '''
+    blocks = []
+    interesting_things = [
+        'domain',
+        'hostname',
+        'ip',
+        'jarm',
+        'ja3s',
+        'ssl',
+    ]
+    db = next(iter(data))
+    new_stuff = data[db]
+
+    #; Format links for quick context lookups
+    link_formats = get_link_formats()
+
+    #; Check for interesting things first:
+    #; If there's nothing interesting, return an empty block
+    interesting = False
+    for thing_type in new_stuff:
+        if thing_type in interesting_things:
+            interesting = True
+            break
+    if not interesting:
+        return []
+
+    # f":collision: NEW HITS [{db}]"
+    blocks.append(block_header(f":collision: NEW HITS [{db}]"))
+    blocks.append(block_divider())
+    context = block_context(
+        elements = [
+            ('mrkdwn', get_date())
+        ]
+    )
+    blocks.append(context)
+    for thing_type, things in new_stuff.items():
+        # TODO - Convert this to a rich_text function in slack_client
+        blocks.append(
+            {
+                'type': 'rich_text',
+                'elements': [
+                    {
+                        'type': 'rich_text_section',
+                        'elements': [
+                            {
+                                'type': 'text',
+                                'text': thing_type.upper(),
+                                'style': {
+                                    'bold': True
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        )
+        for thing in things:
+            keyval = next(iter(thing))
+            #! DEBUG - this should never happen normally
+            if 'confidence' not in thing[keyval]:
+                confidence = 0
+            else:
+                confidence = thing[keyval]['confidence'][0]
+                _log.debug(f"{xterm('MAGENTA')}confidence: {confidence}{xterm('X')}")
+            iid = thing[keyval]['iid']
+            lines = [
+                f"`{keyval}`"
+            ]
+            if thing_type.lower() in link_formats:
+                links = ""
+                for text, link in link_formats[thing_type.lower()].items():
+                    links += f"<{link.format(value=keyval)}|{text}> |"
+                links = links.rstrip(" |")
+                lines.append(links)
+            mrkdwn = "\n".join(lines)
+            button = {
+                "type": "button",
+                "text": {
+                    "type": "plain_text",
+                    "emoji": True,
+                    "text": get_con_format(int(confidence)),
+                },
+                "value": f"{db}|{iid}",
+                "action_id": "set_confidence_modal",
+            }
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": mrkdwn,
+                        "verbatim": True,
+                    },
+                    "accessory": button,
+                }
+            )
+
+    return blocks
+
+def update_thing_modal(
+    payload: Dict = None,
+):
+    _log.debug(f"Building update_thing modal...")
+    # TODO - Add capability to add/remove tags and notes
+    blocks = []
+
+    tdb: TypeDBClient = get_tdb()
+    _log.debug(f"{xterm('YELLOW')}action_val = {payload['actions'][0]['value']}{xterm('X')}")
+    db_name = payload['actions'][0]['value'].split('|')[0]
+    _log.debug(f"{xterm('YELLOW')}Set db_name to {db_name}{xterm('X')}")
+    tdb.db_name = db_name
+    iid = payload['actions'][0]['value'].split('|')[1]
+    _log.debug(f"{xterm('YELLOW')}IID set to {iid}{xterm('X')}")
+    so = Entity(label='entity')
+    so.iid = iid
+    thing = tdb.find_things(so)[0]
+
+    #; Header
+    # // blocks.append(block_header(f"[{db_name}]\n{thing.label}: {thing.keyval}"))
+    #; Divider
+    # // blocks.append(block_divider())
+    #; Context
+    db_type = f"db_name: {db_name} | label: {thing.label}"
+    disco_time = f"discovered: {get_date(thing.get_attributes('date-discovered')[0].value)}"
+    first_time = f"first_seen: {get_date(thing.get_attributes('first-seen')[0].value)}"
+    last_time = f"last_seen: {get_date(thing.get_attributes('last-seen')[0].value)}"
+    times = f"{db_type}\n{disco_time}\n{first_time}\n{last_time}"
+    blocks.append(block_context(
+        elements = [
+            ('mrkdwn', times, True)
+        ]
+    ))
+    #; LEDSRC, TAGS, NOTES
+    tag_mrkdwn = None
+    note_mrkdwn = None
+    srcs = thing.get_attributes('ledsrc')
+    src_vals = [src.value for src in srcs]
+    src_string = ", ".join(src_vals)
+    if src_string: #; This should always be set, but had to change for debugging
+        ledsrc_mrkdwn = f"*LEDSRC*\n```{src_string}```\n"
+    else:
+        ledsrc_mrkdwn = None
+
+    tags = thing.get_attributes('tags')
+    tag_vals = [tag.value for tag in tags]
+    tag_string = ", ".join(tag_vals)
+    if tag_string:
+        tag_mrkdwn = f"*TAGS*\n```{tag_string}```\n"
+
+    notes = thing.get_attributes('notes')
+    note_vals = [note.value for note in notes]
+    note_string = "\n---\n".join(note_vals)
+    if note_string:
+        note_mrkdwn = f"*NOTES*\n```{note_string}```\n"
+
+    meta_mrkdwn = ""
+    if ledsrc_mrkdwn:
+        meta_mrkdwn += ledsrc_mrkdwn
+    if tag_mrkdwn:
+        meta_mrkdwn += tag_mrkdwn
+    if note_mrkdwn:
+        meta_mrkdwn += note_mrkdwn
+    if not meta_mrkdwn:
+        meta_mrkdwn = "No metadata found. You must be debugging :trollface:"
+
+    meta_section = {
+        'type': 'section',
+        'text': {
+            'type': 'mrkdwn',
+            'text': meta_mrkdwn,
+        }
+    }
+    blocks.append(meta_section)
+
+    #; Set Confidence
+    # TODO - Simplify this into a general function in slack_client so it's not so ugly
+    #! This is just for DEBUGGING - normally Confidence should ALWAYS be set.
+    if not thing.get_attributes('confidence'):
+        confidence = 0
+    else:
+        confidence = int(thing.get_attributes('confidence')[0].value)
+    set_con_section = {
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": "Select Level of Confidence"
+        },
+        "accessory": {
+            "type": "static_select",
+            "placeholder": {
+                "type": "plain_text",
+                "emoji": True,
+                "text": get_con_format(confidence)
+            },
+            "options":[
+                {
+                    "text": {
+                        "type": "plain_text",
+                        "emoji": True,
+                        "text": get_con_format(-1)
+                    },
+                    "value": f"{db_name}|{iid}|-1",
+                },
+                {
+                    "text": {
+                        "type": "plain_text",
+                        "emoji": True,
+                        "text": get_con_format(0)
+                    },
+                    "value": f"{db_name}|{iid}|0",
+                },
+                {
+                    "text": {
+                        "type": "plain_text",
+                        "emoji": True,
+                        "text": get_con_format(1)
+                    },
+                    "value": f"{db_name}|{iid}|1",
+                },
+                {
+                    "text": {
+                        "type": "plain_text",
+                        "emoji": True,
+                        "text": get_con_format(2)
+                    },
+                    "value": f"{db_name}|{iid}|2",
+                },
+                {
+                    "text": {
+                        "type": "plain_text",
+                        "emoji": True,
+                        "text": get_con_format(3)
+                    },
+                    "value": f"{db_name}|{iid}|3",
+                },
+            ],
+            "action_id": "set_confidence"
+        }
+    }
+    blocks.append(set_con_section)
+
+    # blocks.append(block_header(f"[{db_name}]\n{thing.label}: {thing.keyval}"))
+    mymodal = {
+        "type": "modal",
+        "callback_id": "set_confidence_submit",
+        "title": {"type": "plain_text", "text": f"{thing.keyval}"},
+        "submit": {"type": "plain_text", "text": "Submit"},
+        # // "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": blocks,
+    }
+
+    return mymodal
