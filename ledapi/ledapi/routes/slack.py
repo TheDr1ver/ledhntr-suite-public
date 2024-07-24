@@ -24,7 +24,8 @@ from ledapi.config import(
     led,
     _log,
     get_tdb,
-    redis_manager
+    redis_manager,
+    xterm
 )
 from ledapi.helpers import handle_response
 
@@ -133,6 +134,7 @@ async def slackaction_ep(
     _log.info(pformat(resp))
     # return await request.json()
     '''
+    _log.debug(f"{xterm('BLUE')}Posting request to /slack/action: \n{pformat(await request.body())}{xterm('X')}")
     try:
         # user = Depends(dep_check_user_role_by_slack(role_everyone))
         user = await get_user_by_slack_id(request)
@@ -191,7 +193,7 @@ async def slackevent_ep(
     # return await request.json()
     return resp
     '''
-
+    _log.debug(f"{xterm('BLUE')}Posting request to /slack/event: \n{pformat(request)}{xterm('X')}")
     try:
         # user = Depends(dep_check_user_role_by_slack(role_everyone))
         user = await get_user_by_slack_id(request)

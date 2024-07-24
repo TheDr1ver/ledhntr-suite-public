@@ -477,7 +477,8 @@ class SlackClient(ConnectorPlugin):
                 },
             }
         ]
-        _log.debug(f"Posting {text} to {channel}")
+        # // _log.debug(f"Posting {text} to {channel}")
+        _log.debug(f"Posting blocks {pformat(blocks)} to {channel}")
         if thread_ts is not None:
             thread_ts = str(thread_ts)
         try:

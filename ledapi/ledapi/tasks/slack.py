@@ -359,8 +359,11 @@ async def mojo_post_news(
                         text_lines.append(f"```{keyval}")
                         for label, values in attributes.items():
                             text_lines.append(f"\t{label}")
-                            for value in values:
-                                text_lines.append(f"\t\t{value}")
+                            if isinstance(values, list):
+                                for value in values:
+                                    text_lines.append(f"\t\t{value}")
+                            elif isinstance(values, str):
+                                text_lines.append(f"\t\t{values}")
                         text_lines.append(f"```")
             else:
                 _log.debug(f"{tt} not in {interesting_things}")
@@ -487,7 +490,11 @@ async def slackation_set_confidence_modal(
         "close": {"type": "plain_text", "text": "Cancel"},
         "blocks": update_thing_modal(payload),
     }'''
-    mymodal = update_thing_modal(payload)
+    try:
+        mymodal = update_thing_modal(payload)
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed building modal: {e}{xterm('X')}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
     _log.debug(f"{xterm('CYAN')}view modal:\n{pformat(mymodal)}{xterm('X')}")
     _log.debug(f"{xterm('CYAN')}modal type: {type(mymodal)}{xterm('X')}")
     try:
@@ -839,6 +846,8 @@ async def slackaction_conf(
 
     resp = None
 
+    _log.debug(f"Payload: \n{xterm('YELLOW')}{pformat(payload)}{xterm('X')}")
+
     opts = {
         'block_actions':{
             "open_add_user_modal": (slackaction_open_add_user_modal, role_dbadmin),
@@ -872,7 +881,11 @@ async def slackaction_conf(
     #. FOR NOW, I'M ONLY USING ONE ACTION_ID AT A TIME SO IT DOESN'T MATTER.
     resp = []
     for action_id in action_ids:
-        func_perms = opts[payload['type']][action_id]
+        aid_trunc = action_id.rpartition('_')[0]
+        if aid_trunc not in opts[payload['type']]:
+            _log.error(f"{xterm('RED')}No action index called {aid_trunc}{xterm('X')}")
+            continue
+        func_perms = opts[payload['type']][aid_trunc]
         try:
             await check_role(user, func_perms[1])
         except HTTPException as e:
@@ -1028,14 +1041,19 @@ async def action_handler(
     _log.debug(f"Enqueuing action_handler")
     form = await request.form()
     payload = form.get('payload')
-    payload = json.loads(payload)
+    try:
+        payload = json.loads(payload)
+    except TypeError as e:
+        _log.error(f"{xterm('RED')}{pformat(payload)}{xterm('X')}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        raise
     _log.debug(f"payload: {pformat(payload)}")
     _log.debug(f"user: {user}")
 
     resp = {}
     resp['payload'] = payload
     resp['headers'] = {key: val for  key, val in request.headers.items()}
-    # resp['body'] = await request.body()
+    # resp['body'] = await request.body() #
     # resp['body'] = resp['body'].decode('utf-8')
 
     job = queue.enqueue_call(

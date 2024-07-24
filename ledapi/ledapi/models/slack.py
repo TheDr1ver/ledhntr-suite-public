@@ -1,5 +1,7 @@
+from pprint import pformat
 from pydantic import BaseModel, model_validator
 from typing import Optional, Dict, List
+from uuid import uuid4
 
 from ledhntr.data_classes import(
     Attribute,
@@ -523,6 +525,7 @@ def new_hits(
         'jarm',
         'ja3s',
         'ssl',
+        'http',
     ]
     db = next(iter(data))
     new_stuff = data[db]
@@ -551,6 +554,9 @@ def new_hits(
     blocks.append(context)
     for thing_type, things in new_stuff.items():
         # TODO - Convert this to a rich_text function in slack_client
+        if thing_type.lower() not in interesting_things:
+            _log.debug(f"{xterm('RED')}{thing_type} is not interesting. Skipping.{xterm('X')}")
+            continue
         blocks.append(
             {
                 'type': 'rich_text',
@@ -597,7 +603,7 @@ def new_hits(
                     "text": get_con_format(int(confidence)),
                 },
                 "value": f"{db}|{iid}",
-                "action_id": "set_confidence_modal",
+                "action_id": f"set_confidence_modal_{uuid4().hex[:8]}",
             }
             blocks.append(
                 {
@@ -750,16 +756,22 @@ def update_thing_modal(
                     "value": f"{db_name}|{iid}|3",
                 },
             ],
-            "action_id": "set_confidence"
+            "action_id": f"set_confidence_{uuid4().hex[:8]}"
         }
     }
     blocks.append(set_con_section)
 
     # blocks.append(block_header(f"[{db_name}]\n{thing.label}: {thing.keyval}"))
+    title = thing.keyval
+    #; if title is 25 char or more, truncate it and add the full title to the context
+    if len(title) >= 25:
+        title = f"{thing.keyval[0:21]}..."
+        # // _log.debug(f"{pformat(blocks[0])}")
+        blocks[0]['elements'][0]['text'] = f"{thing.keyval}\n{blocks[0]['elements'][0]['text']}"
     mymodal = {
         "type": "modal",
-        "callback_id": "set_confidence_submit",
-        "title": {"type": "plain_text", "text": f"{thing.keyval}"},
+        "callback_id": f"set_confidence_submit_{uuid4().hex[:8]}",
+        "title": {"type": "plain_text", "text": f"{title}"},
         "submit": {"type": "plain_text", "text": "Submit"},
         # // "close": {"type": "plain_text", "text": "Cancel"},
         "blocks": blocks,
