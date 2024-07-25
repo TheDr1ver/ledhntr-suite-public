@@ -562,9 +562,9 @@ async def slackaction_set_confidence(
             limit=1,
             inclusive=True,
         )
-        _log.debug(f"old_message: {pformat(old_message)}")
+        # // _log.debug(f"old_message: {pformat(old_message)}")
         old_blocks = old_message['messages'][0]['blocks']
-        _log.debug(f"{xterm('YELLOW')}{old_blocks}")
+        # // _log.debug(f"{xterm('YELLOW')}{old_blocks}")
         updated_blocks = copy.deepcopy(old_blocks)
         for block in old_blocks:
             if 'accessory' in block:
@@ -575,17 +575,21 @@ async def slackaction_set_confidence(
         for block in updated_blocks:
             if block['block_id'] == block_id:
                 block['accessory']['text']['text'] = get_con_format(int(value))
-                _log.debug(f"{block['accessory']['text']['text']}")
-        _log.debug(f"Running update_message {xterm('X')}")
+                # // _log.debug(f"{block['accessory']['text']['text']}")
+        # // _log.debug(f"Running update_message")
+        # // _log.debug(f"{container['channel_id']}")
+        # // _log.debug(f"{container['message_ts']}")
+        # // _log.debug(f"{old_message['messages'][0]['text']}")
+        # // _log.debug(f"{updated_blocks}")
         # // updated_blocks =
         resp = await plugin.update_message(
             channel = container['channel_id'],
             ts = container['message_ts'],
-            text = old_message[0]['text'],
+            text = old_message['messages'][0]['text'],
             blocks = updated_blocks,
         )
         #! WHY ISN'T UPDATE_MESSAGE WORKING?!
-        _log.debug(f"update responses: {pformat(resp.data)}")
+        # // _log.debug(f"update responses: {pformat(resp.data)}")
 
 
     else:

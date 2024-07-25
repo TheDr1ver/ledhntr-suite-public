@@ -593,6 +593,8 @@ class SlackClient(ConnectorPlugin):
                 text = text,
                 blocks = blocks,
             )
+            # // _log.debug(f"{xterm('MAGENTA')}response: {response}")
+            # // _log.debug(f"{response.data}{xterm('X')}")
         except SlackApiError as e:
             _log.error(f"Error sending message {e.response['error']}")
             return False
