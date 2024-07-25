@@ -10,6 +10,10 @@ from .auth import (
     role_admin
 )
 
+from .conman import (
+    ConmanObject,
+)
+
 from .everyone import (
     DBName,
     SearchObject

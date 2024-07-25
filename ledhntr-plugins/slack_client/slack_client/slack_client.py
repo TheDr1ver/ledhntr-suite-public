@@ -445,6 +445,7 @@ class SlackClient(ConnectorPlugin):
         text: str = None,
         blocks: Optional[List] = None,
         blocks_verbatim: Optional[bool] = False,
+        ephemeral: Optional[bool] = False,
         thread_ts: Optional[str] = None,
         **kwargs
     )->bool:
@@ -452,6 +453,8 @@ class SlackClient(ConnectorPlugin):
 
         :param channel: Channel or DM ID, defaults to None
         :type channel: str, optional
+        :param ephemeral: If set to True, sends an ephemeral message
+        :type ephemeral: bool, optional
         :param text: Text to post to the channel, defaults to None
         :type text: str, optional
         :param blocks: Block Kit blocks for pretty messages, defaults to None
@@ -482,12 +485,22 @@ class SlackClient(ConnectorPlugin):
         if thread_ts is not None:
             thread_ts = str(thread_ts)
         try:
-            response = await self.client.chat_postMessage(
-                channel=channel,
-                text=text,
-                blocks=blocks,
-                thread_ts=thread_ts,
-            )
+            if ephemeral:
+                response = await self.client.chat_postEphemeral(
+                    channel=channel,
+                    text=text,
+                    blocks=blocks,
+                    thread_ts=thread_ts,
+                    **kwargs,
+                )
+            else:
+                response = await self.client.chat_postMessage(
+                    channel=channel,
+                    text=text,
+                    blocks=blocks,
+                    thread_ts=thread_ts,
+                    **kwargs,
+                )
         except SlackApiError as e:
             _log.error(f"{xterm('RED')}SlackError sending message {e.response['error']}")
             # _log.error(f"Full error: {e}")

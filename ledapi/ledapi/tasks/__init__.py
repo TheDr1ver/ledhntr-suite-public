@@ -11,6 +11,11 @@ from .everyone import(
     get_news_conf, # used for automation
 )
 
+from .conman import(
+    setcon_handler,
+    set_confidence_task,
+)
+
 from .slack import(
     action_handler,
     event_handler,

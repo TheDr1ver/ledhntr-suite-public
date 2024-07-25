@@ -10,17 +10,6 @@ import time
 import traceback
 from typing import Dict, List, Optional, Union
 
-import redis as syncredis
-from redis.asyncio.client import Redis
-from rq import Queue, Worker, Connection, get_current_job
-from rq.job import Job
-from rq.registry import (
-    FailedJobRegistry,
-    FinishedJobRegistry,
-    ScheduledJobRegistry,
-    StartedJobRegistry,
-    DeferredJobRegistry,
-)
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
@@ -36,7 +25,6 @@ from ledhntr.plugins import (
     ConnectorPlugin,
     AnalyzerPlugin
 )
-
 from ledapi.config import(
     _log,
     led,
@@ -51,9 +39,8 @@ from ledapi.helpers import (
     xterm,
 )
 from ledapi.models import(
+    ConmanObject,
     MOJOCMD,
-    SlackAction,
-    SlackEvent,
     UserModel,
     add_user_modal,
     new_hits,
@@ -64,8 +51,6 @@ from ledapi.models import(
     role_everyone,
     role_public,
     update_thing_modal,
-    # unauthorized_modal,
-    # invalid_command_modal,
 )
 from ledapi.user import User, check_role, dep_check_user_role, get_user_by_slack_id
 from ledapi.worker_manager import(
@@ -74,6 +59,7 @@ from ledapi.worker_manager import(
 )
 from ledapi.tasks import(
     get_news_conf,
+    set_confidence_task,
 )
 
 # _log.debug(f"PYTHONPATH: {os.environ.get('PYTHONPATH')}")
@@ -468,6 +454,10 @@ async def mojo_check_schedules(
         text,
         blocks,
     )
+#~######################################
+#~ slackaction_no_action
+#~######################################
+async def slackaction_no_action(plugin, payload, user): return True
 
 #~######################################
 #~ slackation_set_confidence_modal
@@ -526,39 +516,35 @@ async def slackaction_set_confidence(
     iid = value_str.split('|')[1]
     value = value_str.split('|')[2]
 
-    so = Entity(label='entity')
-    so.iid = iid
-    tdb:TypeDBClient = get_tdb()
-    tdb.db_name = db_name
+    setcon = ConmanObject(
+        db_name = db_name,
+        iid = iid,
+        confidence = value,
+    )
 
-    _log.debug(f"Looking for existing thing...")
-    try:
-        rez = tdb.find_things(so)
-        _log.debug(f"Found things{rez}")
-    except Exception as e:
-        _log.error(f"{xterm('RED')}Failed finding thing {so}: {e}{xterm('X')}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
-    existing_thing = rez[0]
-    _log.debug(f"Existing thing: {existing_thing}")
-    if existing_thing.get_attributes('confidence'):
-        _log.debug(f"Old confidence: {existing_thing.get_attributes('confidence')[0].value}")
-    _log.debug(f"Replacing confidence with {value}...")
-    try:
-        tdb.replace_attribute(existing_thing, Attribute(label='confidence', value=int(value)))
-    except Exception as e:
-        _log.error(f"{xterm('RED')}Failed replacing attribute on {existing_thing}: {e}{xterm('X')}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
-    _log.debug(f"Looking for updated thing...")
-    try:
-        updated_thing = tdb.find_things(so)[0]
-    except Exception as e:
-        _log.error(f"{xterm('RED')}Failed finding thing {so}: {e}{xterm('X')}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
-    _log.debug(f"{xterm('GREEN')}New confidence: {updated_thing.get_attributes('confidence')[0].value}{xterm('X')}")
+    result = await set_confidence_task(setcon, user)
 
     #TODO - update original message with new confidence and alert group that a user changed it.
 
-    return True
+    if result:
+        params = dict(
+            channel=plugin.admin_channel,
+            text=(f"`<SOME USER>` successfuly set {db_name} {result.label} "
+                  f"{result.keyval} to {value}"),
+            blocks_verbatim = True,
+        )
+    else:
+        params = dict(
+            channel = payload['user']['id'],
+            text = (f"Failed setting confidence for {db_name} {iid}. "
+                    f"Check error log."),
+            ephemeral = True,
+            blocks_verbatim = True,
+
+        )
+    await plugin.post_message(**params)
+
+    return {'response_action': 'clear'}
 
 #~######################################
 #~ update_thing_submit
@@ -854,13 +840,14 @@ async def slackaction_conf(
             "check_job_status": (slackaction_check_job_status, role_everyone),
             #. role_everyone can open the dialog, but only con_man can change the confidence
             "set_confidence_modal": (slackation_set_confidence_modal, role_everyone),
-            "set_confidence": (slackaction_set_confidence, role_everyone),
+            "no_action": (slackaction_no_action, role_everyone)
         },
         'view_submission':{
             'add_user_modal': (slackaction_submit_add_user, role_dbadmin), #do the add-user stuff
             # // #. slackaction_update_thing() lets you set confidence, add notes and tags
             # // #; 'update_thing': (slackation_update_thing, role_conman),
             #. slackaction_set_confidence()
+            "set_confidence": (slackaction_set_confidence, role_everyone),
             "update_thing_submit": (update_thing_submit, role_conman)
         }
     }

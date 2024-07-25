@@ -756,7 +756,11 @@ def update_thing_modal(
                     "value": f"{db_name}|{iid}|3",
                 },
             ],
-            "action_id": f"set_confidence_{uuid4().hex[:8]}"
+            # // "action_id": f"set_confidence_{uuid4().hex[:8]}"
+            #; swapping the above with 'no_action' so the confidence doesn't
+            #; change when the dropdown is changed, only when submit is called.
+            # // "action_id": f"no_action_{uuid4().hex[:8]}",
+            "action_id": "new_confidence",
         }
     }
     blocks.append(set_con_section)
@@ -770,7 +774,7 @@ def update_thing_modal(
         blocks[0]['elements'][0]['text'] = f"{thing.keyval}\n{blocks[0]['elements'][0]['text']}"
     mymodal = {
         "type": "modal",
-        "callback_id": f"set_confidence_submit_{uuid4().hex[:8]}",
+        "callback_id": f"set_confidence_{uuid4().hex[:8]}",
         "title": {"type": "plain_text", "text": f"{title}"},
         "submit": {"type": "plain_text", "text": "Submit"},
         # // "close": {"type": "plain_text", "text": "Cancel"},
