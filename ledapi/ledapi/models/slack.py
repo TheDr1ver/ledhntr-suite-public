@@ -9,6 +9,8 @@ from ledhntr.data_classes import(
     Relation,
 )
 
+from ledhntr.helpers import dumps
+
 from ledapi.config import(
     led,
     _log,
@@ -591,8 +593,8 @@ def new_hits(
             if thing_type.lower() in link_formats:
                 links = ""
                 for text, link in link_formats[thing_type.lower()].items():
-                    links += f"<{link.format(value=keyval)}|{text}> |"
-                links = links.rstrip(" |")
+                    links += f"<{link.format(value=keyval)}|{text}> | "
+                links = links.rstrip(" | ")
                 lines.append(links)
             mrkdwn = "\n".join(lines)
             button = {
@@ -603,7 +605,8 @@ def new_hits(
                     "text": get_con_format(int(confidence)),
                 },
                 "value": f"{db}|{iid}",
-                "action_id": f"set_confidence_modal_{uuid4().hex[:8]}",
+                # // "action_id": f"set_confidence_modal_{uuid4().hex[:8]}",
+                "action_id": f"set_confidence_modal",
             }
             blocks.append(
                 {
@@ -623,6 +626,9 @@ def update_thing_modal(
     payload: Dict = None,
 ):
     _log.debug(f"Building update_thing modal...")
+
+    container = dumps(payload['container'])
+
     # TODO - Add capability to add/remove tags and notes
     blocks = []
 
@@ -633,6 +639,7 @@ def update_thing_modal(
     tdb.db_name = db_name
     iid = payload['actions'][0]['value'].split('|')[1]
     _log.debug(f"{xterm('YELLOW')}IID set to {iid}{xterm('X')}")
+
     so = Entity(label='entity')
     so.iid = iid
     thing = tdb.find_things(so)[0]
@@ -774,11 +781,13 @@ def update_thing_modal(
         blocks[0]['elements'][0]['text'] = f"{thing.keyval}\n{blocks[0]['elements'][0]['text']}"
     mymodal = {
         "type": "modal",
-        "callback_id": f"set_confidence_{uuid4().hex[:8]}",
+        # // "callback_id": f"set_confidence_{uuid4().hex[:8]}",
+        "callback_id": f"set_confidence",
         "title": {"type": "plain_text", "text": f"{title}"},
         "submit": {"type": "plain_text", "text": "Submit"},
         # // "close": {"type": "plain_text", "text": "Cancel"},
         "blocks": blocks,
+        "private_metadata": container,
     }
 
     return mymodal

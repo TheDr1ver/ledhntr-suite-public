@@ -20,7 +20,7 @@ from typing import(
 
 import httpx
 
-from slack_sdk.web.async_client import AsyncWebClient
+from slack_sdk.web.async_client import AsyncWebClient, AsyncSlackResponse
 from slack_sdk.errors import SlackApiError
 
 from ledhntr.data_classes import(
@@ -481,7 +481,6 @@ class SlackClient(ConnectorPlugin):
             }
         ]
         # // _log.debug(f"Posting {text} to {channel}")
-        _log.debug(f"Posting blocks {pformat(blocks)} to {channel}")
         if thread_ts is not None:
             thread_ts = str(thread_ts)
         try:
@@ -518,8 +517,39 @@ class SlackClient(ConnectorPlugin):
             _log.error(f"Error sending message: {e}")
             return False
 
-        _log.debug(f"Successful post!: {pformat(response)}")
+        _log.debug(f"Successful post!:{xterm('MAGENTA')}"
+                   f"{pformat(response.data)}{xterm('X')}")
         return True
+
+    @check_client
+    async def conversations_history(
+        self,
+        channel: str = None,
+        inclusive: Optional[bool] = None,
+        latest: Optional[str] = None,
+        limit: Optional[int] = None,
+        oldest: Optional[str] = None,
+        **kwargs
+    )->bool:
+        _log = self.log
+        try:
+            response = await self.client.conversations_history(
+                channel=channel,
+                inclusive=inclusive,
+                latest=latest,
+                limit=limit,
+                oldest=oldest,
+                **kwargs,
+            )
+        except SlackApiError as e:
+            _log.error(f"Error getting convo history {e.response['error']}")
+            return False
+        except Exception as e:
+            _log.error(f"Error getting convo history: {e}")
+            return False
+
+        _log.debug(f"Successfully pulled history!: {pformat(response.data)}")
+        return response.data
 
     @check_client
     async def update_message(
@@ -530,7 +560,7 @@ class SlackClient(ConnectorPlugin):
         blocks: Optional[List] = None,
         blocks_verbatim: Optional[bool] = False,
         **kwargs
-    )->bool:
+    )->Union[AsyncSlackResponse, False]:
         """update pre-exising message
 
         :param channel: channel name where message resides, defaults to None
@@ -571,6 +601,7 @@ class SlackClient(ConnectorPlugin):
             return False
 
         _log.debug(f"Successful update!: {pformat(response)}")
+        return response
 
     @check_client
     async def upload_snippet(

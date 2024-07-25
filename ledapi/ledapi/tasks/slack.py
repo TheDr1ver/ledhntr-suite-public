@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import copy
 import json
 import os
 import httpx
@@ -63,7 +64,10 @@ from ledapi.tasks import(
 )
 
 # _log.debug(f"PYTHONPATH: {os.environ.get('PYTHONPATH')}")
-from slack_client import SlackClient
+from slack_client import (
+    SlackClient,
+    get_con_format,
+)
 from typedb_client import TypeDBClient
 
 #&##############################################################################
@@ -511,7 +515,17 @@ async def slackaction_set_confidence(
 ):
     _log.debug(f"Setting confidence...")
     _log.debug(f"{xterm('YELLOW')}{pformat(payload)}{xterm('X')}")
-    value_str = payload['actions'][0]['selected_option']['value']
+    # // value_str = payload['actions'][0]['selected_option']['value']
+
+    try:
+        value_str = (
+            payload['view']['state']['values']
+            [next(iter(payload['view']['state']['values']))]
+            ['new_confidence']['selected_option']['value']
+        )
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed getting value str: {e}{xterm('X')}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
     db_name = value_str.split('|')[0]
     iid = value_str.split('|')[1]
     value = value_str.split('|')[2]
@@ -529,10 +543,51 @@ async def slackaction_set_confidence(
     if result:
         params = dict(
             channel=plugin.admin_channel,
-            text=(f"`<SOME USER>` successfuly set {db_name} {result.label} "
-                  f"{result.keyval} to {value}"),
+            text=(f"<@{payload['user']['id']}> successfuly set {db_name} "
+                  f"{result.label} {result.keyval} to "
+                  f"{get_con_format(int(value))}"),
             blocks_verbatim = True,
         )
+
+        try:
+            container = json.loads(payload['view']['private_metadata'])
+        except Exception as e:
+            _log.error(f"{xterm('RED')}{pformat(payload['view']['private_metadata'])}{xterm('X')}")
+            _log.error(f"{xterm('RED')}{pformat(container)}{xterm('X')}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+
+        old_message = await plugin.conversations_history(
+            channel=container['channel_id'],
+            latest=container['message_ts'],
+            limit=1,
+            inclusive=True,
+        )
+        _log.debug(f"old_message: {pformat(old_message)}")
+        old_blocks = old_message['messages'][0]['blocks']
+        _log.debug(f"{xterm('YELLOW')}{old_blocks}")
+        updated_blocks = copy.deepcopy(old_blocks)
+        for block in old_blocks:
+            if 'accessory' in block:
+                if block['accessory']['value'] == f"{db_name}|{iid}":
+                    block_id = block['block_id']
+                    _log.debug(f"block_id={block_id}")
+
+        for block in updated_blocks:
+            if block['block_id'] == block_id:
+                block['accessory']['text']['text'] = get_con_format(int(value))
+                _log.debug(f"{block['accessory']['text']['text']}")
+        _log.debug(f"Running update_message {xterm('X')}")
+        # // updated_blocks =
+        resp = await plugin.update_message(
+            channel = container['channel_id'],
+            ts = container['message_ts'],
+            text = old_message[0]['text'],
+            blocks = updated_blocks,
+        )
+        #! WHY ISN'T UPDATE_MESSAGE WORKING?!
+        _log.debug(f"update responses: {pformat(resp.data)}")
+
+
     else:
         params = dict(
             channel = payload['user']['id'],
@@ -868,11 +923,11 @@ async def slackaction_conf(
     #. FOR NOW, I'M ONLY USING ONE ACTION_ID AT A TIME SO IT DOESN'T MATTER.
     resp = []
     for action_id in action_ids:
-        aid_trunc = action_id.rpartition('_')[0]
-        if aid_trunc not in opts[payload['type']]:
-            _log.error(f"{xterm('RED')}No action index called {aid_trunc}{xterm('X')}")
+        # // aid_trunc = action_id.rpartition('_')[0]
+        if action_id not in opts[payload['type']]:
+            _log.error(f"{xterm('RED')}No action index called {action_id}{xterm('X')}")
             continue
-        func_perms = opts[payload['type']][aid_trunc]
+        func_perms = opts[payload['type']][action_id]
         try:
             await check_role(user, func_perms[1])
         except HTTPException as e:
@@ -890,6 +945,8 @@ async def slackaction_conf(
     #. resp will probably have to be converted to a dict w/ action_id's as the keys.
     if len(resp) == 1:
         return resp[0]
+    if not resp:
+        resp = True
     return resp
 
 async def slackevent_conf(

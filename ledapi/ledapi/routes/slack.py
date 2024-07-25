@@ -134,13 +134,13 @@ async def slackaction_ep(
     _log.info(pformat(resp))
     # return await request.json()
     '''
-    _log.debug(f"{xterm('BLUE')}Posting request to /slack/action: \n{pformat(await request.body())}{xterm('X')}")
+    # // _log.debug(f"{xterm('BLUE')}Posting request to /slack/action: \n{pformat(await request.body())}{xterm('X')}")
     try:
         # user = Depends(dep_check_user_role_by_slack(role_everyone))
         user = await get_user_by_slack_id(request)
     except Exception as e:
         _log.error(f"Unable to load user from slack_id: {e}")
-        user = None #; possibly this is a new user.
+        user = None #; possibly this is a new user...
     form = await request.form()
 
     _log.debug(f"Running slack action...")
