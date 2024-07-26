@@ -193,14 +193,14 @@ async def get_available_worker(
         # // _log.debug(f"worker_name: {worker_name}")
         # // _log.debug(f"details: {pformat(details)}")
         # // _log.debug(f"wqm")
-        _log.debug(f"{details['_plugin_name']} || {plugin_name}")
+        # // _log.debug(f"{details['_plugin_name']} || {plugin_name}")
         if details['_plugin_name'] != plugin_name:
             continue
 
         queue = details['queue']
         _log.debug(f"queue: {queue}")
         workers = Worker.all(queue=queue)
-        _log.debug(f"workers: {workers}")
+        _log.debug(f"workers: {', '.join(worker.name for worker in workers)}")
         for w in workers:
             if w.state == 'idle':
                 _log.debug(f"Found idle worker {w.name}. Using queue {queue}.")
