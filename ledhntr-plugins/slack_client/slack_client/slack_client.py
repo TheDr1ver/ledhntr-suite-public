@@ -7,6 +7,7 @@ This is a connector plugin for interacting with a Slack Workspace.
 """
 import asyncio
 import logging
+import traceback
 
 from datetime import datetime, timezone, timedelta
 from functools import wraps
@@ -252,7 +253,7 @@ def check_client(func):
             # // _log.debug(f"self.client not defined. Reloading client.")
             self.reload_web_client()
         else:
-            _log.debug(f"{xterm('RED')}self.client set.")# token: {self.client.token}")
+            _log.debug(f"{xterm('YELLOW')}self.client set.")# token: {self.client.token}")
             _log.debug(f"self.client.auth_test: {await self.client.auth_test()}{xterm('X')}")
         if not await self.client.auth_test():
             self.reload_web_client()
@@ -483,6 +484,33 @@ class SlackClient(ConnectorPlugin):
         # // _log.debug(f"Posting {text} to {channel}")
         if thread_ts is not None:
             thread_ts = str(thread_ts)
+
+        if len(text) > 3000:
+            _log.warning(
+                f"{xterm('YELLOW')}TEXT IS {len(text)} CHARS LONG! TRUNCATING."
+                f"{xterm('X')}"
+            )
+            text = text[0:2999]
+        if len(blocks) > 50:
+            _log.warning(
+            f"{xterm('YELLOW')}MORE THAN 50 {len(blocks)} PARSED!"
+            f"{xterm('X')}"
+        )
+            overflow = len(blocks)-50
+            blocks = blocks[0:48]
+            blocks.append({
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": (f":rotating_light: {len(overflow)} TOO "
+                                    "MANY BLOCKS :rotating_light:")
+                    }
+                ]
+            })
+        parse = True
+        if blocks_verbatim:
+            parse = False
         try:
             if ephemeral:
                 response = await self.client.chat_postEphemeral(
@@ -490,6 +518,7 @@ class SlackClient(ConnectorPlugin):
                     text=text,
                     blocks=blocks,
                     thread_ts=thread_ts,
+                    parse=parse,
                     **kwargs,
                 )
             else:
@@ -498,6 +527,7 @@ class SlackClient(ConnectorPlugin):
                     text=text,
                     blocks=blocks,
                     thread_ts=thread_ts,
+                    parse=parse,
                     **kwargs,
                 )
         except SlackApiError as e:
@@ -542,7 +572,7 @@ class SlackClient(ConnectorPlugin):
                 **kwargs,
             )
         except SlackApiError as e:
-            _log.error(f"Error getting convo history {e.response['error']}")
+            _log.error(f"{xterm('RED')}Error getting convo history {e.response['error']}")
             return False
         except Exception as e:
             _log.error(f"Error getting convo history: {e}")
@@ -596,10 +626,15 @@ class SlackClient(ConnectorPlugin):
             # // _log.debug(f"{xterm('MAGENTA')}response: {response}")
             # // _log.debug(f"{response.data}{xterm('X')}")
         except SlackApiError as e:
-            _log.error(f"Error sending message {e.response['error']}")
+            _log.error(
+                f"{xterm('RED')}Error sending message {e.response['error']}"
+                f"{xterm('X')}"
+            )
+            _log.error(f"{xterm('RED')}Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
             return False
         except Exception as e:
-            _log.error(f"Error sending message: {e}")
+            _log.error(f"{xterm('RED')}Error sending message: {e}{xterm('X')}")
+            _log.error(f"{xterm('RED')}Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
             return False
 
         _log.debug(f"Successful update!: {pformat(response)}")
