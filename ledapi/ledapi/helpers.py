@@ -136,7 +136,7 @@ async def two_sec_grace(
                 new_res['blocks'] = result['result']['blocks']
             '''
             new_res = result['result']
-            _log.debug(f"{xterm('YELLOW')}job is finished. result: {new_res}{xterm('X')}")
+            _log.debug(f"{xterm('GREEN')}job is finished. result: {new_res}{xterm('X')}")
         else:
             # new_res['text'] = f"Job {job_id} is {result['result']}. <CLICK HERE TO CHECK RESULT>"
             new_res['text'] = f"Job {job_id} is {result['result']}"
