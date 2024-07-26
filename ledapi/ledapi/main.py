@@ -78,14 +78,14 @@ async def lifespan(app: FastAPI):
 
     await post_status(
         chat_clients=chat_clients,
-        text_lines=[f":sunrise: *SERVER UP* `{datetime.now(timezone.utc)}` :sunrise:"]
+        text_lines=[f":sunrise: *SERVER UP* :sunrise:\n`{datetime.now(timezone.utc)}`"]
     )
 
     yield
 
     await post_status(
         chat_clients=chat_clients,
-        text_lines=[f":rotating_light: *SERVER DOWN* `{datetime.now(timezone.utc)}` :rotating_light:"]
+        text_lines=[f":rotating_light: *SERVER DOWN* :rotating_light:\n`{datetime.now(timezone.utc)}`"]
     )
 
     _log.debug(f"{xterm('BOLD_RED')}### MAIN ### CANCELING BACKGROUND TASKS{xterm('RESET')}")
