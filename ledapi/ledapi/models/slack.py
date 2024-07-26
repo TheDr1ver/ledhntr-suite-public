@@ -585,7 +585,6 @@ def new_hits(
                 confidence = 0
             else:
                 confidence = thing[keyval]['confidence'][0]
-                _log.debug(f"{xterm('MAGENTA')}confidence: {confidence}{xterm('X')}")
             iid = thing[keyval]['iid']
             lines = [
                 f"`{keyval}`"
@@ -681,6 +680,8 @@ def update_thing_modal(
     note_string = "\n---\n".join(note_vals)
     if note_string:
         note_mrkdwn = f"*NOTES*\n```{note_string}```\n"
+
+    # TODO - ADD OTHER IMPORTANT ATTRIBUTES FOR THINGS LIKE HTTP AND SSL THINGS
 
     meta_mrkdwn = ""
     if ledsrc_mrkdwn:
