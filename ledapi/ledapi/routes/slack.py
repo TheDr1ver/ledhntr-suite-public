@@ -92,10 +92,10 @@ async def mojo_ep(
     _log.info(pformat(resp))
     return resp
     '''
-    _log.debug(f"Running mojo command...")
-    _log.debug(f"{pformat(mojo)}")
+    # // _log.debug(f"Running mojo command...")
+    # // _log.debug(f"{pformat(mojo)}")
     _log.debug(f"User object returned:")
-    _log.debug(f"{user}")
+    _log.debug(f"{pformat(user.to_dict())}")
     msg_400 = f"Invalid input"
     msg_500 = f"Error running mojo command"
 
@@ -123,6 +123,11 @@ async def slackaction_ep(
     request: Request,
     # // user: User = Depends(dep_check_user_role_by_slack(role_everyone)),
 ):
+    #! IMPORTANT NOTE!!!!
+    #! IF YOU'RE GETTING ZERO PAYLOAD WHEN YOUR ACTION SHOULD BE POSTING
+    #! IT'S LIKELY BECAUSE YOUR BLOCKS + TEXT IS TOO DAMN LONG!
+    #! THERE'S LITERALLY NO ERROR MESSAGE THAT WARNS YOU ABOUT THIS, IT JUST
+    #! SENDS 0-BYTE REQUESTS TO YOUR SERVER!
     '''
     resp = {'headers': None, 'body': None}
     resp['headers'] = {key: val for  key, val in request.headers.items()}
@@ -131,9 +136,10 @@ async def slackaction_ep(
     resp['body'] = resp['body'].decode('utf-8')
     # resp['body'] = request.json()
     # _log.info(f"Body: {pformat(await request.json())}")
-    _log.info(pformat(resp))
+    _log.info(f"{xterm('GREEN')}{pformat(resp)}{xterm('X')}")
     # return await request.json()
     '''
+
     # // _log.debug(f"{xterm('BLUE')}Posting request to /slack/action: \n{pformat(await request.body())}{xterm('X')}")
     try:
         # user = Depends(dep_check_user_role_by_slack(role_everyone))
