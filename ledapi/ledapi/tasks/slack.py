@@ -299,7 +299,7 @@ async def mojo_post_news(
         #; This is something else that should be specific to the chat
         #; plugin, but again... MVP... just trying to get it out the door.
         text = f"```{new_things}```"
-        _log.debug(f"{xterm('CYAN')}Posting {text} to {plugin.admin_channel}...{xterm('X')}")
+        # // _log.debug(f"{xterm('CYAN')}Posting {text} to {plugin.admin_channel}...{xterm('X')}")
         try:
             await plugin.upload_snippet(
                 filename=f"{datetime.now(timezone.utc)}_news.json",
@@ -315,7 +315,7 @@ async def mojo_post_news(
         except Exception as e:
             _log.error(f"{xterm('RED')}Failed posting message: {e}")
             _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
-        _log.debug(f"MOJOCMD: {pformat(mojo)}")
+        # // _log.debug(f"MOJOCMD: {pformat(mojo)}")
 
         return True
 
@@ -332,21 +332,25 @@ async def mojo_post_news(
         if not interesting:
             _log.debug(f"{xterm('YELLOW')}nothing interesting found in {db}.{xterm('X')}")
             continue
-        data = {db: thing_types}
-        #; Generate pretty blocks with buttons.
-        try:
-            blocks = new_hits(data)
-            _log.debug(f"{xterm('CYAN')}Generated blocks: \n{pformat(blocks)}{xterm('X')}")
-        except Exception as e:
-            _log.error(f"{xterm('RED')}Failed generating blocks: {e}{xterm('X')}")
-            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
-        text_lines.append(f"*{db}*")
-        for tt, entries in thing_types.items():
-            if tt in interesting_things:
-                text_lines.append(f"*Type: {tt}*")
-                for e in entries:
+        for thing_type, things in thing_types.items():
+            text_lines = []
+            data = {db: {thing_type: things}}
+            #; Generate pretty blocks with buttons.
+            try:
+                blocks = new_hits(data)
+                # // _log.debug(f"{xterm('CYAN')}Generated blocks: \n{pformat(blocks)}{xterm('X')}")
+            except Exception as e:
+                _log.error(f"{xterm('RED')}Failed generating blocks: {e}{xterm('X')}")
+                _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+            text_lines.append(f"*{db}*")
+            # // for tt, entries in thing_types.items():
+            if thing_type in interesting_things:
+                text_lines.append(f"*Type: {thing_type}*")
+                # // for e in entries:
+                for e in things:
                     for keyval, attributes in e.items():
-                        text_lines.append(f"```{keyval}")
+                        text_lines.append(f"```{keyval}```")
+                        '''
                         for label, values in attributes.items():
                             text_lines.append(f"\t{label}")
                             if isinstance(values, list):
@@ -355,26 +359,27 @@ async def mojo_post_news(
                             elif isinstance(values, str):
                                 text_lines.append(f"\t\t{values}")
                         text_lines.append(f"```")
+                        '''
             else:
                 _log.debug(f"{tt} not in {interesting_things}")
 
-        if not text_lines:
-            text_lines = [f"No news from the last {args.hours_back} hours from {db}."]
-        text = "\n".join(text_lines)
-        if not blocks:
-            blocks = None
-        try:
-            await plugin.post_message(
-                # channel=plugin.admin_channel,
-                channel=mojo.channel_id,
-                text=text,
-                blocks=blocks,
-                blocks_verbatim=True,
-            )
-        except Exception as e:
-            _log.error(f"{xterm('RED')}Failed posting message..: {e}")
-            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
-        _log.debug(f"MOJOCMD: {pformat(mojo)}")
+            if not text_lines:
+                text_lines = [f"No news from the last {args.hours_back} hours from {db}."]
+            text = "\n".join(text_lines)
+            if not blocks:
+                blocks = None
+            try:
+                await plugin.post_message(
+                    # channel=plugin.admin_channel,
+                    channel=mojo.channel_id,
+                    text=text,
+                    blocks=blocks,
+                    blocks_verbatim=True,
+                )
+            except Exception as e:
+                _log.error(f"{xterm('RED')}Failed posting message..: {e}")
+                _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        # // _log.debug(f"MOJOCMD: {pformat(mojo)}")
     return True
 
 async def mojo_clear_schedules(
@@ -869,6 +874,13 @@ async def mojocmd_conf(
         except Exception as e:
             raise
         try:
+            await plugin.post_message(
+                channel=mojo.channel_id,
+                text=f"Received `{mojo.text}`",
+                ephemeral=True,
+                blocks_verbatim=True,
+                user=mojo.user_id,
+            )
             resp = await func_perms[0](mojo, user)
         except Exception as e:
             _log.error(f"Failed running {func_perms[0]}: {e}")
@@ -927,7 +939,13 @@ async def slackaction_conf(
     #. FOR NOW, I'M ONLY USING ONE ACTION_ID AT A TIME SO IT DOESN'T MATTER.
     resp = []
     for action_id in action_ids:
-        # // aid_trunc = action_id.rpartition('_')[0]
+        '''
+        aid_trunc = action_id.rpartition('_')[0]
+        if aid_trunc not in opts[payload['type']]:
+        _log.error(f"{xterm('RED')}No action index called {aid_trunc}{xterm('X')}")
+            continue
+        func_perms = opts[payload['type']][aid_trunc]
+        '''
         if action_id not in opts[payload['type']]:
             _log.error(f"{xterm('RED')}No action index called {action_id}{xterm('X')}")
             continue
@@ -1066,7 +1084,7 @@ async def mojo_handler(
     queue = wqm.conf[worker_name]['queue']
 
     _log.debug(f"Enqueuing mojo_handler")
-    _log.debug(f"mojo: {mojo}")
+    _log.debug(f"MOJOCMD: {pformat(mojo)}")
     _log.debug(f"user: {user}")
 
     job = queue.enqueue_call(
@@ -1092,7 +1110,9 @@ async def action_handler(
     try:
         payload = json.loads(payload)
     except TypeError as e:
-        _log.error(f"{xterm('RED')}{pformat(payload)}{xterm('X')}")
+        _log.error(f"{xterm('RED')}MAKE SURE YOUR PAYLOAD IS SMALL!{xterm('X')}")
+        _log.error(f"{xterm('RED')}request:{pformat(form)}{xterm('X')}")
+        _log.error(f"{xterm('RED')}payload:{pformat(payload)}{xterm('X')}")
         _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
         raise
     _log.debug(f"payload: {pformat(payload)}")
@@ -1129,9 +1149,6 @@ async def event_handler(
     resp['headers'] = {key: val for  key, val in request.headers.items()}
     resp['body'] = await request.body()
     resp['body'] = resp['body'].decode('utf-8')
-    # // resp['body-utf8'] = resp['body'].decode('utf-8')
-    # // resp['form'] = await request.form()
-    # // resp['form'] = pformat(resp['form'])
 
     job = queue.enqueue_call(
         slackevent_conf,
