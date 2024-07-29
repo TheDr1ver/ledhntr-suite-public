@@ -390,8 +390,8 @@ async def mojo_post_news(
 
         return True
 
+    something_posted = False
     for db, thing_types in new_things.items():
-        something_posted = False
         if not thing_types:
             continue
         interesting = False
@@ -453,13 +453,14 @@ async def mojo_post_news(
                 _log.error(f"{xterm('RED')}Failed posting message..: {e}")
                 _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
         # // _log.debug(f"MOJOCMD: {pformat(mojo)}")
-        '''
-        if not something_posted and mojo.user_id=="AUTO-MOJO":
-            await plugin.post_message(
-                channel=mojo.channel_id,
-                text=f"Nothing interesting found for {db}"
-            )
-        '''
+
+    if not something_posted and mojo.user_id!="AUTO-MOJO":
+        await plugin.post_message(
+            channel=mojo.channel_id,
+            text=(f"Nothing interesting found for last `{args.hours_back} hours` "
+                  f"in `{list(new_things.keys())}`")
+        )
+
     return True
 
 async def mojo_clear_schedules(
@@ -628,8 +629,8 @@ async def slackaction_set_confidence(
     if result:
         params = dict(
             channel=plugin.admin_channel,
-            text=(f"<@{payload['user']['id']}> successfuly set {db_name} "
-                  f"{result.label} {result.keyval} to "
+            text=(f"<@{payload['user']['id']}> successfully set `{db_name} "
+                  f"{result.label} {result.keyval}` to "
                   f"{get_con_format(int(value))}"),
             blocks_verbatim = True,
         )
