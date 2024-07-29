@@ -36,6 +36,7 @@ from .slack import(
     MOJOCMD,
     SlackEvent,
     SlackAction,
+    add_thing_modal,
     add_user_modal,
     new_hits,
     update_thing_modal,

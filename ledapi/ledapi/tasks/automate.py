@@ -44,9 +44,11 @@ from ledapi.helpers import (
 from ledapi.models import(
     SearchObject,
     JobSubmission,
+    MOJOCMD,
 )
 from ledapi.tasks import(
     hunt_handler,
+    mojo_post_news,
     slack_post_message,
     get_news_conf,
 )
@@ -170,6 +172,7 @@ async def post_news(
     chat_clients: List[str] = [],
     channel: str = "#mojo-dev", # TODO - Get rid of this and roll it into a ConnectorPlugin
 ):
+    """
     bot_post_funcs = {
         'slackbot': slack_post_message,
     }
@@ -259,20 +262,22 @@ async def post_news(
         text_lines.append(f"*{db}*")
         for tt, entries in thing_types.keys():
             if tt in interesting_things:
-                text_lines.append(f"*Type: {tt}*")
+                # // text_lines.append(f"*Type: {tt}*")
                 for e in entries:
                     for keyval, attributes in e.items():
-                        text_lines.append(f"```{keyval}")
+                        text_lines.append(f"```{keyval}```")
+                        '''
                         for label, values in attributes.items():
                             text_lines.append(f"\t{label}")
                             for value in values:
                                 text_lines.append(f"\t\t{value}")
                         text_lines.append(f"```")
+                        '''
             else:
                 _log.debug(f"{tt} not in {interesting_things}")
 
+    text = "\n".join(text_lines)
     for bot in bots:
-        text = "\n".join(text_lines)
         if isinstance(bot, SlackClient):
             await bot.post_message(
                 channel = bot.admin_channel,
@@ -281,6 +286,31 @@ async def post_news(
                 blocks_verbatim=True,
             )
 
+    return True
+    """
+    bots = []
+    for cc in chat_clients:
+        # // _log.debug(f"Checking for client {cc}")
+        for conf, data in wqm.conf.items():
+            if not conf.startswith(cc):
+                # // _log.debug(f"{conf} doesn't start with {cc}")
+                continue
+            await wqm.check_config(conf)
+            plugin = wqm.conf[conf]['_plugin']
+            bots.append(plugin)
+    for bot in bots:
+        x = await bot.conversations_info(channel=bot.admin_channel)
+        channel_id = x['id']
+        mojo = MOJOCMD(
+            command="mojo",
+            text="news --hours_back=1",
+            user_id="AUTO-MOJO",
+            user_name="AUTO-MOJO",
+            channel_name=bot.admin_channel,
+            channel_id=channel_id,
+        )
+        user = User(user_id="AUTO-MOJO")
+        await mojo_post_news(mojo, user)
     return True
 
 

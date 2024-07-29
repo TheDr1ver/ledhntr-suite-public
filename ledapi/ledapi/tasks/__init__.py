@@ -20,6 +20,7 @@ from .slack import(
     action_handler,
     event_handler,
     mojo_handler,
+    mojo_post_news,
     slack_post_message,
 )
 

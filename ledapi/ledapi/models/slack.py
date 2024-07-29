@@ -1,3 +1,4 @@
+from argparse import Namespace
 from pprint import pformat
 from pydantic import BaseModel, model_validator
 from typing import Optional, Dict, List
@@ -24,6 +25,7 @@ from slack_client import (
     block_context,
     block_divider,
     block_header,
+    block_static_select,
     get_con_format,
     get_date,
     get_link_formats,
@@ -621,9 +623,74 @@ def new_hits(
 
     return blocks
 
+def add_thing_modal(
+    mojo: MOJOCMD = None,
+    args: Namespace = None,
+)->Dict:
+    _log.debug(f"Building add_thing modal...")
+    blocks = []
+    tdb: TypeDBClient = get_tdb()
+    all_dbs = tdb.get_all_dbs(readable=True)
+
+    db_opts = []
+    for db in all_dbs:
+        db_opts.append((db,db))
+
+    select_db_section = block_static_select(
+        label="Database",
+        placeholder="Select",
+        options=db_opts,
+        action_id="select_db"
+    )
+    blocks.append(select_db_section)
+
+    allowed_things = led.schema['entity'] + led.schema['relation']
+    schema = None
+    for at in allowed_things:
+        if at['label'] == args.label:
+            schema = at
+            break
+    if schema is None:
+        _log.error(
+            f"{xterm('RED')}No schema found for {args.label}. "
+            f"This shouldn't happen.{xterm('X')}"
+        )
+        return False
+    if not schema['keyattr'] is None and schema['keyattr'] != 'comboid':
+        input={
+            'type': 'input',
+            'element': {
+                'type': 'plain_text_input',
+                'action_id': 'add_thing_keyattr',
+            },
+            'label': {
+                'type': 'plain_text',
+                'text': schema['keyattr'],
+                'emoji': False,
+            },
+        }
+        _log.debug(f"args.value = {args.value}")
+        if not args.value is None:
+            _log.debug(f"setting initial_value to {args.value}")
+            input['element']['initial_value'] = args.value
+        blocks.append(input)
+
+    mymodal = {
+        "type": "modal",
+        # // "callback_id": f"set_confidence_{uuid4().hex[:8]}",
+        "callback_id": f"add_thing",
+        "title": {"type": "plain_text", "text": f"Add {args.label.upper()}"},
+        "submit": {"type": "plain_text", "text": "Submit"},
+        # // "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": blocks,
+        # // "private_metadata": container,
+    }
+
+    return mymodal
+
 def update_thing_modal(
     payload: Dict = None,
-):
+)->Dict:
     _log.debug(f"Building update_thing modal...")
 
     container = dumps(payload['container'])
@@ -703,74 +770,24 @@ def update_thing_modal(
     blocks.append(meta_section)
 
     #; Set Confidence
-    # TODO - Simplify this into a general function in slack_client so it's not so ugly
     #! This is just for DEBUGGING - normally Confidence should ALWAYS be set.
     if not thing.get_attributes('confidence'):
         confidence = 0
     else:
         confidence = int(thing.get_attributes('confidence')[0].value)
-    set_con_section = {
-        "type": "section",
-        "text": {
-            "type": "mrkdwn",
-            "text": "Select Level of Confidence"
-        },
-        "accessory": {
-            "type": "static_select",
-            "placeholder": {
-                "type": "plain_text",
-                "emoji": True,
-                "text": get_con_format(confidence)
-            },
-            "options":[
-                {
-                    "text": {
-                        "type": "plain_text",
-                        "emoji": True,
-                        "text": get_con_format(-1)
-                    },
-                    "value": f"{db_name}|{iid}|-1",
-                },
-                {
-                    "text": {
-                        "type": "plain_text",
-                        "emoji": True,
-                        "text": get_con_format(0)
-                    },
-                    "value": f"{db_name}|{iid}|0",
-                },
-                {
-                    "text": {
-                        "type": "plain_text",
-                        "emoji": True,
-                        "text": get_con_format(1)
-                    },
-                    "value": f"{db_name}|{iid}|1",
-                },
-                {
-                    "text": {
-                        "type": "plain_text",
-                        "emoji": True,
-                        "text": get_con_format(2)
-                    },
-                    "value": f"{db_name}|{iid}|2",
-                },
-                {
-                    "text": {
-                        "type": "plain_text",
-                        "emoji": True,
-                        "text": get_con_format(3)
-                    },
-                    "value": f"{db_name}|{iid}|3",
-                },
-            ],
-            # // "action_id": f"set_confidence_{uuid4().hex[:8]}"
-            #; swapping the above with 'no_action' so the confidence doesn't
-            #; change when the dropdown is changed, only when submit is called.
-            # // "action_id": f"no_action_{uuid4().hex[:8]}",
-            "action_id": "new_confidence",
-        }
-    }
+
+    set_con_section = block_static_select(
+        label="Select Level of Confidence",
+        placeholder=get_con_format(confidence),
+        options=[
+            (get_con_format(-1),f"{db_name}|{iid}|-1"),
+            (get_con_format(0),f"{db_name}|{iid}|0"),
+            (get_con_format(1),f"{db_name}|{iid}|1"),
+            (get_con_format(2),f"{db_name}|{iid}|2"),
+            (get_con_format(3),f"{db_name}|{iid}|3"),
+        ],
+        action_id="new_confidence"
+    )
     blocks.append(set_con_section)
 
     # blocks.append(block_header(f"[{db_name}]\n{thing.label}: {thing.keyval}"))

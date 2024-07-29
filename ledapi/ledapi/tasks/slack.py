@@ -1,9 +1,11 @@
 import argparse
 import asyncio
 import copy
+import difflib
 import json
 import os
 import httpx
+from argparse import Namespace
 from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, Depends, Query, Request, status
 from pprint import pformat
@@ -43,6 +45,7 @@ from ledapi.models import(
     ConmanObject,
     MOJOCMD,
     UserModel,
+    add_thing_modal,
     add_user_modal,
     new_hits,
     role_admin,
@@ -62,6 +65,8 @@ from ledapi.tasks import(
     get_news_conf,
     set_confidence_task,
 )
+
+from slack_sdk.web.async_client import AsyncSlackResponse
 
 # _log.debug(f"PYTHONPATH: {os.environ.get('PYTHONPATH')}")
 from slack_client import (
@@ -108,18 +113,25 @@ async def slack_post_message(
 
 async def mojo_parse_cmd(
     cmd: str = None,
-):
+)->Namespace:
     parser = argparse.ArgumentParser(description="MOJO - a Slack tool for interacting with LEDHNTR")
     subparsers = parser.add_subparsers(dest='cmd', help="Available commands")
 
     #@ Define sub-parsers
+    add = subparsers.add_parser('add', help="Add something to a database.")
     news = subparsers.add_parser('news', help="Get the latest findings from any given database.")
     search = subparsers.add_parser('search', help="Search information in the LEDHNTR databases and external APIs.")
+
+    #@ Handle 'add arguments
+    add.add_argument('pos', nargs='*', help='Positional arguments: [label value verbose]')
+    add.add_argument('--label', type=str, help="Label to add (e.g. ip)")
+    add.add_argument('--value', type=str, help="Value of that label (e.g. 192.168.1.100)")
+    add.add_argument('--verbose', action='store_true', help="Enable verbose output")
 
     #@ Handle 'search' arguments
     search.add_argument('pos', nargs='*', help='Positional arguments: [label value verbose]')
     search.add_argument('--label', type=str, help="Label to search for (e.g. ip)")
-    search.add_argument('--value', type=str, help="Value eto search for (e.g. 192.168.1.100)")
+    search.add_argument('--value', type=str, help="Value to search for (e.g. 192.168.1.100)")
     search.add_argument('--verbose', action='store_true', help="Enable verbose output")
 
     #@ Handle 'news' arguments
@@ -132,7 +144,9 @@ async def mojo_parse_cmd(
     args = parser.parse_args(cmd.split())
 
     #. Process positional arguments for 'search'
-    if args.cmd == 'search':
+    #; commands with positional arguments [label value verbose]
+    lvv = ['add', 'search']
+    if args.cmd in lvv:
         if args.pos:
             if args.label is None:
                 args.label = args.pos[0]
@@ -261,6 +275,63 @@ async def mojo_debug(
     await asyncio.sleep(5)
     return mojo
 
+async def mojo_add_thing(
+    mojo: MOJOCMD = None,
+    user: User = None,
+)->bool:
+    _log.debug(f"Opening add_thing modal...")
+
+    #; parse args
+    try:
+        args = await mojo_parse_cmd(mojo.text)
+    except SystemExit as e:
+        _log.error(f"{xterm('RED')}Error parsing cmd: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+
+    plugin:SlackClient = await get_plugin()
+    #; Check valid thing type
+    valid_things = [thing['label'] for thing in led.schema['entity']]
+    if args.label not in valid_things:
+        matches = difflib.get_close_matches(
+            args.label,
+            valid_things,
+            n=1,
+            cutoff=0.6
+        )
+        if matches:
+            txt = f"{args.label} is an invalid thing type. Did you mean {matches[0]}?"
+        else:
+            txt = f"{args.label} is an invalid thing type.\nValid things are: `{', '.join(valid_things)}`"
+        await plugin.post_message(
+            channel=mojo.channel_id,
+            text=txt,
+            blocks_verbatim=True,
+            ephemeral=True,
+            user=mojo.user_id,
+        )
+        return True
+
+    #; Open modal
+    try:
+        mymodal = add_thing_modal(mojo, args)
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed building modal: {e}{xterm('X')}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}view modal:\n{pformat(mymodal)}{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}modal type: {type(mymodal)}{xterm('X')}")
+
+    try:
+        await plugin.views_open(
+            trigger_id=mojo.trigger_id,
+            view = mymodal,
+        )
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed opening modal: {e}{xterm('X')}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        return False
+
+    return True
+
 async def mojo_post_news(
     mojo: MOJOCMD = None,
     user: User = None,
@@ -320,6 +391,7 @@ async def mojo_post_news(
         return True
 
     for db, thing_types in new_things.items():
+        something_posted = False
         if not thing_types:
             continue
         interesting = False
@@ -345,6 +417,7 @@ async def mojo_post_news(
             text_lines.append(f"*{db}*")
             # // for tt, entries in thing_types.items():
             if thing_type in interesting_things:
+                something_posted = True
                 text_lines.append(f"*Type: {thing_type}*")
                 # // for e in entries:
                 for e in things:
@@ -363,8 +436,8 @@ async def mojo_post_news(
             else:
                 _log.debug(f"{tt} not in {interesting_things}")
 
-            if not text_lines:
-                text_lines = [f"No news from the last {args.hours_back} hours from {db}."]
+            # // if not text_lines:
+            # //     text_lines = [f"No news from the last {args.hours_back} hours from {db}."]
             text = "\n".join(text_lines)
             if not blocks:
                 blocks = None
@@ -380,6 +453,13 @@ async def mojo_post_news(
                 _log.error(f"{xterm('RED')}Failed posting message..: {e}")
                 _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
         # // _log.debug(f"MOJOCMD: {pformat(mojo)}")
+        '''
+        if not something_posted and mojo.user_id=="AUTO-MOJO":
+            await plugin.post_message(
+                channel=mojo.channel_id,
+                text=f"Nothing interesting found for {db}"
+            )
+        '''
     return True
 
 async def mojo_clear_schedules(
@@ -848,6 +928,7 @@ async def mojocmd_conf(
         "clear-schedules": (mojo_clear_schedules, role_admin),
         "check-schedules": (mojo_check_schedules, role_everyone),
         "news": (mojo_post_news, role_everyone),
+        "add": (mojo_add_thing, role_hunter),
         #; mojo add_db 20240723_MyNewDB
         #. "add_db": (mojo_add_db, role_dbadmin)
         #; mojo add_hunt #; launches modal
@@ -874,6 +955,7 @@ async def mojocmd_conf(
         except Exception as e:
             raise
         try:
+            #; post ephemeral acknowledgement of command
             await plugin.post_message(
                 channel=mojo.channel_id,
                 text=f"Received `{mojo.text}`",
