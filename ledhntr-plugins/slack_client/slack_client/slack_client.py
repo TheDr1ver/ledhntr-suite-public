@@ -48,6 +48,8 @@ _log: logging.Logger = logging.getLogger('ledhntr')
 # TODO - rich_text_section, rich_text_list, rich_text_preformatted, rich_text_quote
 # TODO - Build out comprehensive Section session as well
 
+
+
 def block_context(
     elements: List[tuple] = None,
     block_id: Optional[str] = None,
@@ -151,6 +153,79 @@ def block_header(
     if not block_id is None:
         block['block_id'] = block_id
 
+    return block
+
+def block_static_select(
+    label: str = None,
+    placeholder: str = None,
+    options: List[tuple] = None,
+    action_id: str = None,
+    block_id: Optional[str] = None,
+)->Dict:
+    """Build static_select section
+
+        Example call:
+
+        block_static_select(
+            label="Level of Confidence",
+            placeholder="Select Level",
+            options=[
+                (":x: False-Positive","my_db|my_iid|-1"),
+                (":+1: True-Positive","my_db|my_iid|1")
+            ],
+            action_id="new_confidence",
+        )
+
+    :param label: label for selection, defaults to None
+    :type label: str, required
+    :param placeholder: initial value for selector, defaults to None
+    :type placeholder: str, required
+    :param options: List of tuples to populate options, defaults to None
+        tuples contain exactly 2 values, with the first value being the text
+        content of the selection, and the second value being the value that
+        is passed to the server when that option is selected. For example:
+        (":x: False-Positive","my_db|my_iid|-1")
+    :type options: List[tuple], required
+    :param action_id: action_id for section submission, defaults to None
+    :type action_id: str, required
+    :param block_id: unique block ID for this block, defaults to None
+    :type block_id: Optional[str], optional
+    :return: dictionary of formatted static_select section block
+    :rtype: Dict
+    """
+    block = {
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": label,
+        },
+        "accessory": {
+            "type": "static_select",
+            "placeholder": {
+                "type": "plain_text",
+                "emoji": True,
+                "text": placeholder
+            },
+            "options": [],
+            "action_id": action_id,
+        }
+    }
+
+    for option in options:
+        opt = {
+            "text": {
+                'type': 'plain_text',
+                'emoji': True,
+                'text': option[0]
+            },
+            "value": option[1]
+        }
+        block['accessory']['options'].append(opt)
+
+    if block_id is not None:
+        block['block_id'] = block_id
+
+    _log.debug(f"Built block: {pformat(block)}")
     return block
 
 def get_con_format(key: int = None):
@@ -259,6 +334,10 @@ def check_client(func):
             self.reload_web_client()
         return await func(self, *args, **kwargs)
     return check_client_wrapper
+
+#&##########################################################################
+#& Client
+#&##########################################################################
 
 class SlackClient(ConnectorPlugin):
     """SlackClient
@@ -385,7 +464,45 @@ class SlackClient(ConnectorPlugin):
         return None
 
     #&##########################################################################
-    #& POST/UPDATE MESSAGES
+    #& HANDLE CHANNELS
+    #&##########################################################################
+
+    @check_client
+    async def conversations_info(
+        self,
+        channel: Optional[str] = None,
+        **kwargs,
+    )->Dict:
+        _log.debug(f"Getting channel info for channel: {channel}")
+        resp = await self.client.conversations_list(types="public_channel,private_channel", limit=1000)
+        convo_list = resp.data['channels']
+        if channel is None:
+            return convo_list
+        for convo in convo_list:
+            if convo['name']==channel:
+                try:
+                    resp = await self.client.conversations_info(
+                        channel=convo['id'],
+                        **kwargs,
+                    )
+                    return resp.data['channel']
+                except SlackApiError as e:
+                    _log.error(
+                        f"{xterm('RED')}Error getting conversations info {e.response['error']}"
+                        f"{xterm('X')}"
+                    )
+                    _log.error(f"{xterm('RED')}Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+                    return False
+                except Exception as e:
+                    _log.error(f"{xterm('RED')}Error getting conversations info: {e}{xterm('X')}")
+                    _log.error(f"{xterm('RED')}Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+                    return False
+        _log.debug(f"No channel found called {channel}.")
+        return convo_list
+
+
+    #&##########################################################################
+    #& HANDLE MESSAGES AND RESPONSES
     #&##########################################################################
 
     @check_client
@@ -449,7 +566,7 @@ class SlackClient(ConnectorPlugin):
         ephemeral: Optional[bool] = False,
         thread_ts: Optional[str] = None,
         **kwargs
-    )->bool:
+    )->AsyncSlackResponse:
         """Posts brand new message to a channel
 
         :param channel: Channel or DM ID, defaults to None
@@ -549,7 +666,7 @@ class SlackClient(ConnectorPlugin):
 
         _log.debug(f"Successful post!:{xterm('MAGENTA')}"
                    f"{pformat(response.data)}{xterm('X')}")
-        return True
+        return response
 
     @check_client
     async def conversations_history(
@@ -690,6 +807,34 @@ class SlackClient(ConnectorPlugin):
         except Exception as e:
             raise
         return None
+
+    @check_client
+    async def delete_message(
+        self,
+        channel: str = None,
+        ts: str = None,
+        **kwargs,
+    )->bool:
+        _log.debug(f"Deleting message {ts} from channel {channel}")
+        try:
+            resp = await self.client.chat_delete(
+                channel=channel,
+                ts=ts,
+                **kwargs
+            )
+        except SlackApiError as e:
+            _log.error(
+                f"{xterm('RED')}Error deleting message {e.response['error']}"
+                f"{xterm('X')}"
+            )
+            _log.error(f"{xterm('RED')}Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+            return False
+        except Exception as e:
+            _log.error(f"{xterm('RED')}Error deleting message: {e}{xterm('X')}")
+            _log.error(f"{xterm('RED')}Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+            return False
+        _log.debug(f"Successfully deleted message: {resp.data}")
+        return True
 
     #&##########################################################################
     #& INTERACTIVITY
