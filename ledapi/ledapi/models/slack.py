@@ -656,16 +656,13 @@ def add_thing_modal(
     )
     blocks.append(select_db_section)
 
-    allowed_things = led.schema['entity'] + led.schema['relation']
     schema = None
     if args.label in special_cases:
         schema = special_cases[args.label]
 
     if schema is None:
-        for at in allowed_things:
-            if at['label'] == args.label:
-                schema = at
-                break
+        schema = led.schema['entity'].get(args.label) or \
+            led.schema['relation'].get(args.label)
     if schema is None:
         _log.error(
             f"{xterm('RED')}No schema found for {args.label}. "

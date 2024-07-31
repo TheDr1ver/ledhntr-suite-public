@@ -60,21 +60,13 @@ redis_url = conf['ledapi']['redis_url']
 # Organize Schema so we don't have to do it again
 def org_schema(led):
     led.all_labels = {
-        'thing': [],
-        'attribute': [],
-        'entity': [],
-        'relation': [],
+        'thing': list(led.schema['attribute'].keys()) + \
+            list(led.schema['entity'].keys()) + \
+            list(led.schema['relation'].keys()),
+        'attribute': list(led.schema['attribute'].keys()),
+        'entity': list(led.schema['entity'].keys()),
+        'relation': list(led.schema['relation'].keys()),
     }
-    for ttype in led.schema.keys():
-        for thing in led.schema[ttype]:
-            if thing['label'] not in led.all_labels:
-                led.all_labels['thing'].append(thing['label'])
-            if thing['type']=='attribute':
-                led.all_labels['attribute'].append(thing['label'])
-            elif thing['type']=='entity':
-                led.all_labels['entity'].append(thing['label'])
-            elif thing['type']=='relation':
-                led.all_labels['relation'].append(thing['label'])
     return led
 
 led = org_schema(led)

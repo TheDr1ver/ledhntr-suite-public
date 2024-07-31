@@ -204,9 +204,9 @@ def _load_default_schema(schema:str=""):
     }
 
     pretty_schema = {
-        'attribute': [],
-        'entity': [],
-        'relation': [],
+        'attribute': {},
+        'entity': {},
+        'relation': {},
     }
 
     with open(schema, 'r') as s:
@@ -280,7 +280,7 @@ def _load_default_schema(schema:str=""):
                                     info['value_type']=value_type
 
                         if info:
-                            pretty_schema[key].append(info)
+                            pretty_schema[key][info['label']]=info
 
                         type_parsing.remove(thing)
 

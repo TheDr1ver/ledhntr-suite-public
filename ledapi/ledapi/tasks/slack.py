@@ -382,7 +382,9 @@ async def mojo_add_thing(
 
     plugin:SlackClient = await get_plugin()
     #; Check valid thing type
-    valid_things = [thing['label'] for thing in led.schema['entity']]
+    # // valid_things = [thing['label'] for thing in led.schema['entity']]
+    valid_things = list(led.schema['entity'].keys()) + \
+        list(led.schema['relation'].keys())
     if args.label not in valid_things:
         matches = difflib.get_close_matches(
             args.label,
