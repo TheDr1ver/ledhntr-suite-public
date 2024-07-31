@@ -57,6 +57,22 @@ def _meta_attrs():
     ]
     return meta_attrs
 
+def _comboid_ignore():
+    """Combines pseudo-meta attributes and full-meta attributes
+    Specifically when calculating a comboid, we want to avoid things like
+    hunt-name and actor-name. These are both keyvals for the 'hunt' and 'actor'
+    entities, so they can't be treated the same as all the other meta values,
+    but we sitll want to ignore them when calculating comboid values b/c
+    actor-names shouldn't define if an object is unique in the DB or not.
+    """
+    pseduo_meta = [
+        'actor-name',
+        'hunt-name',
+    ]
+    comboid_attrs = _meta_attrs() + pseduo_meta
+    return comboid_attrs
+
+
 def _convert_value_types(x, vt):
     """
     List of approved value types.
@@ -551,9 +567,11 @@ def _comboid_calc(obj):
         # // return sha256
         return Attribute(label='comboid', value="")
 
+    comboid_ignore = _comboid_ignore()
+
     comboid_attrs = {}
     for attr in obj.has:
-        if attr.label in obj.meta_attrs:
+        if attr.label in comboid_ignore:
             continue
         if attr.label not in comboid_attrs:
             comboid_attrs[attr.label]=[attr.value]
