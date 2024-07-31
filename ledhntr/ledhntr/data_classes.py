@@ -39,6 +39,7 @@ def _meta_attrs():
         'frequency',
         'hunt-active',
         # ! https://github.com/TheDr1ver/ledhntr-suite-public/issues/2
+        # // 'actor-name',
         # // 'hunt-name',
         'last-hunted',
         'last-seen',

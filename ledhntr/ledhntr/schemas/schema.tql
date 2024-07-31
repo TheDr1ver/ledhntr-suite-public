@@ -41,6 +41,7 @@ define
         #@## ssl found on an IP? ledsrc=ip-addy + ledsrc=shodan-<fqdn>
         #@## fqdn PDNS found an IP? ledsrc=ip-addy + ledsrc=zeta-<fqdn>
         #@#####################################################################
+        owns actor-name, # non-meta, used as key for 'actor'
         owns confidence,
         owns date-discovered,
         owns date-seen,
@@ -113,6 +114,7 @@ define
         #@## ssl found on an IP? ledsrc=ip-addy + ledsrc=shodan-<fqdn>
         #@## fqdn PDNS found an IP? ledsrc=fqdn + ledsrc=zeta-<fqdn>
         #@#####################################################################
+        owns actor-name, # non-meta, used as key for 'actor'
         owns confidence,
         owns date-discovered,
         owns date-seen,
@@ -133,9 +135,22 @@ define
         owns password,
         owns user;
 
-    actor sub hntr-entity,
-        owns comboid @key,
-        owns actor-name,
+    actor sub entity,
+        #@ global meta-attrs
+        owns ledid, # required for all entities
+        owns ledsrc,
+        owns confidence,
+        owns date-discovered,
+        owns date-seen,
+        owns first-seen,
+        owns hunt-name,
+        owns last-seen,
+        owns ref-link,
+        owns note,
+        owns tag,
+        owns user-uuid
+        #@ actor-specific
+        owns actor-name @key,
         owns alias;
 
     autonomous-system sub hntr-entity,
@@ -290,6 +305,7 @@ define
         plays reference:referenced, # entity referenced entity
         owns ledid, # required for all relations
         owns ledsrc,
+        owns actor-name, # non-meta, used as key for 'actor'
         owns comboid,
         owns confidence,
         owns date-discovered,
@@ -298,10 +314,10 @@ define
         owns last-seen,
         owns note,
         owns tag,
+        owns user-uuid,
 
         # A hunt should be able to own ANYTHING it finds. Kinda wish owns * would work
         owns account-service,
-        owns actor-name,
         owns alias,
         owns as-name,
         owns as-number,
@@ -473,7 +489,6 @@ define
     meta-tags sub hntr-entity;
 
     misp-event sub hntr-entity,
-        owns actor-name,
         owns alias,
         owns date-published,
         owns domain-name,
