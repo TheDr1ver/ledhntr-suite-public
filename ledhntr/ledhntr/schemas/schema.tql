@@ -148,7 +148,7 @@ define
         owns ref-link,
         owns note,
         owns tag,
-        owns user-uuid
+        owns user-uuid,
         #@ actor-specific
         owns actor-name @key,
         owns alias;
