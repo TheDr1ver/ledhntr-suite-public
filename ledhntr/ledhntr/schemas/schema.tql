@@ -39,7 +39,7 @@ define
         #@## relations together.
         #@##
         #@## ssl found on an IP? ledsrc=ip-addy + ledsrc=shodan-<fqdn>
-        #@## fqdn PDNS found an IP? ledsrc=fqdn + ledsrc=zeta-<fqdn>
+        #@## fqdn PDNS found an IP? ledsrc=ip-addy + ledsrc=zeta-<fqdn>
         #@#####################################################################
         owns confidence,
         owns date-discovered,
@@ -49,7 +49,8 @@ define
         owns last-seen,
         owns note,
         owns ref-link,
-        owns tag;
+        owns tag,
+        owns user-uuid;
 
     attachment sub hntr-relation,
         relates attachment-file,
@@ -120,7 +121,8 @@ define
         owns last-seen,
         owns ref-link,
         owns note,
-        owns tag;
+        owns tag,
+        owns user-uuid;
 
     account sub hntr-entity,
         owns comboid @key,
@@ -459,6 +461,16 @@ define
         owns jarm-cipher,
         owns jarm-fingerprint,
         owns jarm-tls-ext;
+
+    #@ meta-* entities are used when we need to keep values in the database
+    #@ that would otherwise just be free-flowing attributes that end up
+    #@ getting purged.
+    #@ For example, meta-tags is there so all the valid tags can be polled
+    #@ from the database and populate an external, dynamically-generated form
+    #@ with their values, even if the tags themselves aren't currently attached
+    #@ to any other entities or relations.
+
+    meta-tags sub hntr-entity;
 
     misp-event sub hntr-entity,
         owns actor-name,
@@ -1174,6 +1186,9 @@ define
         value string;
 
     user sub attribute,
+        value string;
+
+    user-uuid sub attribute,
         value string;
 
     valid-end sub attribute,

@@ -47,6 +47,7 @@ def _meta_attrs():
         'note',
         'ref-link',
         'tag',
+        'user-uuid',
         # ! adding these... really hope this doesn't break stuff
         # ! that I've since forgotten about...
         'hunt-endpoint',
