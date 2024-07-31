@@ -633,6 +633,18 @@ def add_thing_modal(
     all_dbs = tdb.get_all_dbs(readable=True)
 
     db_opts = []
+    multi_line_attrs = ['http-html', 'hunt-string']
+    special_cases = {
+        'hunt': {
+            'keyattr': 'hunt-name',
+            'owns': [
+                'hunt-name', 'hunt-active', 'hunt-endpoint', 'hunt-service',
+                'hunt-string', 'frequency',
+                'confidence', 'note', 'tag', 'actor-name'
+            ]
+        }
+    }
+
     for db in all_dbs:
         db_opts.append((db,db))
 
@@ -646,10 +658,14 @@ def add_thing_modal(
 
     allowed_things = led.schema['entity'] + led.schema['relation']
     schema = None
-    for at in allowed_things:
-        if at['label'] == args.label:
-            schema = at
-            break
+    if args.label in special_cases:
+        schema = special_cases[args.label]
+
+    if schema is None:
+        for at in allowed_things:
+            if at['label'] == args.label:
+                schema = at
+                break
     if schema is None:
         _log.error(
             f"{xterm('RED')}No schema found for {args.label}. "
@@ -673,6 +689,26 @@ def add_thing_modal(
         if not args.value is None:
             _log.debug(f"setting initial_value to {args.value}")
             input['element']['initial_value'] = args.value
+        blocks.append(input)
+
+    for attr in schema['owns']:
+        if attr == 'comboid' or attr == schema['keyattr']:
+            continue
+        input={
+            'type': 'input',
+            'element': {
+                'type': 'plain_text_input',
+                'action_id': f'add_thing_{attr}',
+            },
+            'label': {
+                'type': 'plain_text',
+                'text': attr,
+                'emoji': False,
+            },
+        }
+        _log.debug(f"args.value = {args.value}")
+        if attr in multi_line_attrs:
+            input['element']['multiline'] = True
         blocks.append(input)
 
     mymodal = {
