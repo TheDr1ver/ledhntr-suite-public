@@ -318,7 +318,6 @@ define
 
         # A hunt should be able to own ANYTHING it finds. Kinda wish owns * would work
         owns account-service,
-        owns alias,
         owns as-name,
         owns as-number,
         owns auth-ssl-response,
@@ -489,7 +488,6 @@ define
     meta-tags sub hntr-entity;
 
     misp-event sub hntr-entity,
-        owns alias,
         owns date-published,
         owns domain-name,
         owns http-html,
