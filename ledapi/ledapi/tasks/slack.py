@@ -721,6 +721,28 @@ async def slackation_set_confidence_modal(
     return True
 
 #~######################################
+#~ slackaction_add_thing
+#~######################################
+
+async def slackaction_add_thing(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->Dict:
+    _log.debug(f"Adding thing...")
+    _log.debug(f"{xterm('YELLOW')}{pformat(payload)}{xterm('X')}")
+
+    #; Parse out important values
+
+    #; Run the add_thing(thing, user) task
+
+    #; Set params for successful result or ephemeral failure message
+
+    #; Post the message
+
+    return {'response_action': 'clear'}
+
+#~######################################
 #~ slackaction_set_confidence
 #~######################################
 
@@ -728,7 +750,7 @@ async def slackaction_set_confidence(
     plugin: SlackClient = None,
     payload: Dict = None,
     user: User = None,
-):
+)->Dict:
     _log.debug(f"Setting confidence...")
     _log.debug(f"{xterm('YELLOW')}{pformat(payload)}{xterm('X')}")
     # // value_str = payload['actions'][0]['selected_option']['value']
@@ -752,9 +774,8 @@ async def slackaction_set_confidence(
         confidence = value,
     )
 
+    #@ Actually set the confidence inside the database
     result = await set_confidence_task(setcon, user)
-
-    #TODO - update original message with new confidence and alert group that a user changed it.
 
     if result:
         params = dict(
@@ -765,22 +786,22 @@ async def slackaction_set_confidence(
             blocks_verbatim = True,
         )
 
+        #@ update original message with new confidence and alert group that a user changed it.
         try:
             container = json.loads(payload['view']['private_metadata'])
         except Exception as e:
             _log.error(f"{xterm('RED')}{pformat(payload['view']['private_metadata'])}{xterm('X')}")
             _log.error(f"{xterm('RED')}{pformat(container)}{xterm('X')}")
             _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
-
+        #; Get the old message
         old_message = await plugin.conversations_history(
             channel=container['channel_id'],
             latest=container['message_ts'],
             limit=1,
             inclusive=True,
         )
-        # // _log.debug(f"old_message: {pformat(old_message)}")
+        #; Modify the blocks
         old_blocks = old_message['messages'][0]['blocks']
-        # // _log.debug(f"{xterm('YELLOW')}{old_blocks}")
         updated_blocks = copy.deepcopy(old_blocks)
         for block in old_blocks:
             if 'accessory' in block:
@@ -791,13 +812,8 @@ async def slackaction_set_confidence(
         for block in updated_blocks:
             if block['block_id'] == block_id:
                 block['accessory']['text']['text'] = get_con_format(int(value))
-                # // _log.debug(f"{block['accessory']['text']['text']}")
-        # // _log.debug(f"Running update_message")
-        # // _log.debug(f"{container['channel_id']}")
-        # // _log.debug(f"{container['message_ts']}")
-        # // _log.debug(f"{old_message['messages'][0]['text']}")
-        # // _log.debug(f"{updated_blocks}")
-        # // updated_blocks =
+
+        #; Update the old message
         resp = await plugin.update_message(
             channel = container['channel_id'],
             ts = container['message_ts'],
@@ -817,6 +833,7 @@ async def slackaction_set_confidence(
             blocks_verbatim = True,
             user=user.slack_id,
         )
+    #; Print the result of setting the confidence
     await plugin.post_message(**params)
 
     return {'response_action': 'clear'}
@@ -1132,7 +1149,7 @@ async def slackaction_conf(
             'add_user_modal': (slackaction_submit_add_user, role_dbadmin), #do the add-user stuff
             # // #. slackaction_update_thing() lets you set confidence, add notes and tags
             # // #; 'update_thing': (slackation_update_thing, role_conman),
-            #. slackaction_set_confidence()
+            #; "add_thing": (slackaction_add_thing, role_hunter),
             "set_confidence": (slackaction_set_confidence, role_everyone),
             "update_thing_submit": (update_thing_submit, role_conman)
         }
