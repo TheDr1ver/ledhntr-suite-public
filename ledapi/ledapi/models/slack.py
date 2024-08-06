@@ -1,4 +1,5 @@
 from argparse import Namespace
+from datetime import datetime, timezone
 from pprint import pformat
 from pydantic import BaseModel, model_validator
 from typing import Optional, Dict, List
@@ -22,9 +23,13 @@ from ledapi.config import(
 
 from ledapi.models import RoleEnum
 from slack_client import (
+    block_checkbox,
     block_context,
+    block_datetime_picker,
     block_divider,
     block_header,
+    block_number,
+    block_plain_text_input,
     block_static_select,
     get_con_format,
     get_date,
@@ -38,35 +43,38 @@ from typedb_client import TypeDBClient
 #@##############################################################################
 
 class MOJOCMD(BaseModel):
+    admin_channel: str = None
+    api_app_id: str = None
+    channel_id: str = None
+    channel_name: str = None
+    command: str = None
+    db_name: str = None
+    is_enterprise_install: bool = False
+    response_url: str = None
+    slackbot_token: str = None
     token: str = None
     team_id: str = None
     team_domain: str = None
-    channel_id: str = None
-    channel_name: str = None
+    text: str = None
+    trigger_id: str = None
+    user_channel: str = None
     user_id: str = None
     user_name: str = None
-    command: str = None
-    text: str = None
-    api_app_id: str = None
-    is_enterprise_install: bool = False
-    response_url: str = None
-    trigger_id: str = None
-    slackbot_token: str = None
-    admin_channel: str = None
+
 
 class SlackEvent(BaseModel):
-    token: str = None
-    team_id: str = None
+    api_app_id: str = None
+    authorizations: List = None
     context_team_id: str = None
     context_enterprise_id: str = None
-    api_app_id: str = None
     event: Dict = None
-    type: str = None
+    event_context: str = None
     event_id: str = None
     event_time: int = None
-    authorizations: List = None
     is_ext_shared_channel: bool = False
-    event_context: str = None
+    token: str = None
+    team_id: str = None
+    type: str = None
 
     '''
     # Reaction Added
@@ -148,20 +156,20 @@ class SlackEvent(BaseModel):
 
 
 class SlackAction(BaseModel):
-    type: str = None
-    user: Dict = None
+    actions: List[Dict] = None
     api_app_id: str = None
-    token: str = None
+    channel: Dict = None
     container: Dict = None
-    trigger_id: str = None
-    team: Dict = None
     enterprise: str = None
     is_enterprise_intsall: bool = False
-    channel: Dict = None
     message: Dict = None # This is the message that was sent to the channel to create the modal
-    state: Dict = None
     response_url: str = None
-    actions: List[Dict] = None
+    state: Dict = None
+    team: Dict = None
+    token: str = None
+    trigger_id: str = None
+    type: str = None
+    user: Dict = None
     '''
     # sent as URL-encoded payload
     # once decoded looks like this
@@ -633,7 +641,28 @@ def add_thing_modal(
     all_dbs = tdb.get_all_dbs(readable=True)
 
     db_opts = []
+    #; Which attributes require multi-line inputs
     multi_line_attrs = ['http-html', 'hunt-string']
+    #; Which checkboxes should be True by default?
+    chk_true = ['hunt-active']
+    #; What should the initial value of these ints be?
+    init_int = {
+        'confidence': 0,
+        'frequency': 24,
+    }
+    #; Any numbers that should have min/max values?
+    min_max = {
+        'confidence': (-1,3),
+        'frequency': (0,None),
+    }
+    #; List of meta attributes that are universally required
+    required = [
+        'actor-name', 'confidence', 'frequency',
+        'hunt-active', 'hunt-endpoint', 'hunt-service', 'hunt-string',
+    ]
+    #; List of attributes that should default to right now
+    now_dates = ['date-seen', 'date-discovered']
+    #; entities/relations that should have a limited number of fields available
     special_cases = {
         'hunt': {
             'keyattr': 'hunt-name',
@@ -645,68 +674,118 @@ def add_thing_modal(
         }
     }
 
+    #; Available Databases - Tuple of text,value
     for db in all_dbs:
         db_opts.append((db,db))
 
+    #; Generate multi-static select from config.
     select_db_section = block_static_select(
         label="Database",
         placeholder="Select",
         options=db_opts,
-        action_id="select_db"
+        action_id="select_db",
+        initial_option=(mojo.db_name, mojo.db_name),
     )
+    #; Append them to the primary blocks
     blocks.append(select_db_section)
 
     schema = None
+    #; If the label is a "special case", use fields defined above
     if args.label in special_cases:
         schema = special_cases[args.label]
 
     if schema is None:
+        #; Otherwise get the schema from led.schema
         schema = led.schema['entity'].get(args.label) or \
             led.schema['relation'].get(args.label)
+    #; if it's still None, there's no schema that matches this thing.
     if schema is None:
+        #! This should never happen b/c we check for valid things before getting
+        #! to this point.
         _log.error(
             f"{xterm('RED')}No schema found for {args.label}. "
             f"This shouldn't happen.{xterm('X')}"
         )
         return False
+    #; If the thing has a keyattr and the keyattr isn't comboid
     if not schema['keyattr'] is None and schema['keyattr'] != 'comboid':
-        input={
-            'type': 'input',
-            'element': {
-                'type': 'plain_text_input',
-                'action_id': 'add_thing_keyattr',
-            },
-            'label': {
-                'type': 'plain_text',
-                'text': schema['keyattr'],
-                'emoji': False,
-            },
-        }
-        _log.debug(f"args.value = {args.value}")
-        if not args.value is None:
-            _log.debug(f"setting initial_value to {args.value}")
-            input['element']['initial_value'] = args.value
+        #; make sure the first input is for that keyattr
+        input = block_plain_text_input(
+            action_id = 'add_thing_keyattr',
+            label = schema['keyattr'],
+            initial_value = args.value,
+            focus_on_load = True,
+        )
         blocks.append(input)
 
     for attr in schema['owns']:
         if attr == 'comboid' or attr == schema['keyattr']:
             continue
-        input={
-            'type': 'input',
-            'element': {
-                'type': 'plain_text_input',
-                'action_id': f'add_thing_{attr}',
-            },
-            'label': {
-                'type': 'plain_text',
-                'text': attr,
-                'emoji': False,
-            },
-        }
-        _log.debug(f"args.value = {args.value}")
-        if attr in multi_line_attrs:
-            input['element']['multiline'] = True
-        blocks.append(input)
+        #@ Get value_type
+        value_schema = led.schema['attribute'].get(attr)
+        if value_schema is None:
+            _log.error(f"{xterm('RED')}Could not find "
+                       f"attribute type {attr}{xterm('X')}")
+            continue
+        value_type = value_schema.get('value_type')
+        #@ Set Defaults
+        #; Checkbox True
+        if attr in chk_true:
+            initial_options = [(attr, attr)]
+        else:
+            initial_options = []
+        #; initial integer value
+        if attr in init_int:
+            initial_value = init_int[attr]
+        else:
+            initial_value = None
+        #; min/max values
+        if attr in min_max:
+            min_value = min_max[attr][0]
+            max_value = min_max[attr][1]
+        else:
+            min_value = None
+            max_value = None
+        #; now dates
+        if attr in now_dates:
+            initial_date_time = int(datetime.now(timezone.utc).timestamp())
+        else:
+            initial_date_time = None
+        #@ Handle different attribute input types
+        if value_type == 'boolean':
+            input = block_checkbox(
+                action_id = f"add_thing_{attr}",
+                label = attr,
+                options = [(attr, attr)],
+                initial_options = initial_options,
+                optional = attr not in required,
+            )
+        elif value_type == 'double':
+            input = block_number(
+                action_id = f"add_thing_{attr}",
+                label = attr,
+                initial_value = initial_value,
+                min_value = min_value,
+                max_value = max_value,
+                optional = attr not in required,
+            )
+        elif value_type == 'datetime':
+            input = block_datetime_picker(
+                action_id = f"add_thing_{attr}",
+                label = attr,
+                initial_date_time = initial_date_time,
+                optional = attr not in required,
+            )
+        else: #@ implied value_type == 'string'
+            input = block_plain_text_input(
+                action_id = f"add_thing_{attr}",
+                label = attr,
+                multiline = attr in multi_line_attrs,
+                optional = attr not in required,
+            )
+        #; add input to main blocks.
+        if input:
+            blocks.append(input)
 
     mymodal = {
         "type": "modal",

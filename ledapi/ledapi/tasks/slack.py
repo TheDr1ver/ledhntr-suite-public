@@ -405,6 +405,9 @@ async def mojo_add_thing(
         )
         return True
 
+    #; Set user or default database
+    mojo.db_name = user.db_name or plugin.default_db
+    _log.debug(f"{xterm('CYAN')}Set user_db to {mojo.db_name}. user: {user.db_name} plugin: {plugin.default_db}{xterm('X')}")
     #; Open modal
     try:
         mymodal = add_thing_modal(mojo, args)

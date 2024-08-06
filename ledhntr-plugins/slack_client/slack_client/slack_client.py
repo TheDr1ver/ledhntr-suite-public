@@ -48,7 +48,62 @@ _log: logging.Logger = logging.getLogger('ledhntr')
 # TODO - rich_text_section, rich_text_list, rich_text_preformatted, rich_text_quote
 # TODO - Build out comprehensive Section session as well
 
+def block_checkbox(
+    action_id: str = None,
+    label: str = None,
+    options: List[tuple] = None,
+    emoji: Optional[bool] = True,
+    initial_options: List[tuple] = None,
+    block_id: Optional[str] = None,
+    optional: Optional[bool] = False,
+)->Dict:
+    block = {
+        'type': 'input',
+        'element': {
+            'type': 'checkboxes',
+            'options': [],
+            'action_id': action_id,
+        },
+        'label': {
+            'type': 'plain_text',
+            'text': label,
+            'emoji': emoji,
+        }
+    }
+    for option in options:
+        opt = {
+            "text": {
+                'type': 'plain_text',
+                'emoji': emoji,
+                'text': option[0]
+            },
+            "value": option[1]
+        }
+        block['element']['options'].append(opt)
 
+    for initial_option in initial_options:
+        if block['element'].get('initial_options') is None:
+            block['element']['initial_options'] = []
+        if isinstance(initial_option, tuple) and len(initial_option)==2:
+            init = {
+                'text': {
+                    'type': 'plain_text',
+                    'emoji': emoji,
+                    'text': initial_option[0],
+                },
+                'value': initial_option[1],
+            }
+            block['element']['initial_options'].append(init)
+        else:
+            _log.error(
+                f"{xterm('RED')}initial_option needs to be a tuple with "
+                f"exactly 2 values!{xterm('X')}"
+            )
+    if optional:
+        block['optional'] = optional
+    if block_id is not None:
+        block['block_id'] = block_id
+    return block
 
 def block_context(
     elements: List[tuple] = None,
@@ -124,6 +179,40 @@ def block_context(
 
     return block
 
+def block_datetime_picker(
+    action_id: str = None,
+    label: str = None,
+    emoji: Optional[bool] = True,
+    initial_date_time: Optional[Union[int,str]] = None,
+    focus_on_load: Optional[bool] = False,
+    optional: Optional[bool] = False,
+    block_id: Optional[str] = None,
+)->Dict:
+
+    block = {
+        'type': 'input',
+        'element': {
+            'type': 'datetimepicker',
+            'action_id': action_id,
+        },
+        'label': {
+            'type': 'plain_text',
+            'text': label,
+            'emoji': emoji,
+        }
+    }
+    if initial_date_time is not None:
+        dto = format_date(initial_date_time)
+        epoch = int(dto.timestamp())
+        block['element']['initial_date_time'] = epoch
+
+    block['element']['focus_on_load'] = focus_on_load
+    block['optional'] = optional
+    if block_id is not None:
+        block['block_id'] = block_id
+
+    return block
+
 def block_divider():
     return {
         "type": "divider"
@@ -155,11 +244,111 @@ def block_header(
 
     return block
 
-def block_static_select(
-    label: str = None,
-    placeholder: str = None,
-    options: List[tuple] = None,
+def block_number(
     action_id: str = None,
+    label: str = None,
+    emoji: Optional[bool] = True,
+    is_decimal_allowed: Optional[bool] = True,
+    initial_value: Optional[Union[int,float]] = None,
+    min_value: Optional[Union[int,float]] = None,
+    max_value: Optional[Union[int,float]] = None,
+    dispatch_action_config: Optional[str] = None,
+    focus_on_load: Optional[bool] = False,
+    placeholder: Optional[str] = None,
+    optional: Optional[bool] = False,
+    block_id: Optional[str] = None,
+)->Dict:
+
+    block = {
+        'type': 'input',
+        'element': {
+            'type': 'number_input',
+            'action_id': action_id,
+            'is_decimal_allowed': is_decimal_allowed,
+        },
+        'label': {
+            'type': 'plain_text',
+            'text': label,
+            'emoji': emoji,
+        },
+    }
+    if placeholder:
+        block['element']['placeholder'] = {
+            'type': 'plain_text',
+            'text': placeholder,
+        }
+    if initial_value is not None:
+        block['element']['initial_value'] = str(initial_value)
+    if min_value is not None:
+        block['element']['min_value'] = str(min_value)
+    if max_value is not None:
+        block['element']['max_value'] = str(max_value)
+    if dispatch_action_config:
+        block['element']['dispatch_action_config'] = \
+        get_dispatch_action_config(dispatch_action_config)
+    block['optional'] = optional
+    block['element']['focus_on_load'] = focus_on_load
+    if block_id is not None:
+        block['block_id'] = block_id
+
+    return block
+
+def block_plain_text_input(
+    action_id: str = None,
+    label: str = None,
+    emoji: Optional[bool] = False,
+    placeholder: Optional[str] = None,
+    initial_value: Optional[str] = None,
+    multiline: Optional[bool] = False,
+    min_length: Optional[int] = 0,
+    max_length: Optional[int] = 3000,
+    focus_on_load: Optional[str] = False,
+    dispatch_action_config: Optional[str] = None,
+    optional: Optional[bool] = False,
+    block_id: Optional[str] = None,
+)->Dict:
+
+    block = {
+        'type': 'input',
+        'element': {
+            'type': 'plain_text_input',
+            'action_id': action_id,
+        },
+        'label': {
+            'type': 'plain_text',
+            'text': label,
+            'emoji': emoji,
+        },
+    }
+    if placeholder:
+        block['element']['placeholder'] = {
+            'type': 'plain_text',
+            'text': placeholder,
+        }
+    if initial_value:
+        block['element']['initial_value'] = str(initial_value)
+    if min_length is not None:
+        block['element']['min_length'] = min_length
+    if max_length is not None:
+        block['element']['max_length'] = max_length
+    if dispatch_action_config:
+        block['element']['dispatch_action_config'] = \
+        get_dispatch_action_config(dispatch_action_config)
+
+    block['element']['multiline'] = multiline
+    block['element']['focus_on_load'] = focus_on_load
+    block['optional'] = optional
+    if block_id is not None:
+        block['block_id'] = block_id
+
+    return block
+
+def block_static_select(
+    action_id: str = None,
+    label: str = None,
+    options: List[tuple] = None,
+    initial_option: Optional[tuple] = None,
+    placeholder: Optional[str] = None,
     block_id: Optional[str] = None,
 )->Dict:
     """Build static_select section
@@ -222,6 +411,22 @@ def block_static_select(
         }
         block['accessory']['options'].append(opt)
 
+    if isinstance(initial_option, tuple) and len(initial_option)==2:
+        init = {
+            'text': {
+                'type': 'plain_text',
+                'emoji': True,
+                'text': initial_option[0],
+            },
+            'value': initial_option[1],
+        }
+        block['accessory']['initial_option']=init
+    else:
+        _log.error(
+            f"{xterm('RED')}initial_option needs to be a tuple with "
+            f"exactly 2 values!{xterm('X')}"
+        )
+
     if block_id is not None:
         block['block_id'] = block_id
 
@@ -244,6 +449,41 @@ def get_date(date: datetime = None):
     epoch = int(date.timestamp())
     slack_format = f"<!date^{epoch}^{{date_num}} {{time_secs}}|{date}>"
     return slack_format
+
+def get_dispatch_action_config(
+    trigger:str = None,
+)->Union[Dict,None]:
+    """Configure dispatch action
+
+    :param trigger: 'enter', 'char', or 'both', defaults to None
+    :type trigger: str, optional
+    :return: dispatch action configuration object
+    :rtype: Dict
+    """
+    enter = ["on_enter_pressed", "enter"]
+    char = ["char", "on_character_entered"]
+    both = ["both"]
+
+    if trigger in enter:
+        trigger_opts = ['on_enter_pressed']
+    elif trigger in char:
+        trigger_opts = ['on_character_entered']
+    elif trigger in both:
+        trigger_opts = ['on_enter_pressed', 'on_character_entered']
+    else:
+        _log.error(
+            f"{xterm('RED')}Invalid trigger: {trigger}. "
+            f"Returning None.{xterm('X')}"
+        )
+        return None
+
+    frame = {
+        'dispatch_action_config': {
+            'trigger_actions_on': trigger_opts
+        }
+    }
+
+    return frame
 
 def get_link_formats():
     link_formats = {
@@ -372,17 +612,23 @@ class SlackClient(ConnectorPlugin):
             'admin_channel',
             fallback='mojo-admin',
         )
-        if not self.admin_channel.startswith('#'):
-            self.admin_channel = f"#{self.admin_channel}"
+        # // if not self.admin_channel.startswith('#'):
+        # //     self.admin_channel = f"#{self.admin_channel}"
 
 
         self.user_channel = config.get(
             'options',
             'user_channel',
-            fallback='mojo-bot',
+            fallback='mojo',
         )
-        if not self.user_channel.startswith('#'):
-            self.user_channel = f"#{self.user_channel}"
+        # // if not self.user_channel.startswith('#'):
+        # //     self.user_channel = f"#{self.user_channel}"
+
+        self.default_db = config.get(
+            'options',
+            'default_db',
+            fallback='scratchpad',
+        )
 
         self.client = None
 
