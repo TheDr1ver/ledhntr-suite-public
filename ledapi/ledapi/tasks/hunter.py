@@ -430,7 +430,6 @@ async def get_hunts(
         tdb.db_name = db
         so = Entity(label='hunt', has=[Attribute(label='hunt-active', value=True)])
         res = result_error_catching(tdb.find_things, f"Failed searching for {so}", so) #! Change to handle_response()
-        tdb.close_client()
         if not res:
             _log.debug(f"No results for {so} in {tdb.db_name}")
             continue
@@ -455,6 +454,7 @@ async def get_hunts(
                             hunt_res[fv].append(attr.value)
                 results['results'][db].append(hunt_res)
                 results['count']+=1
+    tdb.close_client()
     return results
 
 #~###############

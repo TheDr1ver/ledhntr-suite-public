@@ -107,6 +107,141 @@ async def slack_post_message(
     _log.debug(f"Successful post! {response}")
     return True
 
+#~######################################
+#~ Populate External Actor Opts
+#~######################################
+
+async def opts_add_thing_get_actors(
+    payload: Dict = None,
+    user: User = None,
+)->Dict:
+    block = {
+        'options': [],
+    }
+    view = payload['view']
+    set_vals = view['state']['values']
+    input = payload['value']
+    db_name = None
+    _log.debug(f"{xterm('CYAN')}Checking DBs for actors containing {input}...{xterm('X')}")
+    for _, field_dat in set_vals.items():
+        if 'select_db' in field_dat:
+            db_name = field_dat['select_db']['selected_option'].get('value')
+        '''
+        if 'add_thing_hunt-service' in field_dat:
+            hunt_service = field_dat['add_thing_hunt-service']['selected_option'].get('value')
+        '''
+    #~ Check DB
+    if db_name is None:
+        _log.warning(
+            f"{xterm('YELLOW')}DB selection requried for actor lookup{xterm('X')}"
+        )
+        return block
+    tdb:TypeDBClient = get_tdb()
+    db_names = tdb.get_all_dbs(readable=True)
+    if db_name not in db_names:
+        _log.warning(
+            f"{xterm('YELLOW')}{db_name} is an invalid DB. Must be one of:"
+            f" {db_names}{xterm('X')}"
+        )
+        return block
+
+    tdb.db_name = db_name
+
+    #; Get actors from DB
+    so = Entity(label='actor')
+    actors = tdb.find_things(so)
+
+    #; Parse Results
+    all_names = {}
+    for actor in actors:
+        actor_name = actor.get_attributes('actor-name')[0].value
+        if actor_name not in all_names:
+            all_names[actor_name] = actor_name
+        aliases = actor.get_attributes('alias')
+        for alias in aliases:
+            if alias.value not in all_names:
+                all_names[alias.value] = actor_name
+    #; Return as valid options
+    _log.debug(f"{xterm('CYAN')}Found matching names: \n{pformat(all_names)}{xterm('X')}")
+    for name in all_names:
+        if input.lower() in name.lower():
+            if name.lower() == all_names[name].lower():
+                txt = f"{name}"
+            else:
+                txt = f"{name} ({all_names[name]})"
+            opt = {
+                'text': {
+                    'type': 'plain_text',
+                    'text': txt,
+                },
+                'value': all_names[name],
+            }
+            block['options'].append(opt)
+
+    tdb.close_client()
+    return block
+
+async def opts_add_thing_get_tags(
+    payload: Dict = None,
+    user: User = None,
+)->Dict:
+    block = {
+        'options': [],
+    }
+    view = payload['view']
+    set_vals = view['state']['values']
+    input = payload['value']
+    db_name = None
+    _log.debug(f"{xterm('CYAN')}Checking DBs for actors containing {input}...{xterm('X')}")
+    for _, field_dat in set_vals.items():
+        if 'select_db' in field_dat:
+            db_name = field_dat['select_db']['selected_option'].get('value')
+        '''
+        if 'add_thing_hunt-service' in field_dat:
+            hunt_service = field_dat['add_thing_hunt-service']['selected_option'].get('value')
+        '''
+    #~ Check DB
+    if db_name is None:
+        _log.warning(
+            f"{xterm('YELLOW')}DB selection requried for actor lookup{xterm('X')}"
+        )
+        return block
+    tdb:TypeDBClient = get_tdb()
+    db_names = tdb.get_all_dbs(readable=True)
+    if db_name not in db_names:
+        _log.warning(
+            f"{xterm('YELLOW')}{db_name} is an invalid DB. Must be one of:"
+            f" {db_names}{xterm('X')}"
+        )
+        return block
+
+    tdb.db_name = db_name
+
+    #; Get actors from DB
+    so = Entity(label='meta-tags')
+    meta_tags = tdb.find_things(so)
+    #; there SHOULD only be one meta-tags entity, but you never know...
+    all_tags = []
+    for mt in meta_tags:
+        tagattrs = mt.get_attributes('tag')
+        for ta in tagattrs:
+            if ta.value not in all_tags:
+                all_tags.append(ta.value)
+    _log.debug(f"{xterm('CYAN')}Found tags: \n{pformat(all_tags)}{xterm('X')}")
+    for tag in all_tags:
+        if input.lower() in tag.lower():
+            opt = {
+                'text': {
+                    'type': 'plain_text',
+                    'text': tag,
+                },
+                'value': tag,
+            }
+            block['options'].append(opt)
+    tdb.close_client()
+    return block
+
+
 
 #~######################################
 #~ Parse MOJO CMDs
@@ -1305,6 +1440,49 @@ async def slackevent_conf(
     return True #; this will be changed to 'response'
 
 
+async def slackoptions_conf(
+    req: Dict = None,
+    user: User = None,
+):
+    plugin:SlackClient = await get_plugin()
+    # data = json.loads(payload)
+    # // data = req['payload']
+    data = json.loads(req['payload'])
+    _log.debug(f"{xterm('CYAN')}{pformat(data)}{xterm('X')}")
+    action_id = data['action_id']
+    # // view = data['view']
+    # // state = view['state']
+    _log.debug(f"{xterm('CYAN')}Received action_id: {action_id}{xterm('X')}")
+    #@ populate options
+    opts = {
+        'add_thing_get_actors': (opts_add_thing_get_actors, role_hunter),
+        'add_thing_get_tags': (opts_add_thing_get_tags, role_hunter),
+    }
+    #! Mimic mojocmd_conf opts/permissions checking process
+    if action_id in opts:
+        func_perms = opts[action_id]
+        try:
+            _log.debug(f"Checking user.role {user.role} against roles: {func_perms[1]}")
+            await check_role(user, func_perms[1])
+        except HTTPException as e:
+            # // await plugin.unauthorized_resp(trigger_id=mojo.trigger_id)
+            _log.error(
+                f"{xterm('RED')}Unauthorized user: {user.slack_id} with role "
+                f"{user.role}. Requires {func_perms[1]} or higher.{xterm('X')}"
+            )
+            raise
+        except Exception as e:
+            raise
+        try:
+            #; Run the options-getting function
+            resp = await func_perms[0](data, user)
+        except Exception as e:
+            _log.error(
+                f"{xterm('RED')}Failed running {func_perms[0]}: {e}{xterm('X')}"
+            )
+
+    return resp
+
 #&##############################################################################
 #& API Endpoint-Facing Functions
 #&##############################################################################
@@ -1389,6 +1567,36 @@ async def event_handler(
 
     job = queue.enqueue_call(
         slackevent_conf,
+        args=[resp, user],
+        timeout=60*5,
+        result_ttl=60*60,
+    )
+
+    response = await two_sec_grace(worker_name, job.id, slack_format=True)
+
+    return response
+
+async def options_handler(
+    request: Request = None,
+    user: User = None,
+):
+    worker_name = await get_available_worker('slack_client')
+    queue = wqm.conf[worker_name]['queue']
+    _log.debug(f"Enqueuing options_handler")
+    _log.debug(f"request: {request}")
+    _log.debug(f"user: {user}")
+    # // _log.debug(f"form: {pformat(await request.form())}")
+
+    resp = {}
+    resp['headers'] = {key: val for  key, val in request.headers.items()}
+    # // resp['body'] = await request.body()
+    # // resp['body'] = resp['body'].decode('utf-8')
+    form = await request.form()
+    payload = form.get('payload')
+    resp['payload'] = payload
+
+    job = queue.enqueue_call(
+        slackoptions_conf,
         args=[resp, user],
         timeout=60*5,
         result_ttl=60*60,

@@ -392,6 +392,56 @@ def unauthorized_modal():
     }
 '''
 
+def _get_actors()->Dict:
+
+    block = {
+        'type': 'section',
+        # // 'block_id': 'test-tag-section123',
+        'text': {
+            'type': 'mrkdwn',
+            'text': 'Actors',
+        },
+        'accessory': {
+            'action_id': 'add_thing_get_actors',
+            'type': 'multi_external_select',
+            'placeholder': {
+                'type': 'plain_text',
+                'text': 'Select related actors',
+            },
+            'min_query_length': 3,
+        }
+    }
+
+    return block
+
+def _get_hunt_endpoints()->Dict:
+    block = {}
+    return block
+
+def _get_hunt_services()->Dict:
+    block = {}
+    return block
+
+def _get_tags()->Dict:
+    block = {
+        'type': 'section',
+        # // 'block_id': 'test-tag-section123',
+        'text': {
+            'type': 'mrkdwn',
+            'text': 'Tags',
+        },
+        'accessory': {
+            'action_id': 'add_thing_get_tags',
+            'type': 'multi_external_select',
+            'placeholder': {
+                'type': 'plain_text',
+                'text': 'Select related tags',
+            },
+            'min_query_length': 3,
+        },
+    }
+    return block
+
 def add_user_modal(
     userval: str = None,
 ):
@@ -658,12 +708,12 @@ def add_thing_modal(
     #; List of meta attributes that are universally required
     required = [
         'actor-name', 'confidence', 'frequency',
-        'hunt-active', 'hunt-endpoint', 'hunt-service', 'hunt-string',
+        'hunt-endpoint', 'hunt-service', 'hunt-string',
     ]
     #; List of attributes that should default to right now
     now_dates = ['date-seen', 'date-discovered']
     #; entities/relations that should have a limited number of fields available
-    special_cases = {
+    special_ents = {
         'hunt': {
             'keyattr': 'hunt-name',
             'owns': [
@@ -672,6 +722,14 @@ def add_thing_modal(
                 'confidence', 'note', 'tag', 'actor-name'
             ]
         }
+    }
+    #; attributes that have preset values
+    special_attrs = {
+        'actor-name': _get_actors(),
+        # 'hunt-service': _get_hunt_services(),
+        #; can hunt-endpoint be populated based on hunt-service value?
+        # 'hunt-endpoint': block_get_hunt_endpoints(),
+        'tag': _get_tags(),
     }
 
     #; Available Databases - Tuple of text,value
@@ -691,8 +749,8 @@ def add_thing_modal(
 
     schema = None
     #; If the label is a "special case", use fields defined above
-    if args.label in special_cases:
-        schema = special_cases[args.label]
+    if args.label in special_ents:
+        schema = special_ents[args.label]
 
     if schema is None:
         #; Otherwise get the schema from led.schema
@@ -726,6 +784,11 @@ def add_thing_modal(
         if value_schema is None:
             _log.error(f"{xterm('RED')}Could not find "
                        f"attribute type {attr}{xterm('X')}")
+            continue
+        #@ Check for special attributes
+        if attr in special_attrs:
+            input = special_attrs[attr]
+            blocks.append(input)
             continue
         value_type = value_schema.get('value_type')
         #@ Set Defaults
