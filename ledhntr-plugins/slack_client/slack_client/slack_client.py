@@ -1037,16 +1037,45 @@ class SlackClient(ConnectorPlugin):
             _log.error(f"initial_comment: {initial_comment}{xterm('X')}")
             raise
 
+    #&##########################################################################
+    #& HANDLE MODALs
+    #&##########################################################################
+
+    @check_client
+    async def views_update(
+        self,
+        view: dict = None,
+        external_id: Optional[str] = None,
+        view_id: Optional[str] = None,
+        hash: Optional[str] = None,
+        **kwargs
+    )->AsyncSlackResponse:
+        try:
+            resp = await self.client.views_update(
+                view=view,
+                external_id=external_id,
+                view_id=view_id,
+                hash=hash,
+                **kwargs
+            )
+        except SlackApiError as e:
+            raise
+        except Exception as e:
+            raise
+        return resp
+
     @check_client
     async def views_open(
         self,
         trigger_id: str = None,
         view: List = None,
+        **kwargs
     )->None:
         try:
             await self.client.views_open(
                 trigger_id=trigger_id,
-                view=view
+                view=view,
+                **kwargs
             )
         except SlackApiError as e:
             raise

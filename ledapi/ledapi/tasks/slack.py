@@ -46,8 +46,11 @@ from ledapi.models import(
     ConmanObject,
     MOJOCMD,
     UserModel,
+    add_attribute_label,
+    add_attribute_value,
     add_thing_modal,
     add_user_modal,
+    get_add_attribute,
     new_hits,
     role_admin,
     role_dbadmin,
@@ -111,16 +114,7 @@ async def slack_post_message(
 #~ Populate External Actor Opts
 #~######################################
 
-async def opts_add_thing_get_actors(
-    payload: Dict = None,
-    user: User = None,
-)->Dict:
-    block = {
-        'options': [],
-    }
-    view = payload['view']
-    set_vals = view['state']['values']
-    input = payload['value']
+async def check_db(set_vals:Dict = None)->Union[TypeDBClient,False]:
     db_name = None
     _log.debug(f"{xterm('CYAN')}Checking DBs for actors containing {input}...{xterm('X')}")
     for _, field_dat in set_vals.items():
@@ -135,7 +129,7 @@ async def opts_add_thing_get_actors(
         _log.warning(
             f"{xterm('YELLOW')}DB selection requried for actor lookup{xterm('X')}"
         )
-        return block
+        return False
     tdb:TypeDBClient = get_tdb()
     db_names = tdb.get_all_dbs(readable=True)
     if db_name not in db_names:
@@ -143,9 +137,25 @@ async def opts_add_thing_get_actors(
             f"{xterm('YELLOW')}{db_name} is an invalid DB. Must be one of:"
             f" {db_names}{xterm('X')}"
         )
-        return block
+        return False
 
     tdb.db_name = db_name
+    return tdb
+
+async def opts_add_thing_get_actors(
+    payload: Dict = None,
+    user: User = None,
+)->Dict:
+    block = {
+        'options': [],
+    }
+    view = payload['view']
+    set_vals = view['state']['values']
+    input = payload['value']
+    #; Check if the DB is set and if set, that it's valid.
+    tdb = await check_db(set_vals)
+    if not tdb:
+        return block
 
     #; Get actors from DB
     so = Entity(label='actor')
@@ -191,31 +201,10 @@ async def opts_add_thing_get_tags(
     view = payload['view']
     set_vals = view['state']['values']
     input = payload['value']
-    db_name = None
-    _log.debug(f"{xterm('CYAN')}Checking DBs for actors containing {input}...{xterm('X')}")
-    for _, field_dat in set_vals.items():
-        if 'select_db' in field_dat:
-            db_name = field_dat['select_db']['selected_option'].get('value')
-        '''
-        if 'add_thing_hunt-service' in field_dat:
-            hunt_service = field_dat['add_thing_hunt-service']['selected_option'].get('value')
-        '''
-    #~ Check DB
-    if db_name is None:
-        _log.warning(
-            f"{xterm('YELLOW')}DB selection requried for actor lookup{xterm('X')}"
-        )
+    #; Check if the DB is set and if set, that it's valid.
+    tdb = await check_db(set_vals)
+    if not tdb:
         return block
-    tdb:TypeDBClient = get_tdb()
-    db_names = tdb.get_all_dbs(readable=True)
-    if db_name not in db_names:
-        _log.warning(
-            f"{xterm('YELLOW')}{db_name} is an invalid DB. Must be one of:"
-            f" {db_names}{xterm('X')}"
-        )
-        return block
-
-    tdb.db_name = db_name
 
     #; Get actors from DB
     so = Entity(label='meta-tags')
@@ -241,7 +230,42 @@ async def opts_add_thing_get_tags(
     tdb.close_client()
     return block
 
-
+async def opts_get_attr_labels(
+    payload: Dict = None,
+    user: User = None,
+)->Dict:
+    block = {
+        'options': [],
+    }
+    view = payload['view']
+    set_vals = view['state']['values']
+    input = payload['value']
+    #; Check if the DB is set and if set, that it's valid.
+    tdb = await check_db(set_vals)
+    if not tdb:
+        return block
+    tdb.close_client() #; we're not using TDB in this case
+    #; Get thing we're processing from title
+    title = view.get('title')
+    add_thing = title.get('text').split(' ')[-1].lower()
+    ent = led.schema['entity'].get(add_thing)
+    if ent is None:
+        ent = led.schema['relation'].get(add_thing)
+    ent_obj = Entity(label=add_thing)
+    all_attributes = ent['owns']
+    for attr in all_attributes:
+        if attr == ent_obj.keyattr:
+            continue
+        if input.lower() in attr.lower():
+            opt = {
+                'text': {
+                    'type': 'plain_text',
+                    'text': attr,
+                },
+                'value': attr,
+            }
+            block['options'].append(opt)
+    return block
 
 #~######################################
 #~ Parse MOJO CMDs
@@ -814,10 +838,140 @@ async def mojo_check_schedules(
         text,
         blocks,
     )
+
+
 #~######################################
 #~ slackaction_no_action
 #~######################################
 async def slackaction_no_action(plugin, payload, user): return True
+
+#~######################################
+#~ slackation_get_attr_labels
+#~######################################
+
+async def slackation_get_attr_labels(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->bool:
+    """Handle when an attribute label is selected and an input needs to be created
+
+    :param plugin: instance of SlackClient plugin, defaults to None
+    :type plugin: SlackClient, optional
+    :param payload: Payload sent when selecting a label after Add New Attribute,
+        defaults to None
+    :type payload: Dict, optional
+    :param user: User initiating the request, defaults to None
+    :type user: User, optional
+    :return: True if successful, False if failed
+    :rtype: bool
+    """
+    #; Get the action
+    actions = payload['actions']
+    if not actions:
+        _log.error(f"{xterm('RED')}No valid action was seen: {actions}{xterm('X')}")
+        return False
+    #; Clone the existing view properties
+    view_id = payload['view']['id']
+    hash = payload['view']['hash']
+    copy_keys = [
+        'blocks', 'callback_id',  'submit', 'title', 'type',
+    ]
+    view = {}
+    for key in copy_keys:
+        view[key] = payload['view'].get(key)
+    #; Get the label
+    label = payload['actions'][0]['selected_option'].get('value')
+    if not label:
+        _log.error(f"{xterm('RED')}Invalid selected_option: "
+                   f"{pformat(payload['actions'][0])}{xterm('X')}")
+        return False
+    #; Get the value_type
+    label_schema = led.schema['attribute'].get(label)
+    if label_schema is None:
+        _log.error(f"{xterm('RED')}No schema available for {label}{xterm('X')}")
+        return False
+    value_type = label_schema.get('value_type')
+    if value_type is None:
+        _log.error(f"{xterm('RED')}No value_type found for {label}.{xterm('X')}")
+        return False
+    new_input = add_attribute_value(label=label, value_type=value_type)
+
+    #; Update the view with a new input
+    #; Remove the label we just selected and add the fresh input
+    del view['blocks'][-1]
+    #; Add the new input
+    view['blocks'].append(new_input)
+    #; Add back in the 'Add Attribute' button
+    view['blocks'].append(get_add_attribute())
+    #! Check if block count is above a certain threshold, then potentially
+    #! remove the 'add new attribute' button as well.
+    result = None
+    _log.debug(f"{xterm('CYAN')}Sending view: {pformat(view)}{xterm('X')}")
+    try:
+        result = await plugin.views_update(
+            view=view,
+            view_id=view_id,
+            hash=hash,
+        )
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed updating view: {e}{xterm('X')}")
+    if result:
+        return True
+    return False
+
+#~######################################
+#~ slackaction_add_new_attribute
+#~######################################
+
+async def slackaction_add_new_attribute(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->bool:
+    """handle when Add New Attribute button is clicked
+
+    :param plugin: instance of SlackClient plugin, defaults to None
+    :type plugin: SlackClient, optional
+    :param payload: Payload sent when clicking Add New Attribute, defaults to None
+    :type payload: Dict, optional
+    :param user: User initiating the request, defaults to None
+    :type user: User, optional
+    :return: True if successful, False if failed
+    :rtype: bool
+    """
+    #; Clone the existing view properties
+    view_id = payload['view']['id']
+    hash = payload['view']['hash']
+    copy_keys = [
+        'blocks', 'callback_id',  'submit', 'title', 'type',
+    ]
+    view = {}
+    for key in copy_keys:
+        view[key] = payload['view'].get(key)
+    #; Remove focus-on-load from all other blocks
+    for block in view['blocks']:
+        if block.get('element') and block.get('element').get('focus_on_load'):
+            block['element']['focus_on_load'] = False
+        elif block.get('accessory') and block.get('accessory').get('focus_on_load'):
+            block['accessory']['focus_on_load'] = False
+    #; Update the view with a new input
+    new_attr_label = add_attribute_label()
+    view['blocks'].pop() #; Remove the 'add attribute' button
+    view['blocks'].append(new_attr_label) #; Add the new label
+    result = None
+    _log.debug(f"{xterm('CYAN')}Sending view: {pformat(view)}{xterm('X')}")
+    try:
+        result = await plugin.views_update(
+            view=view,
+            view_id=view_id,
+            hash=hash,
+        )
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed updating view: {e}{xterm('X')}")
+    if result:
+        return True
+    return False
 
 #~######################################
 #~ slackation_set_confidence_modal
@@ -1279,10 +1433,12 @@ async def slackaction_conf(
 
     opts = {
         'block_actions':{
+            'add_new_attribute': (slackaction_add_new_attribute, role_hunter),
             "open_add_user_modal": (slackaction_open_add_user_modal, role_dbadmin),
             "check_job_status": (slackaction_check_job_status, role_everyone),
             #. role_everyone can open the dialog, but only con_man can change the confidence
             "set_confidence_modal": (slackation_set_confidence_modal, role_everyone),
+            'get_attr_labels': (slackation_get_attr_labels, role_hunter),
             "no_action": (slackaction_no_action, role_everyone)
         },
         'view_submission':{
@@ -1457,8 +1613,8 @@ async def slackoptions_conf(
     opts = {
         'add_thing_get_actors': (opts_add_thing_get_actors, role_hunter),
         'add_thing_get_tags': (opts_add_thing_get_tags, role_hunter),
+        'get_attr_labels': (opts_get_attr_labels, role_hunter),
     }
-    #! Mimic mojocmd_conf opts/permissions checking process
     if action_id in opts:
         func_perms = opts[action_id]
         try:
@@ -1480,6 +1636,9 @@ async def slackoptions_conf(
             _log.error(
                 f"{xterm('RED')}Failed running {func_perms[0]}: {e}{xterm('X')}"
             )
+    else:
+        _log.error(f"{xterm('RED')}No actions specified for {action_id}{xterm('X')}")
+        resp = None
 
     return resp
 

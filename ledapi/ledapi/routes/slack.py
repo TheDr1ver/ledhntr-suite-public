@@ -129,10 +129,11 @@ async def slackaction_ep(
     #! IT'S LIKELY BECAUSE YOUR BLOCKS + TEXT IS TOO DAMN LONG!
     #! THERE'S LITERALLY NO ERROR MESSAGE THAT WARNS YOU ABOUT THIS, IT JUST
     #! SENDS 0-BYTE REQUESTS TO YOUR SERVER!
-    '''
+
     resp = {'headers': None, 'body': None}
     resp['headers'] = {key: val for  key, val in request.headers.items()}
-    # _log.info(f"Headers: \n{pformat(headers)}")
+    _log.debug(f"{xterm('CYAN')}Headers: \n{pformat(resp['headers'])}{xterm('X')}")
+    '''
     resp['body'] = await request.body()
     resp['body'] = resp['body'].decode('utf-8')
     # resp['body'] = request.json()
@@ -236,7 +237,7 @@ async def slackevent_ep(
 #~##########################
 
 @router.post("/slack/options")
-async def slackevent_ep(
+async def slackoptions_ep(
     request: Request,
     # // user: User = Depends(dep_check_user_role_by_slack(role_everyone)),
 ):

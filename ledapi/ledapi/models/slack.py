@@ -414,6 +414,25 @@ def _get_actors()->Dict:
 
     return block
 
+def get_add_attribute()->Dict:
+    block = {
+        'block_id': 'add_new_attribute_block',
+        'type': 'actions',
+        'elements': [
+            {
+                'type': 'button',
+                'text': {
+                    'type': 'plain_text',
+                    'text': ':heavy_plus_sign: Add New Attribute',
+                    'emoji': True,
+                },
+                'value': 'add_new_attribute',
+                'action_id': 'add_new_attribute',
+            }
+        ]
+    }
+    return block
+
 def _get_hunt_endpoints()->Dict:
     block = {}
     return block
@@ -441,6 +460,119 @@ def _get_tags()->Dict:
         },
     }
     return block
+
+def add_attribute_label()->Dict:
+    block = {
+        'type': 'section',
+        'text': {
+            'text': '*Attribute Label*',
+            'type': 'mrkdwn',
+        },
+        'accessory': {
+            'action_id': 'get_attr_labels',
+            'type': 'external_select',
+            'placeholder': {
+                'type': 'plain_text',
+                'text': 'Select a label',
+                'emoji': True,
+            },
+            'min_query_length': 2,
+            'focus_on_load': True,
+        }
+    }
+    return block
+
+def add_attribute_value(
+    label: str = None,
+    value_type: str = None
+)->Dict:
+    """Return section block based on value_type fed
+
+    :param value_type: string, double, boolean, or datetime, defaults to None
+    :type value_type: str, optional
+    :return: Section block containing appropriate input widget
+    :rtype: Dict
+    """
+
+    #@ Set Configs
+    #; Which attributes require multi-line inputs
+    multi_line_attrs = ['http-html', 'hunt-string']
+    #; Which checkboxes should be True by default?
+    chk_true = ['hunt-active']
+    #; What should the initial value of these ints be?
+    init_int = {
+        'confidence': 0,
+        'frequency': 24,
+    }
+    #; Any numbers that should have min/max values?
+    min_max = {
+        'confidence': (-1,3),
+        'frequency': (0,None),
+    }
+    #; List of meta attributes that are universally required
+    required = [
+        'actor-name', 'confidence', 'frequency',
+        'hunt-endpoint', 'hunt-service', 'hunt-string',
+    ]
+    #; List of attributes that should default to right now
+    now_dates = ['date-seen', 'date-discovered']
+
+    #@ Set Defaults
+    #; Checkbox True
+    if label in chk_true:
+        initial_options = [(label, 'on')]
+    else:
+        initial_options = []
+    #; initial integer value
+    if label in init_int:
+        initial_value = init_int[label]
+    else:
+        initial_value = None
+    #; min/max values
+    if label in min_max:
+        min_value = min_max[label][0]
+        max_value = min_max[label][1]
+    else:
+        min_value = None
+        max_value = None
+    #; now dates
+    if label in now_dates:
+        initial_date_time = int(datetime.now(timezone.utc).timestamp())
+    else:
+        initial_date_time = None
+
+    if value_type == 'boolean':
+        input = block_checkbox(
+            action_id = f"add_attr_{label}",
+            label = label,
+            options = [(label, 'on')],
+            initial_options = initial_options,
+            optional = label not in required,
+        )
+    elif value_type == 'double':
+        input = block_number(
+            action_id = f"add_attr_{label}",
+            label = label,
+            initial_value = initial_value,
+            min_value = min_value,
+            max_value = max_value,
+            optional = label not in required,
+        )
+    elif value_type == 'datetime':
+        input = block_datetime_picker(
+            action_id = f"add_attr_{label}",
+            label = label,
+            initial_date_time = initial_date_time,
+            optional = label not in required,
+        )
+    else: #@ implied value_type == 'string'
+        input = block_plain_text_input(
+            action_id = f"add_thing_{label}",
+            label = label,
+            multiline = label in multi_line_attrs,
+            optional = label not in required,
+        )
+    return input
 
 def add_user_modal(
     userval: str = None,
@@ -691,38 +823,22 @@ def add_thing_modal(
     all_dbs = tdb.get_all_dbs(readable=True)
 
     db_opts = []
-    #; Which attributes require multi-line inputs
-    multi_line_attrs = ['http-html', 'hunt-string']
-    #; Which checkboxes should be True by default?
-    chk_true = ['hunt-active']
-    #; What should the initial value of these ints be?
-    init_int = {
-        'confidence': 0,
-        'frequency': 24,
-    }
-    #; Any numbers that should have min/max values?
-    min_max = {
-        'confidence': (-1,3),
-        'frequency': (0,None),
-    }
-    #; List of meta attributes that are universally required
-    required = [
-        'actor-name', 'confidence', 'frequency',
-        'hunt-endpoint', 'hunt-service', 'hunt-string',
+
+    #; Universal "meta" attributes that could/should apply to every entity/relation
+    #; Leaving out 'ref-link' for now to save space.
+    universal_meta = [
+        'actor-name', 'confidence', 'date-discovered', 'frequency', 'note', 'tag'
     ]
-    #; List of attributes that should default to right now
-    now_dates = ['date-seen', 'date-discovered']
+
     #; entities/relations that should have a limited number of fields available
     special_ents = {
         'hunt': {
             'keyattr': 'hunt-name',
-            'owns': [
-                'hunt-name', 'hunt-active', 'hunt-endpoint', 'hunt-service',
-                'hunt-string', 'frequency',
-                'confidence', 'note', 'tag', 'actor-name'
-            ]
+            'owns': ['hunt-name', 'hunt-active', 'hunt-endpoint', 'hunt-service',
+                'hunt-string',]
         }
     }
+
     #; attributes that have preset values
     special_attrs = {
         'actor-name': _get_actors(),
@@ -750,7 +866,9 @@ def add_thing_modal(
     schema = None
     #; If the label is a "special case", use fields defined above
     if args.label in special_ents:
+        #; set keyattr and extend universal_meta
         schema = special_ents[args.label]
+        universal_meta = special_ents[args.label]['owns'] + universal_meta
 
     if schema is None:
         #; Otherwise get the schema from led.schema
@@ -773,11 +891,15 @@ def add_thing_modal(
             label = schema['keyattr'],
             initial_value = args.value,
             focus_on_load = True,
+            block_id = 'keyattr',
         )
         blocks.append(input)
 
-    for attr in schema['owns']:
-        if attr == 'comboid' or attr == schema['keyattr']:
+    for attr in universal_meta:
+        #@ Check for special attributes
+        if attr in special_attrs:
+            input = special_attrs[attr]
+            blocks.append(input)
             continue
         #@ Get value_type
         value_schema = led.schema['attribute'].get(attr)
@@ -785,70 +907,15 @@ def add_thing_modal(
             _log.error(f"{xterm('RED')}Could not find "
                        f"attribute type {attr}{xterm('X')}")
             continue
-        #@ Check for special attributes
-        if attr in special_attrs:
-            input = special_attrs[attr]
-            blocks.append(input)
-            continue
         value_type = value_schema.get('value_type')
-        #@ Set Defaults
-        #; Checkbox True
-        if attr in chk_true:
-            initial_options = [(attr, attr)]
-        else:
-            initial_options = []
-        #; initial integer value
-        if attr in init_int:
-            initial_value = init_int[attr]
-        else:
-            initial_value = None
-        #; min/max values
-        if attr in min_max:
-            min_value = min_max[attr][0]
-            max_value = min_max[attr][1]
-        else:
-            min_value = None
-            max_value = None
-        #; now dates
-        if attr in now_dates:
-            initial_date_time = int(datetime.now(timezone.utc).timestamp())
-        else:
-            initial_date_time = None
         #@ Handle different attribute input types
-        if value_type == 'boolean':
-            input = block_checkbox(
-                action_id = f"add_thing_{attr}",
-                label = attr,
-                options = [(attr, attr)],
-                initial_options = initial_options,
-                optional = attr not in required,
-            )
-        elif value_type == 'double':
-            input = block_number(
-                action_id = f"add_thing_{attr}",
-                label = attr,
-                initial_value = initial_value,
-                min_value = min_value,
-                max_value = max_value,
-                optional = attr not in required,
-            )
-        elif value_type == 'datetime':
-            input = block_datetime_picker(
-                action_id = f"add_thing_{attr}",
-                label = attr,
-                initial_date_time = initial_date_time,
-                optional = attr not in required,
-            )
-        else: #@ implied value_type == 'string'
-            input = block_plain_text_input(
-                action_id = f"add_thing_{attr}",
-                label = attr,
-                multiline = attr in multi_line_attrs,
-                optional = attr not in required,
-            )
+        input = add_attribute_value(label=attr, value_type=value_type)
         #; add input to main blocks.
-        if input:
-            blocks.append(input)
+        blocks.append(input)
+
+    #@ + Add New Attribute Block
+    #! There should be a check for how long the modal can be before this is added
+    blocks.append(get_add_attribute())
 
     mymodal = {
         "type": "modal",
