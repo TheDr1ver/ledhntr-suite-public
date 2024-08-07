@@ -402,7 +402,7 @@ def _get_actors()->Dict:
             'text': 'Actors',
         },
         'accessory': {
-            'action_id': 'add_thing_get_actors',
+            'action_id': 'add_thing_get_actor-name',
             'type': 'multi_external_select',
             'placeholder': {
                 'type': 'plain_text',
@@ -433,12 +433,37 @@ def get_add_attribute()->Dict:
     }
     return block
 
-def _get_hunt_endpoints()->Dict:
-    block = {}
+def _get_hunt_endpoints(endpoints:List[str] = None)->Dict:
+    #. This will need to be populated with available endpoints
+    #. after hunt_services is selected.
+    block = {
+        'type': 'section',
+        'text': {
+            'type': 'mrkdwn',
+            'text': 'Hunt Endpoints'
+        }
+    }
     return block
 
 def _get_hunt_services()->Dict:
-    block = {}
+    #. Populate with enabled HNTR plugins
+    block = {
+        'type': 'section',
+        'text': {
+            'type': 'mrkdwn',
+            'text': 'Hunt Services',
+        },
+        'accessory': {
+            'action_id': 'add_thing_get_hunt_services',
+            'type': 'external_select',
+            'placeholder': {
+                'type': 'plain_text',
+                'text': 'Select a hunt service',
+                'emoji': True,
+            },
+            'min_query_length': 2,
+        },
+    }
     return block
 
 def _get_tags()->Dict:
@@ -450,7 +475,7 @@ def _get_tags()->Dict:
             'text': 'Tags',
         },
         'accessory': {
-            'action_id': 'add_thing_get_tags',
+            'action_id': 'add_thing_get_tag',
             'type': 'multi_external_select',
             'placeholder': {
                 'type': 'plain_text',
@@ -509,13 +534,17 @@ def add_attribute_value(
         'confidence': (-1,3),
         'frequency': (0,None),
     }
-    #; List of meta attributes that are universally required
+    #; List of meta attributes that are universally required if they exist
     required = [
         'actor-name', 'confidence', 'frequency',
-        'hunt-endpoint', 'hunt-service', 'hunt-string',
+        'hunt-endpoint', 'hunt-service', 'hunt-string', 'date-seen',
     ]
     #; List of attributes that should default to right now
     now_dates = ['date-seen', 'date-discovered']
+    #; String min/max defaults
+    str_min_max = {
+        'ip-address': (7,45)
+    }
 
     #@ Set Defaults
     #; Checkbox True
@@ -535,6 +564,13 @@ def add_attribute_value(
     else:
         min_value = None
         max_value = None
+    #; min/max lengths
+    if label in str_min_max:
+        min_length = str_min_max[label][0]
+        max_length = str_min_max[label][1]
+    else:
+        min_length = None
+        max_length = None
     #; now dates
     if label in now_dates:
         initial_date_time = int(datetime.now(timezone.utc).timestamp())
@@ -570,6 +606,8 @@ def add_attribute_value(
             action_id = f"add_thing_{label}",
             label = label,
             multiline = label in multi_line_attrs,
+            min_length=min_length,
+            max_length=max_length,
             optional = label not in required,
         )
     return input
@@ -819,6 +857,8 @@ def add_thing_modal(
 )->Dict:
     _log.debug(f"Building add_thing modal...")
     blocks = []
+    # // container = dumps(payload['container'])
+    # // _log.debug(f"{xterm('CYAN')}MOJO: {pformat(mojo)}{xterm('X')}")
     tdb: TypeDBClient = get_tdb()
     all_dbs = tdb.get_all_dbs(readable=True)
 
@@ -827,7 +867,7 @@ def add_thing_modal(
     #; Universal "meta" attributes that could/should apply to every entity/relation
     #; Leaving out 'ref-link' for now to save space.
     universal_meta = [
-        'actor-name', 'confidence', 'date-discovered', 'frequency', 'note', 'tag'
+        'actor-name', 'confidence', 'date-seen', 'date-discovered', 'note', 'tag'
     ]
 
     #; entities/relations that should have a limited number of fields available
@@ -925,7 +965,7 @@ def add_thing_modal(
         "submit": {"type": "plain_text", "text": "Submit"},
         # // "close": {"type": "plain_text", "text": "Cancel"},
         "blocks": blocks,
-        # // "private_metadata": container,
+        "private_metadata": mojo.channel_id,
     }
 
     return mymodal

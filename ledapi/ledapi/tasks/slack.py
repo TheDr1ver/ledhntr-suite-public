@@ -23,7 +23,7 @@ from ledhntr.data_classes import(
     Entity,
     Relation,
 )
-from ledhntr.helpers import dumps
+from ledhntr.helpers import dumps, format_date
 from ledhntr.plugins import (
     HNTRPlugin,
     ConnectorPlugin,
@@ -142,7 +142,7 @@ async def check_db(set_vals:Dict = None)->Union[TypeDBClient,False]:
     tdb.db_name = db_name
     return tdb
 
-async def opts_add_thing_get_actors(
+async def opts_add_thing_get_actor(
     payload: Dict = None,
     user: User = None,
 )->Dict:
@@ -191,7 +191,7 @@ async def opts_add_thing_get_actors(
     tdb.close_client()
     return block
 
-async def opts_add_thing_get_tags(
+async def opts_add_thing_get_tag(
     payload: Dict = None,
     user: User = None,
 )->Dict:
@@ -875,7 +875,7 @@ async def slackation_get_attr_labels(
     view_id = payload['view']['id']
     hash = payload['view']['hash']
     copy_keys = [
-        'blocks', 'callback_id',  'submit', 'title', 'type',
+        'blocks', 'callback_id',  'submit', 'title', 'type', 'private_metadata'
     ]
     view = {}
     for key in copy_keys:
@@ -944,7 +944,7 @@ async def slackaction_add_new_attribute(
     view_id = payload['view']['id']
     hash = payload['view']['hash']
     copy_keys = [
-        'blocks', 'callback_id',  'submit', 'title', 'type',
+        'blocks', 'callback_id',  'submit', 'title', 'type', 'private_metadata'
     ]
     view = {}
     for key in copy_keys:
@@ -1022,17 +1022,132 @@ async def slackaction_add_thing(
     plugin: SlackClient = None,
     payload: Dict = None,
     user: User = None,
-)->Dict:
+)->Union[Dict, False]:
     _log.debug(f"Adding thing...")
     _log.debug(f"{xterm('YELLOW')}{pformat(payload)}{xterm('X')}")
-
+    message_failed = False
     #; Parse out important values
+    label = payload['view']['title'].get('text').split(' ')[-1].lower()
+    values = payload['view']['state']['values']
+    #; Build Thing Object
+    if label in led.schema['entity']:
+        new_thing = Entity(label=label)
+    elif label in led.schema['relation']:
+        new_thing = Entity(label=label)
+    else:
+        msg = f"Invalid label: {label}"
+        _log.error(xterm('RED')+msg+xterm('X'))
+        message_failed = True
 
-    #; Run the add_thing(thing, user) task
+    for _, fieldvals in values.items():
+        if message_failed:
+            continue
+        #; Get DB Name
+        if fieldvals.get('select_db'):
+            db_name = fieldvals.get('select_db').get('selected_option').get('value')
+            continue
 
+        #; Parse Attributes
+        skip_me = ['db']
+        for field, data in fieldvals.items():
+            attr_label = field.split('_')[-1]
+            if attr_label in skip_me:
+                continue
+            if attr_label == 'keyattr':
+                attr_label = new_thing.keyattr
+            data_type = data.get('type')
+            if data_type in ['plain_text_input', 'number_input']:
+                val = data.get('value')
+                if val is None:
+                    continue
+                attr = Attribute(label=attr_label, value=val)
+                new_thing.has.append(attr)
+            elif data_type == 'static_select':
+                val = data.get('selected_option').get('value')
+                if val is None:
+                    continue
+                attr = Attribute(label=attr_label, value=val)
+                new_thing.has.append(attr)
+            elif data_type == 'multi_external_select':
+                opts = data.get('selected_options')
+                for opt in opts:
+                    val = opt.get('value')
+                    if val is None:
+                        continue
+                    attr = Attribute(label=attr_label, value=val)
+                    new_thing.has.append(attr)
+            elif data_type == 'datetimepicker':
+                if data.get('selected_date_time') is None:
+                    continue
+                val = format_date(data.get('selected_date_time'))
+                attr = Attribute(label=attr_label, value=val)
+                new_thing.has.append(attr)
+            else:
+                _log.error(
+                    f"{xterm('RED')}Unknown data type: {data_type}. "
+                    f"Skipping {attr_label}.{xterm('X')}"
+                )
+
+    #; Attach submitting user
+    new_thing.has.append(Attribute(label='user-uuid', value=user.uuid))
+
+    if not message_failed:
+        #; Get tdb client
+        tdb:TypeDBClient = get_tdb()
+        tdb.db_name = db_name
+        #; Validate database
+        if not tdb.check_db(db_name=db_name):
+            msg = f"Database {db_name} does not exist!"
+            _log.error(xterm('RED')+msg+xterm('X'))
+            message_failed = True
+
+        #; Run the add_thing(thing, user) task
+        try:
+            _log.debug(f"{xterm('CYAN')}Attempting to add thing "
+                    f"{pformat(new_thing.to_dict())}{xterm('X')}")
+            rez = tdb.add_thing(new_thing, return_things=True)
+            _log.debug(f"{xterm('CYAN')}Result: {rez}{xterm('X')}")
+        except Exception as e:
+            msg = f"Failed adding things: {e}"
+            _log.error(xterm('RED')+msg+xterm('X'))
+            message_failed = True
+
+    if message_failed:
     #; Set params for successful result or ephemeral failure message
+        #; Also set params if it failed
+        params = dict(
+            channel = payload['view']['private_metadata'],
+            text = (f"Failed adding {new_thing}. "
+                    f"Check error log."),
+            ephemeral = True,
+            blocks_verbatim = True,
+            user=user.slack_id,
+        )
+        await plugin.post_message(**params)
+        return False
 
-    #; Post the message
+    #; Otherwise, send success message to admin channel
+    params = dict(
+        channel = plugin.admin_channel,
+        text = (f"<@{payload['user']['id']}> Successfully added `{new_thing}` to "
+                # // f"`{db_name}`!\n```{rez.to_dict()}```"),
+                f"`{db_name}`!"),
+        blocks_verbatim = True,
+        user=user.slack_id,
+    )
+    await plugin.post_message(**params)
+    #; Send same message to user
+
+    params = dict(
+        channel = payload['view']['private_metadata'],
+        text = (f"Successfully added `{new_thing}` to "
+                f"`{db_name}`!\n```{rez.to_dict()}```"),
+        ephemeral = True,
+        blocks_verbatim = True,
+        user=payload['user']['id'],
+    )
+
+    await plugin.post_message(**params)
 
     return {'response_action': 'clear'}
 
@@ -1445,7 +1560,7 @@ async def slackaction_conf(
             'add_user_modal': (slackaction_submit_add_user, role_dbadmin), #do the add-user stuff
             # // #. slackaction_update_thing() lets you set confidence, add notes and tags
             # // #; 'update_thing': (slackation_update_thing, role_conman),
-            #; "add_thing": (slackaction_add_thing, role_hunter),
+            "add_thing": (slackaction_add_thing, role_hunter),
             "set_confidence": (slackaction_set_confidence, role_everyone),
             "update_thing_submit": (update_thing_submit, role_conman)
         }
@@ -1489,7 +1604,8 @@ async def slackaction_conf(
             result = await func_perms[0](plugin, payload, user)
             resp.append(result)
         except Exception as e:
-            _log.error(f"Failed running {func_perms[0]}: {e}")
+            _log.error(f"{xterm('RED')}Failed running {func_perms[0]}: {e}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
 
     #. Will also have to figure out how to properly return a list of responses.
     #. resp will probably have to be converted to a dict w/ action_id's as the keys.
@@ -1611,8 +1727,8 @@ async def slackoptions_conf(
     _log.debug(f"{xterm('CYAN')}Received action_id: {action_id}{xterm('X')}")
     #@ populate options
     opts = {
-        'add_thing_get_actors': (opts_add_thing_get_actors, role_hunter),
-        'add_thing_get_tags': (opts_add_thing_get_tags, role_hunter),
+        'add_thing_get_actor-name': (opts_add_thing_get_actor, role_hunter),
+        'add_thing_get_tag': (opts_add_thing_get_tag, role_hunter),
         'get_attr_labels': (opts_get_attr_labels, role_hunter),
     }
     if action_id in opts:

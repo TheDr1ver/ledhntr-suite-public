@@ -898,8 +898,12 @@ class SlackClient(ConnectorPlugin):
             # _log.error(f"Full error: {e}")
             _log.error(f"channel: {channel}")
             _log.error(f"text: {text}")
+            _log.error(f"blocks: {pformat(blocks)}")
             _log.error(f"thread_ts: {thread_ts}")
-            _log.error(f"blocks: {pformat(blocks)}{xterm('X')}")
+            _log.error(f"parse: {parse}")
+            for k, v in kwargs.items():
+                _log.error(f"{k}: {v}")
+            _log.error(xterm('X'))
             '''
             _log.error(f"self.client: {self.client}")
             _log.error(f"self.client.token: {self.client.token}")
