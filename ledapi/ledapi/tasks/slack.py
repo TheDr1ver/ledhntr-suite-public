@@ -699,6 +699,7 @@ async def mojo_post_news(
         if not interesting:
             _log.debug(f"{xterm('YELLOW')}nothing interesting found in {db}.{xterm('X')}")
             continue
+        """
         for thing_type, things in thing_types.items():
             text_lines = []
             data = {db: {thing_type: things}}
@@ -729,7 +730,7 @@ async def mojo_post_news(
                         text_lines.append(f"```")
                         '''
             else:
-                _log.debug(f"{tt} not in {interesting_things}")
+                _log.debug(f"{thing_type} not in {interesting_things}")
 
             # // if not text_lines:
             # //     text_lines = [f"No news from the last {args.hours_back} hours from {db}."]
@@ -748,6 +749,53 @@ async def mojo_post_news(
                 _log.error(f"{xterm('RED')}Failed posting message..: {e}")
                 _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
         # // _log.debug(f"MOJOCMD: {pformat(mojo)}")
+        """
+        text_lines = []
+        data = {db: thing_types}
+        #; Generate pretty blocks with buttons.
+        try:
+            blocks = new_hits(data)
+            # // _log.debug(f"{xterm('CYAN')}Generated blocks: \n{pformat(blocks)}{xterm('X')}")
+        except Exception as e:
+            _log.error(f"{xterm('RED')}Failed generating blocks: {e}{xterm('X')}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        text_lines.append(f"*{db}*")
+        for tt, entries in thing_types.items():
+            if tt in interesting_things:
+                something_posted = True
+                text_lines.append(f"*Type: {tt}*")
+                for e in entries:
+                    for keyval, attributes in e.items():
+                        text_lines.append(f"```{keyval}```")
+                        '''
+                        for label, values in attributes.items():
+                            text_lines.append(f"\t{label}")
+                            if isinstance(values, list):
+                                for value in values:
+                                    text_lines.append(f"\t\t{value}")
+                            elif isinstance(values, str):
+                                text_lines.append(f"\t\t{values}")
+                        text_lines.append(f"```")
+                        '''
+            else:
+                _log.debug(f"{tt} not in {interesting_things}")
+
+        # // if not text_lines:
+        # //     text_lines = [f"No news from the last {args.hours_back} hours from {db}."]
+        text = "\n".join(text_lines)
+        if not blocks:
+            blocks = None
+        try:
+            await plugin.post_message(
+                # channel=plugin.admin_channel,
+                channel=mojo.channel_id,
+                text=text,
+                blocks=blocks,
+                blocks_verbatim=True,
+            )
+        except Exception as e:
+            _log.error(f"{xterm('RED')}Failed posting message..: {e}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
 
     if not something_posted and mojo.user_id!="AUTO-MOJO":
         await plugin.post_message(
