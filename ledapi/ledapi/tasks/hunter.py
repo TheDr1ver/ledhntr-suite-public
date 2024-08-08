@@ -1,3 +1,4 @@
+import logging
 import time
 import traceback
 
@@ -67,14 +68,19 @@ async def find_active_hunts_task(
     :return: All active hunts for the given plugin in the DB
     :rtype: Dict
     """
-    _log.setLevel('INFO')
     _log.debug(f"Finding active hunts...")
     tdb = get_tdb()
     tdb.db_name = db_name
     #* Find active hunts
     hntr_plugin:HNTRPlugin = wqm.conf.get(hntr_worker_name)['_plugin']
     try:
+        low_logging = False
+        if _log.getEffectiveLevel() < logging.INFO:
+            low_logging = True
+            _log.setLevel('INFO')
         all_active_hunts = hntr_plugin.find_active_hunts(tdb, ignore_freq=forced)
+        if low_logging:
+            _log.setLevel('DEBUG')
         #* Narrow it down to only one hunt if we've explicitly provided a name
         if hunt_name and not hunt_name.lower()=='all':
             active_hunts = {}
@@ -84,13 +90,13 @@ async def find_active_hunts_task(
                         active_hunts[endpoint]=[hunt]
         else:
             active_hunts = all_active_hunts
+        _log.debug(f"{xterm('CYAN')}Found hunts: {active_hunts}{xterm('X')}")
         tdb.close_client()
     except Exception as e:
         _log.error(f"Failed finding hunts: {e}")
         _log.error(f"Traceback: {traceback.format_exc()}")
         tdb.close_client()
         raise Exception
-    _log.setLevel('DEBUG')
     return active_hunts
 
 #TODO RUN HUNT JOB2 - LOAD CACHED HUNTS FROM DISK - DEPENDS ON JOB1 SUCCESS
