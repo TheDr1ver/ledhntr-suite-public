@@ -296,10 +296,14 @@ wqm = WorkersQueueManager()
 #@ Simplify getting worker plugin
 #@##############################################################################
 
-async def get_plugin():
-    job_id = get_current_job().id
-    worker_name = get_current_job().worker_name
-    await wqm.check_config(worker_name)
+async def get_plugin(worker_name:Optional[str] = None):
+    if worker_name is None:
+        job_id = get_current_job().id
+        worker_name = get_current_job().worker_name
+    else:
+        if not len(worker_name.split('.')) > 1 :
+            worker_name+=".01"
+        await wqm.check_config(worker_name)
     plugin = wqm.conf[worker_name]['_plugin']
     _log.debug(f"{xterm('BLUE')}Job {job_id} worker_name: {worker_name} plugin: {plugin}{xterm('X')}")
     return plugin
