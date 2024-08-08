@@ -17,6 +17,36 @@ import ledhntr.helpers as helpers
 from ledhntr.plugin_loader import PluginLoader
 from ledhntr.data_classes import pretty_schema
 
+class CustomFormatter(logging.Formatter):
+    # XTERM escape codes
+    colors = {
+        "RESET": "\033[0m",
+        "RED": "\033[31m",
+        "BOLD_RED": "\033[1;31m",
+        "GREEN": "\033[32m",
+        "BOLD_GREEN": "\033[1;32m",
+        "YELLOW": "\033[33m",
+        "BOLD_YELLOW": "\033[1;33m",
+        "BLUE": "\033[34m",
+        "BOLD_BLUE": "\033[1;34m",
+        "CYAN": "\033[36m",
+        "BOLD_CYAN": "\033[1;36m",
+        "MAGENTA": "\033[35m",
+        "BOLD_MAGENTA": "\033[1;35m",
+        "WHITE": "\033[37m",
+        "BOLD_WHITE": "\033[1;37m",
+        "BLACK": "\033[30m",
+        "BOLD_BLACK": "\033[1;30m"
+    }
+
+    def format(self, record):
+        if record.levelno == logging.ERROR:
+            record.msg = f"{self.colors['RED']}{record.msg}{self.colors['RESET']}"
+        elif record.levelno == logging.DEBUG:
+            record.msg = f"{self.colors['WHITE']}{record.msg}{self.colors['RESET']}"
+        elif record.levelno == logging.WARNING:
+            record.msg = f"{self.colors['YELLOW']}{record.msg}{self.colors['RESET']}"
+        return super().format(record)
 
 class LEDHNTR(PluginLoader):
 
@@ -111,7 +141,8 @@ class LEDHNTR(PluginLoader):
         # if log_syntax == 'json':
         #     formatter = jsonlogger.JsonFormatter
         # else:
-        formatter = logging.Formatter
+        # // formatter = logging.Formatter
+        formatter = CustomFormatter
 
         stderr_handler = logging.StreamHandler()
 
