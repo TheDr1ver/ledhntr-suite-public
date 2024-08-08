@@ -676,6 +676,8 @@ class HNTRPlugin(BasePlugin, ABC):
         #     all_hunts = [all_hunts]
 
         # Confirm everything we got back is what we expected
+        #; Just in case frequency wasn't set
+        frequency = 0
         for hunt in all_hunts:
             safe_copy = copy.deepcopy(hunt.has)
             # for attr in hunt.has:
