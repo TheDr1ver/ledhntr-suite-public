@@ -1127,13 +1127,15 @@ class SlackClient(ConnectorPlugin):
         _log = self._log
         action_ids = []
         if payload['type'] == 'block_actions':
+            term = "actions:action_id"
             for aid in payload['actions']:
                 action_id = aid['action_id']
                 action_ids.append(action_id)
         elif payload['type'] == 'view_submission':
             action_id = payload['view']['callback_id']
+            term = "view:callback_id"
             action_ids.append(action_id)
         else:
             return False
-        _log.debug(f"Retrieved action_ids {action_ids} from payload.")
+        _log.debug(f"Retrieved {term} {action_ids} from payload.")
         return action_ids

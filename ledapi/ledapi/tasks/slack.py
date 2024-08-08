@@ -51,6 +51,7 @@ from ledapi.models import(
     add_thing_modal,
     add_user_modal,
     get_add_attribute,
+    get_hunt_endpoints,
     new_hits,
     role_admin,
     role_dbadmin,
@@ -845,6 +846,99 @@ async def mojo_check_schedules(
 #~######################################
 async def slackaction_no_action(plugin, payload, user): return True
 
+async def blockaction_update_view(
+    payload: Dict = None
+)->Tuple[Dict, Union[str, bool]]:
+    """Get updated view and selection value
+
+    :param payload: Payload sent by block action when selection is chosen,
+         defaults to None
+    :type payload: Dict, required
+    :return: copied view, selection value or False if invalid
+    :rtype: Tuple[Dict, Union[str, bool]]
+    """
+
+    #; Clone the existing view properties
+    copy_keys = [
+        'blocks', 'callback_id',  'submit', 'title', 'type', 'private_metadata'
+    ]
+    view = {}
+    for key in copy_keys:
+        view[key] = payload['view'].get(key)
+    #; Get the action
+    actions = payload['actions']
+    if not actions:
+        _log.error(f"{xterm('RED')}No valid action was seen: {actions}{xterm('X')}")
+        return view, False
+    #; Get the value
+    if actions[0].get('type') == 'static_select':
+        value = actions[0]['selected_option'].get('value')
+    elif actions[0].get('type') in ['button']:
+        value = actions[0].get('value')\
+    # TODO - handle other action types
+    else:
+        value = False
+    if not value:
+        _log.error(f"{xterm('RED')}Invalid selected_option: "
+                   f"{pformat(actions[0])}{xterm('X')}")
+        return view, False
+    return view, value
+
+#~######################################
+#~ slackaction_get_hunt_endpoints
+#~######################################
+async def slackaction_get_hunt_endpoints(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->bool:
+
+    view_id = payload['view']['id']
+    hash = payload['view']['hash']
+
+    view, plugin_name = await blockaction_update_view(payload)
+    _log.debug(f"{xterm('CYAN')}Searching for {plugin_name} endpoints...{xterm('X')}")
+
+    #; Get valid endpoints and URI paths for plugin_name
+    try:
+        myplugin = led.load_plugin(plugin_name)
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed loading plugin {plugin_name}:"
+                   f" {e}{xterm('X')}")
+        return False
+    api_confs = list(myplugin.api_confs.keys())
+    endpoints = {}
+    for ac in api_confs:
+        endpoints[ac] = myplugin.api_confs[ac].to_dict().get('uri')
+
+    #; Build new block
+    new_block = get_hunt_endpoints(endpoints)
+    _log.debug(f"{xterm('CYAN')}Built new_block {pformat(new_block)}{xterm('X')}")
+
+    #; Remove block_id for hunt-endpoints if one already exists
+    removed_endpoint = [d for d in view['blocks'] if d.get('block_id') != 'hunt-endpoint']
+    view['blocks'] = removed_endpoint
+
+    #; Add new hunt-endpoint block
+    for index, d in enumerate(view['blocks']):
+        if d.get('block_id') == 'hunt-service':
+            view['blocks'].insert(index + 1, new_block)
+            break
+
+    result = None
+    # // _log.debug(f"{xterm('CYAN')}Sending view: {pformat(view)}{xterm('X')}")
+    try:
+        result = await plugin.views_update(
+            view=view,
+            view_id=view_id,
+            hash=hash,
+        )
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed updating view: {e}{xterm('X')}")
+    if result:
+        return True
+    return False
+
 #~######################################
 #~ slackation_get_attr_labels
 #~######################################
@@ -866,25 +960,11 @@ async def slackation_get_attr_labels(
     :return: True if successful, False if failed
     :rtype: bool
     """
-    #; Get the action
-    actions = payload['actions']
-    if not actions:
-        _log.error(f"{xterm('RED')}No valid action was seen: {actions}{xterm('X')}")
-        return False
-    #; Clone the existing view properties
     view_id = payload['view']['id']
     hash = payload['view']['hash']
-    copy_keys = [
-        'blocks', 'callback_id',  'submit', 'title', 'type', 'private_metadata'
-    ]
-    view = {}
-    for key in copy_keys:
-        view[key] = payload['view'].get(key)
-    #; Get the label
-    label = payload['actions'][0]['selected_option'].get('value')
+
+    view, label = await blockaction_update_view(payload)
     if not label:
-        _log.error(f"{xterm('RED')}Invalid selected_option: "
-                   f"{pformat(payload['actions'][0])}{xterm('X')}")
         return False
     #; Get the value_type
     label_schema = led.schema['attribute'].get(label)
@@ -943,12 +1023,9 @@ async def slackaction_add_new_attribute(
     #; Clone the existing view properties
     view_id = payload['view']['id']
     hash = payload['view']['hash']
-    copy_keys = [
-        'blocks', 'callback_id',  'submit', 'title', 'type', 'private_metadata'
-    ]
-    view = {}
-    for key in copy_keys:
-        view[key] = payload['view'].get(key)
+
+    view, value = await blockaction_update_view(payload)
+
     #; Remove focus-on-load from all other blocks
     for block in view['blocks']:
         if block.get('element') and block.get('element').get('focus_on_load'):
@@ -956,7 +1033,8 @@ async def slackaction_add_new_attribute(
         elif block.get('accessory') and block.get('accessory').get('focus_on_load'):
             block['accessory']['focus_on_load'] = False
     #; Update the view with a new input
-    new_attr_label = add_attribute_label()
+    label = payload['view']['title'].get('text').split(' ')[-1].lower()
+    new_attr_label = add_attribute_label(label=label)
     view['blocks'].pop() #; Remove the 'add attribute' button
     view['blocks'].append(new_attr_label) #; Add the new label
     result = None
@@ -1033,7 +1111,7 @@ async def slackaction_add_thing(
     if label in led.schema['entity']:
         new_thing = Entity(label=label)
     elif label in led.schema['relation']:
-        new_thing = Entity(label=label)
+        new_thing = Relation(label=label)
     else:
         msg = f"Invalid label: {label}"
         _log.error(xterm('RED')+msg+xterm('X'))
@@ -1090,6 +1168,15 @@ async def slackaction_add_thing(
 
     #; Attach submitting user
     new_thing.has.append(Attribute(label='user-uuid', value=user.uuid))
+
+    #; Set LEDSRC
+    ledsrc = "Slack"
+    ledsrc += f"|{payload['team'].get('id')}"
+    ledsrc += f"|{payload['user'].get('id')}"
+    channel = payload['view'].get('private_metadata')
+    if channel is not None:
+        ledsrc += f"|{channel}"
+    new_thing.has.append(Attribute(label='ledsrc', value=ledsrc))
 
     if not message_failed:
         #; Get tdb client
@@ -1554,6 +1641,7 @@ async def slackaction_conf(
             #. role_everyone can open the dialog, but only con_man can change the confidence
             "set_confidence_modal": (slackation_set_confidence_modal, role_everyone),
             'get_attr_labels': (slackation_get_attr_labels, role_hunter),
+            'get_hunt_endpoints': (slackaction_get_hunt_endpoints, role_hunter),
             "no_action": (slackaction_no_action, role_everyone)
         },
         'view_submission':{
@@ -1729,7 +1817,8 @@ async def slackoptions_conf(
     opts = {
         'add_thing_get_actor-name': (opts_add_thing_get_actor, role_hunter),
         'add_thing_get_tag': (opts_add_thing_get_tag, role_hunter),
-        'get_attr_labels': (opts_get_attr_labels, role_hunter),
+        #. removed in favor of static population
+        # // 'get_attr_labels': (opts_get_attr_labels, role_hunter),
     }
     if action_id in opts:
         func_perms = opts[action_id]

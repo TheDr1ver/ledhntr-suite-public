@@ -352,45 +352,12 @@ class SlackAction(BaseModel):
 
 #@##############################################################################
 #@### Slack Modals
+#@###
+#@### Consider rolling these into the SlackClient plugin - potentially with
+#@### their own modals.py file that gets imported by slack_client.py
+#@### it's just way easier to dev like this because the app reloads every time
+#@### I save, so I don't have to keep reinstalling the damn plugin.
 #@##############################################################################
-'''
-def invalid_command_modal(cmd: str = None):
-    return {"type": "modal",
-        "callback_id": "invalid_command",
-        "title": {
-            "type": "plain_text",
-            "text": "Invalid Command"
-        },
-        "blocks": [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f":no_entry: You have entered an invalid command: {cmd}"
-                }
-            }
-        ]
-    }
-
-
-def unauthorized_modal():
-    return {"type": "modal",
-        "callback_id": "unauthorized_modal",
-        "title": {
-            "type": "plain_text",
-            "text": "Unauthorized"
-        },
-        "blocks": [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": ":no_entry: You are not authorized"
-                }
-            }
-        ]
-    }
-'''
 
 def _get_actors()->Dict:
 
@@ -414,6 +381,49 @@ def _get_actors()->Dict:
 
     return block
 
+def get_hunt_endpoints(endpoints:Dict = None)->Dict:
+    block = {
+        'type': 'section',
+        'block_id': 'hunt-endpoint',
+        'text': {
+            'type': 'mrkdwn',
+            'text': 'Hunt Endpoint',
+        },
+        'accessory': {
+            'action_id': 'add_thing_hunt-endpoint',
+            'type': 'static_select',
+            'placeholder': {
+                'type': 'plain_text',
+                'text': 'Select an endpoint',
+                'emoji': False,
+            },
+            'options': [],
+        }
+    }
+    if endpoints is None:
+        opt = {
+            'value': '0',
+            'text': {
+                'type': 'plain_text',
+                'text': "Select a hunt-service first",
+                'emoji': False,
+            },
+        },
+        block['accessory']['options'].append(opt)
+        return block
+    for ep, uri in endpoints.items():
+        opt = {
+            'value': ep,
+            'text': {
+                'type': 'plain_text',
+                'text': f"{ep} ({uri})",
+                'emoji': False,
+            },
+        }
+        block['accessory']['options'].append(opt)
+
+    return block
+
 def get_add_attribute()->Dict:
     block = {
         'block_id': 'add_new_attribute_block',
@@ -433,37 +443,46 @@ def get_add_attribute()->Dict:
     }
     return block
 
-def _get_hunt_endpoints(endpoints:List[str] = None)->Dict:
-    #. This will need to be populated with available endpoints
-    #. after hunt_services is selected.
-    block = {
-        'type': 'section',
-        'text': {
-            'type': 'mrkdwn',
-            'text': 'Hunt Endpoints'
-        }
-    }
-    return block
-
 def _get_hunt_services()->Dict:
     #. Populate with enabled HNTR plugins
     block = {
         'type': 'section',
+        'block_id': 'hunt-service',
         'text': {
             'type': 'mrkdwn',
             'text': 'Hunt Services',
         },
         'accessory': {
-            'action_id': 'add_thing_get_hunt_services',
-            'type': 'external_select',
+            'action_id': 'get_hunt_endpoints',
+            'type': 'static_select',
             'placeholder': {
                 'type': 'plain_text',
                 'text': 'Select a hunt service',
                 'emoji': True,
             },
-            'min_query_length': 2,
+            'options': [],
         },
     }
+
+    #; Get list of HNTR plugins
+    plugin_list = led.list_plugins()
+    hntr_plugins = []
+    for plugin_name, details in plugin_list.items():
+        if 'HNTR' in details['classes']:
+            hntr_plugins.append(plugin_name)
+
+    #; Populate options
+    for plugin in hntr_plugins:
+        opt = {
+            'value': plugin,
+            'text': {
+                'type': 'plain_text',
+                'text': plugin,
+                'emoji': False,
+            },
+        }
+        block['accessory']['options'].append(opt)
+
     return block
 
 def _get_tags()->Dict:
@@ -486,7 +505,7 @@ def _get_tags()->Dict:
     }
     return block
 
-def add_attribute_label()->Dict:
+def add_attribute_label(label:str = None)->Dict:
     block = {
         'type': 'section',
         'text': {
@@ -495,16 +514,55 @@ def add_attribute_label()->Dict:
         },
         'accessory': {
             'action_id': 'get_attr_labels',
-            'type': 'external_select',
+            'type': 'static_select',
             'placeholder': {
                 'type': 'plain_text',
                 'text': 'Select a label',
                 'emoji': True,
             },
-            'min_query_length': 2,
+            'options': [],
             'focus_on_load': True,
         }
     }
+    '''
+    #; old external selector
+    'accessory': {
+        'action_id': 'get_attr_labels',
+        'type': 'external_select',
+        'placeholder': {
+            'type': 'plain_text',
+            'text': 'Select a label',
+            'emoji': True,
+        },
+        'min_query_length': 2,
+        'focus_on_load': True,
+    }
+    '''
+    schema = led.schema['entity'].get(label)
+    meta_attrs = Entity(label=label).meta_attrs
+    if schema is None:
+        schema = led.schema['relation'].get(label)
+        meta_attrs = Relation(label=label).meta_attrs
+    if schema is None:
+        return block
+    for attr_label in schema.get('owns'):
+        #; ignore keyattrs because it's already in the modal and HIGHLANDER
+        if attr_label == schema.get('keyattr'):
+            continue
+        #; ignore meta_attrs because we don't want to mess with them unless
+        #; explicitly stated through something like a special 'hunt' schema.
+        if attr_label in meta_attrs:
+            continue
+        opt = {
+            'text': {
+                'type': 'plain_text',
+                'text': attr_label,
+                'emoji': True,
+            },
+            'value': attr_label,
+        }
+        block['accessory']['options'].append(opt)
+
     return block
 
 def add_attribute_value(
@@ -874,17 +932,17 @@ def add_thing_modal(
     special_ents = {
         'hunt': {
             'keyattr': 'hunt-name',
-            'owns': ['hunt-name', 'hunt-active', 'hunt-endpoint', 'hunt-service',
-                'hunt-string',]
+            'owns': ['hunt-service', 'hunt-string',
+                'hunt-active',]
         }
     }
 
     #; attributes that have preset values
     special_attrs = {
         'actor-name': _get_actors(),
-        # 'hunt-service': _get_hunt_services(),
+        'hunt-service': _get_hunt_services(),
         #; can hunt-endpoint be populated based on hunt-service value?
-        # 'hunt-endpoint': block_get_hunt_endpoints(),
+        'hunt-endpoint': get_hunt_endpoints(),
         'tag': _get_tags(),
     }
 
