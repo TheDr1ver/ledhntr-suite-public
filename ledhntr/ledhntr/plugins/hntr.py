@@ -654,7 +654,7 @@ class HNTRPlugin(BasePlugin, ABC):
         string = Attribute(label='hunt-string')
         service = Attribute(
             label='hunt-service',
-            value=self.__class__.__name__
+            value=self.__class__.__name__.lower()
         )
         search_object = Entity(
             label="hunt",
@@ -708,7 +708,7 @@ class HNTRPlugin(BasePlugin, ABC):
                     hunt.has.remove(attr)
                     hunt.has.append(new_attr)
                 if attr.label == 'hunt-service':
-                    if not attr.value == self.__class__.__name__:
+                    if not attr.value == self.__class__.__name__.lower():
                         _log.warning(
                             f"Hunt {hunt.iid} is for {attr.value}! Skipping."
                         )
@@ -1079,7 +1079,7 @@ class HNTRPlugin(BasePlugin, ABC):
         now = datetime.now(timezone.utc)
         has = [
             Attribute(label='hunt-active', value=hunt_active),
-            Attribute(label='hunt-service', value=self.__class__.__name__),
+            Attribute(label='hunt-service', value=self.__class__.__name__.lower()),
             Attribute(label='hunt-string', value=query),
             Attribute(label='hunt-endpoint', value=endpoint),
             Attribute(label='frequency', value=frequency),
@@ -2188,7 +2188,8 @@ class HNTRPlugin(BasePlugin, ABC):
             for ep, ac in self.api_confs.items():
                 _log.info(f"self.api_confs: {self.api_confs}")
                 # _log.info(f"Checking APICOnf: {self.__class__.__name__.lower()}_{ep}")
-                if f"{self.__class__.__name__.lower()}_{ep}" == endpoint:
+                # // if f"{self.__class__.__name__.lower()}_{ep}" == endpoint:
+                if ep == endpoint:
                     api_conf = copy.deepcopy(ac)
                     break
             if api_conf is None:
