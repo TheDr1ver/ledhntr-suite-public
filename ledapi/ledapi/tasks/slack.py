@@ -647,7 +647,6 @@ async def mojo_post_news(
         'jarm',
         'ja3s',
         'ssl',
-        'http',
     ]
 
     news_results = await get_news_conf(args.hours_back)
@@ -754,7 +753,7 @@ async def mojo_post_news(
         data = {db: thing_types}
         #; Generate pretty blocks with buttons.
         try:
-            blocks = new_hits(data)
+            blocks = new_hits(data, interesting_things)
             # // _log.debug(f"{xterm('CYAN')}Generated blocks: \n{pformat(blocks)}{xterm('X')}")
         except Exception as e:
             _log.error(f"{xterm('RED')}Failed generating blocks: {e}{xterm('X')}")
@@ -786,6 +785,9 @@ async def mojo_post_news(
         if not blocks:
             blocks = None
         try:
+            if plugin is None:
+                plugin:SlackClient = await get_plugin('slack_client.01')
+                _log.debug(f"plugin: {plugin}")
             await plugin.post_message(
                 # channel=plugin.admin_channel,
                 channel=mojo.channel_id,
@@ -1165,7 +1167,7 @@ async def slackaction_add_thing(
         _log.error(xterm('RED')+msg+xterm('X'))
         message_failed = True
 
-    for _, fieldvals in values.items():
+    for block_id, fieldvals in values.items():
         if message_failed:
             continue
         #; Get DB Name
@@ -1176,7 +1178,10 @@ async def slackaction_add_thing(
         #; Parse Attributes
         skip_me = ['db']
         for field, data in fieldvals.items():
-            attr_label = field.split('_')[-1]
+            # // attr_label = field.split('_')[-1]
+            if block_id in ['db_name']:
+                continue
+            attr_label = block_id
             if attr_label in skip_me:
                 continue
             if attr_label == 'keyattr':
@@ -1194,12 +1199,15 @@ async def slackaction_add_thing(
                     continue
                 attr = Attribute(label=attr_label, value=val)
                 new_thing.has.append(attr)
-            elif data_type == 'multi_external_select':
+            elif data_type in ['checkboxes', 'multi_external_select']:
                 opts = data.get('selected_options')
                 for opt in opts:
                     val = opt.get('value')
                     if val is None:
                         continue
+                    if data_type == 'checkboxes':
+                        if val == 'on':
+                            val = True
                     attr = Attribute(label=attr_label, value=val)
                     new_thing.has.append(attr)
             elif data_type == 'datetimepicker':
@@ -1264,7 +1272,7 @@ async def slackaction_add_thing(
     #; Otherwise, send success message to admin channel
     params = dict(
         channel = plugin.admin_channel,
-        text = (f"<@{payload['user']['id']}> Successfully added `{new_thing}` to "
+        text = (f"<@{payload['user']['id']}> Successfully added `{rez}` to "
                 # // f"`{db_name}`!\n```{rez.to_dict()}```"),
                 f"`{db_name}`!"),
         blocks_verbatim = True,
@@ -1275,8 +1283,8 @@ async def slackaction_add_thing(
 
     params = dict(
         channel = payload['view']['private_metadata'],
-        text = (f"Successfully added `{new_thing}` to "
-                f"`{db_name}`!\n```{rez.to_dict()}```"),
+        text = (f"Successfully added `{rez}` to {db_name}!"),
+                # // f"`{db_name}`!\n```{rez.to_dict()}```"),
         ephemeral = True,
         blocks_verbatim = True,
         user=payload['user']['id'],
@@ -1333,6 +1341,8 @@ async def slackaction_set_confidence(
         #@ update original message with new confidence and alert group that a user changed it.
         try:
             container = json.loads(payload['view']['private_metadata'])
+            _log.debug(f"{xterm('GREEN')}container message_ts: {container['message_ts']}")
+            _log.debug(f"{xterm('GREEN')}container thread_ts: {container['thread_ts']}")
         except Exception as e:
             _log.error(f"{xterm('RED')}{pformat(payload['view']['private_metadata'])}{xterm('X')}")
             _log.error(f"{xterm('RED')}{pformat(container)}{xterm('X')}")
@@ -1340,18 +1350,52 @@ async def slackaction_set_confidence(
         #; Get the old message
         old_message = await plugin.conversations_history(
             channel=container['channel_id'],
+            oldest=container['thread_ts'],
             latest=container['message_ts'],
-            limit=1,
+            # // limit=1,
             inclusive=True,
         )
+        _log.debug(f"{xterm('GREEN')}latest: {old_message['latest']}")
+        # // _log.debug(f"{xterm('CYAN')}old_message: {pformat(old_message)}")
         #; Modify the blocks
-        old_blocks = old_message['messages'][0]['blocks']
-        updated_blocks = copy.deepcopy(old_blocks)
-        for block in old_blocks:
-            if 'accessory' in block:
-                if block['accessory']['value'] == f"{db_name}|{iid}":
-                    block_id = block['block_id']
-                    _log.debug(f"block_id={block_id}")
+        block_id = None
+        for message in old_message['messages']:
+            old_blocks = message['blocks']
+            updated_blocks = copy.deepcopy(old_blocks)
+            for block in old_blocks:
+                if 'accessory' in block:
+                    if block['accessory']['value'] == f"{db_name}|{iid}":
+                        block_id = block['block_id']
+                        _log.debug(f"block_id={block_id}")
+            if block_id:
+                break
+
+        if block_id is None:
+            _log.warning(
+                f"Couldn't find block_id in conversation history. Checking thread."
+            )
+            thread_messages = await plugin.conversations_replies(
+                channel=container['channel_id'],
+                ts=container['thread_ts'],
+                inclusive=True,
+            )
+            for message in thread_messages['messages']:
+                if message['ts'] == container['message_ts']:
+                    old_blocks = message['blocks']
+                    updated_blocks = copy.deepcopy(old_blocks)
+                for block in old_blocks:
+                    if 'accessory' in block:
+                        if block['accessory']['value'] == f"{db_name}|{iid}":
+                            block_id = block['block_id']
+                            _log.debug(f"block_id={block_id}")
+                if block_id:
+                    break
+
+        if block_id is None:
+            _log.error(f"Missing block_id! old_blocks should have "
+                    f"accessory|value of {db_name}|{iid}. "
+                    f"old_blocks: {xterm('CYAN')}{pformat(old_blocks)}")
+            return False
 
         for block in updated_blocks:
             if block['block_id'] == block_id:
@@ -1361,7 +1405,7 @@ async def slackaction_set_confidence(
         resp = await plugin.update_message(
             channel = container['channel_id'],
             ts = container['message_ts'],
-            text = old_message['messages'][0]['text'],
+            text = message['text'],
             blocks = updated_blocks,
         )
         #! WHY ISN'T UPDATE_MESSAGE WORKING?!
