@@ -363,7 +363,7 @@ def _get_actors()->Dict:
 
     block = {
         'type': 'section',
-        # // 'block_id': 'test-tag-section123',
+        'block_id': 'actor-name',
         'text': {
             'type': 'mrkdwn',
             'text': 'Actors',
@@ -488,7 +488,7 @@ def _get_hunt_services()->Dict:
 def _get_tags()->Dict:
     block = {
         'type': 'section',
-        # // 'block_id': 'test-tag-section123',
+        'block_id': 'tag',
         'text': {
             'type': 'mrkdwn',
             'text': 'Tags',
@@ -637,6 +637,7 @@ def add_attribute_value(
 
     if value_type == 'boolean':
         input = block_checkbox(
+            block_id=label,
             action_id = f"add_attr_{label}",
             label = label,
             options = [(label, 'on')],
@@ -645,6 +646,7 @@ def add_attribute_value(
         )
     elif value_type == 'double':
         input = block_number(
+            block_id=label,
             action_id = f"add_attr_{label}",
             label = label,
             initial_value = initial_value,
@@ -654,6 +656,7 @@ def add_attribute_value(
         )
     elif value_type == 'datetime':
         input = block_datetime_picker(
+            block_id=label,
             action_id = f"add_attr_{label}",
             label = label,
             initial_date_time = initial_date_time,
@@ -661,6 +664,7 @@ def add_attribute_value(
         )
     else: #@ implied value_type == 'string'
         input = block_plain_text_input(
+            block_id=label,
             action_id = f"add_thing_{label}",
             label = label,
             multiline = label in multi_line_attrs,
@@ -726,6 +730,7 @@ def add_user_modal(
 
 def new_hits(
     data: Dict = {},
+    interesting_things: List = None,
 ):
     _log.debug(f"Building new_hits block")
     '''
@@ -808,15 +813,6 @@ def new_hits(
     }
     '''
     blocks = []
-    interesting_things = [
-        'domain',
-        'hostname',
-        'ip',
-        'jarm',
-        'ja3s',
-        'ssl',
-        'http',
-    ]
     db = next(iter(data))
     new_stuff = data[db]
 
@@ -933,7 +929,7 @@ def add_thing_modal(
         'hunt': {
             'keyattr': 'hunt-name',
             'owns': ['hunt-service', 'hunt-string',
-                'hunt-active',]
+                'hunt-active', 'frequency',]
         }
     }
 
@@ -952,6 +948,7 @@ def add_thing_modal(
 
     #; Generate multi-static select from config.
     select_db_section = block_static_select(
+        block_id="db_name",
         label="Database",
         placeholder="Select",
         options=db_opts,
