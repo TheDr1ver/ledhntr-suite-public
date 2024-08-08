@@ -848,15 +848,100 @@ class SlackClient(ConnectorPlugin):
         if thread_ts is not None:
             thread_ts = str(thread_ts)
 
+        '''#. Removed because we fixed the nginx POST issues
         if len(text) > 3000:
             _log.warning(
                 f"{xterm('YELLOW')}TEXT IS {len(text)} CHARS LONG! TRUNCATING."
                 f"{xterm('X')}"
             )
             text = text[0:2999]
+        '''
+
+        def chunk_blocks_by_size(blocks, block_limit, size_limit):
+            chunks = []
+            current_chunk = []
+            current_size = 0
+
+            for block in blocks:
+                block_size = len(dumps(block, compactly=True))
+                if len(current_chunk) < block_limit and current_size + block_size <= size_limit:
+                    current_chunk.append(block)
+                    current_size += block_size
+                else:
+                    chunks.append(current_chunk)
+                    current_chunk = [block]
+                    current_size = block_size
+
+            if current_chunk:
+                chunks.append(current_chunk)
+
+            return chunks
+
+        # Use smaller size limit for thread messages (4K Chars)
+        size_limit = 4000 if thread_ts else 10000
+        chunked_blocks = chunk_blocks_by_size(blocks, 20, size_limit)
+        parse = not blocks_verbatim
+
+        async def send_blocks(blocks_chunk, thread_ts):
+            try:
+                if ephemeral:
+                    response = await self.client.chat_postEphemeral(
+                        channel=channel,
+                        text=text,
+                        blocks=blocks_chunk,
+                        thread_ts=thread_ts,
+                        parse=parse,
+                        **kwargs,
+                    )
+                else:
+                    response = await self.client.chat_postMessage(
+                        channel=channel,
+                        text=text,
+                        blocks=blocks_chunk,
+                        thread_ts=thread_ts,
+                        parse=parse,
+                        **kwargs,
+                    )
+                _log.debug(f"{xterm('CYAN')}SUCCESS")
+                _log.debug(f"num_blocks: {len(blocks_chunk)}")
+                _log.debug(f"blocks bytes: {len(dumps(blocks_chunk, compactly=True))}")
+                _log.debug(f"thread_ts: {thread_ts}")
+                # // _log.debug(f"blocks: {blocks_chunk}{xterm('X')}")
+                return response
+            except SlackApiError as e:
+                _log.error(f"{xterm('RED')}SlackError sending message: {e}")
+                _log.error(f"ERROR: {e.response['error']}")
+                _log.error(f"channel: {channel}")
+                # // _log.error(f"text: {text}")
+                _log.error(f"num_blocks: {len(blocks_chunk)}")
+                _log.error(f"blocks bytes: {len(dumps(blocks_chunk, compactly=True))}")
+                # // _log.error(f"blocks: {pformat(blocks_chunk)}")
+                _log.error(f"thread_ts: {thread_ts}")
+                _log.error(f"parse: {parse}")
+                for k, v in kwargs.items():
+                    _log.error(f"{k}: {v}")
+                _log.error(xterm('X'))
+                return False
+            except Exception as e:
+                _log.error(f"Error sending message: {e}")
+                return False
+
+        for i, blocks_chunk in enumerate(chunked_blocks):
+            if i == 0:
+                response = await send_blocks(blocks_chunk, thread_ts)
+                if response is False:
+                    return False
+                thread_ts = response.data.get('ts')
+            else:
+                response = await send_blocks(blocks_chunk, thread_ts)
+                if response is False:
+                    return False
+
+        return response
+        """
         if len(blocks) > 50:
             _log.warning(
-            f"{xterm('YELLOW')}MORE THAN 50 {len(blocks)} PARSED!"
+            f"{xterm('YELLOW')}MORE THAN 50 BLOCKS PARSED: {len(blocks)}!"
             f"{xterm('X')}"
         )
             overflow = len(blocks)-50
@@ -917,6 +1002,7 @@ class SlackClient(ConnectorPlugin):
         _log.debug(f"Successful post!:{xterm('MAGENTA')}"
                    f"{pformat(response.data)}{xterm('X')}")
         return response
+        """
 
     @check_client
     async def conversations_history(
@@ -945,7 +1031,39 @@ class SlackClient(ConnectorPlugin):
             _log.error(f"Error getting convo history: {e}")
             return False
 
-        _log.debug(f"Successfully pulled history!: {pformat(response.data)}")
+        # // _log.debug(f"Successfully pulled history!: {pformat(response.data)}")
+        return response.data
+
+    @check_client
+    async def conversations_replies(
+        self,
+        channel: str = None,
+        ts: str = None,
+        inclusive: Optional[bool] = None,
+        latest: Optional[str] = None,
+        limit: Optional[int] = None,
+        oldest: Optional[str] = None,
+        **kwargs
+    )->bool:
+        _log = self.log
+        try:
+            response = await self.client.conversations_replies(
+                channel=channel,
+                ts=ts,
+                inclusive=inclusive,
+                latest=latest,
+                limit=limit,
+                oldest=oldest,
+                **kwargs,
+            )
+        except SlackApiError as e:
+            _log.error(f"{xterm('RED')}Error getting convo history {e.response['error']}")
+            return False
+        except Exception as e:
+            _log.error(f"Error getting convo history: {e}")
+            return False
+
+        # // _log.debug(f"Successfully pulled history!: {pformat(response.data)}")
         return response.data
 
     @check_client
