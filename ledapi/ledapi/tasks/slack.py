@@ -1364,15 +1364,16 @@ async def slackaction_set_confidence(
         try:
             container = json.loads(payload['view']['private_metadata'])
             _log.debug(f"{xterm('GREEN')}container message_ts: {container['message_ts']}")
-            _log.debug(f"{xterm('GREEN')}container thread_ts: {container['thread_ts']}")
+            _log.debug(f"{xterm('GREEN')}container thread_ts: {container.get('thread_ts')}")
         except Exception as e:
             _log.error(f"{xterm('RED')}{pformat(payload['view']['private_metadata'])}{xterm('X')}")
             _log.error(f"{xterm('RED')}{pformat(container)}{xterm('X')}")
             _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
         #; Get the old message
+        oldest = container.get('thread_ts')
         old_message = await plugin.conversations_history(
             channel=container['channel_id'],
-            oldest=container['thread_ts'],
+            oldest=oldest,
             latest=container['message_ts'],
             # // limit=1,
             inclusive=True,
@@ -1398,7 +1399,7 @@ async def slackaction_set_confidence(
             )
             thread_messages = await plugin.conversations_replies(
                 channel=container['channel_id'],
-                ts=container['thread_ts'],
+                ts=container.get('thread_ts'),
                 inclusive=True,
             )
             for message in thread_messages['messages']:
