@@ -493,10 +493,10 @@ class Attribute(Thing):
 
         super().__init__(**kwargs)
         self.thingtype = 'attribute'
-        if self._label == "date-seen" \
-        or self._label == "date-discovered" \
-        or self._label == "first-seen" \
-        or self._label == "last-seen":
+        #; Make sure datetime attributes are always proper date format
+        if self._label in [
+            'date-seen', 'date-discovered', 'first-seen', 'last-seen',
+        ]:
             if not isinstance(value, datetime):
                 try:
                     _value = dateutil.parser.parse(value)
@@ -510,6 +510,7 @@ class Attribute(Thing):
         else:
             self._value = value
 
+        #; Calculate value_type
         if not value_type and self._label in schema_value_types:
             self._value_type=schema_value_types[self._label]
         else:
@@ -521,6 +522,9 @@ class Attribute(Thing):
             except Exception as e:
                 print(f"label={self.label} value={self.value} vt={self._value_type}")
                 raise e
+        #; Set keyval and keyattr to simplify things
+        self.keyval = self._value
+        self.keyattr = self._label
 
     @property
     def value(self):
