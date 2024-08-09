@@ -2162,6 +2162,33 @@ class TypeDBClient(ConnectorPlugin):
         if not isinstance(things, list):
             things = [things]
 
+        # Convert thing strings into proper
+        tx = self.check_tx()
+        concepts = tx.concepts
+        proper_things = []
+        for thing in things:
+            thing_type = None
+            if isinstance(thing, str):
+                thing_type = concepts.get_attribute_type(thing).resolve()
+                if not thing_type:
+                    thing_type = concepts.get_relation_type(thing).resolve()
+                    if not thing_type:
+                        thing_type = concepts.get_entity_type(thing).resolve()
+                        if not thing_type:
+                            _log.warning(
+                                f"Unable to determine proper type of {thing}. Skipping!"
+                            )
+                            return []
+                        else:
+                            proper_things.append(Entity(label=thing))
+                    else:
+                        proper_things.append(Relation(label=thing))
+                else:
+                    proper_things.append(Attribute(label=thing))
+            elif isinstance(thing, Thing):
+                proper_things.append(thing)
+        things = proper_things
+
         # Regardless of whether or not we want to check for meta attributes,
         # we never want to check for specific ledid attributes. It's much faster
         # to check for iid's in that case. So if include_meta_attrs = True, we
@@ -2920,7 +2947,8 @@ class TypeDBClient(ConnectorPlugin):
             tql += ";"
             if hasattr(thing, 'value') and thing.value is not None:
                 fmt_val = self.format_value_query(thing.value)
-                tql += f' ${thing.label}_{thing.counter}={fmt_val}; get;'
+                tql += f' ${thing.label}_{thing.counter}={fmt_val};'
+            tql += 'get;'
             return tql
         if len(thing.has) > 0:
             first = True
