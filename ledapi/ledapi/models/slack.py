@@ -1036,6 +1036,152 @@ def add_thing_modal(
 
     return mymodal
 
+def edit_thing_modal(
+    mojo: MOJOCMD = None,
+    args: Namespace = None,
+)->Dict:
+    _log.debug(f"Building edit_thing modal...")
+    #. There should be a translation layer before we get to edit_thing_modal
+    #. that converts MOJOCMD or Payload into effectively the same object.
+    #. args should also be a universal object that's populated either from
+    #. the mojo command or a button being pressed.
+    #.
+    #. /mojo edit <label> <keyval>
+    #. defaults to 'evil' db - otherwise takes --database flag to change
+    #. If you run it with just the label you should get an external select box
+    #. that lets you effectively search for the keyval you're interested in changing.
+    #. Once you select the value from the dropdown it should populate the rest
+    #. of the modal.
+    blocks = []
+    mymodal = {}
+    # // container = dumps(payload['container'])
+    # // _log.debug(f"{xterm('CYAN')}MOJO: {pformat(mojo)}{xterm('X')}")
+    tdb: TypeDBClient = get_tdb()
+    tdb.db_name = args.database
+    if not args.label:
+        # TODO - these errors should be sent to the user, not just logged to CLI
+        _log.error(f"A thing label is required before we can edit anything.")
+        return mymodal
+    if not args.value:
+        search_rez = tdb.find_things(args.label)
+    else:
+        ent = Entity(label=args.label)
+        if ent.keyattr is None:
+            _log.error(f"Cannot edit a type that doesn't have a keyattr")
+            return mymodal
+        keyattr = Attribute(label=ent.keyattr, value=args.value)
+        ent.has.append(keyattr)
+        search_rez = tdb.find_things(ent)
+    #TODO If len(search_rez)==1 set the title, remove the keyval search input,
+    #TODO and populate the rest of the modal with the result's editable attributes
+    #TODO
+    #TODO If len(search_rez) > 1 then we need to add the keyval search input and
+    #TODO start populating it externally with select options.
+    #TODO
+    #TODO Before inputs, we want first/last/discovered dates, label, keyval,
+    #TODO ledsrc(s) and hunt-name(s) at the top for fast context.
+    #TODO
+    #TODO For the Edit modal front-and-center inputs should be change confidence, existing
+    #TODO Notes/Tags/Actors, and a Delete button should be available for the whole
+    #TODO Thing as well as each individual attribute.
+    #TODO
+    #TODO Attributes that should not be editable/removable include:
+    #TODO   date-seen, date-discovered, keyattr, user-uuid, ledid, ledsrc,
+    #TODO   hunt-name (for anything other than hunts)
+    db_opts = []
+
+    #; Universal "meta" attributes that could/should apply to every entity/relation
+    #; Leaving out 'ref-link' for now to save space.
+    universal_meta = [
+        'actor-name', 'confidence', 'date-seen', 'date-discovered', 'note', 'tag'
+    ]
+
+    #; entities/relations that should have a limited number of fields available
+    special_ents = {
+        'hunt': {
+            'keyattr': 'hunt-name',
+            'owns': ['hunt-service', 'hunt-string',
+                'hunt-active', 'frequency',]
+        }
+    }
+
+    #; attributes that have preset values
+    special_attrs = {
+        'actor-name': _get_actors(),
+        'hunt-service': _get_hunt_services(),
+        #; can hunt-endpoint be populated based on hunt-service value?
+        'hunt-endpoint': get_hunt_endpoints(),
+        'tag': _get_tags(),
+    }
+
+    schema = None
+    #; If the label is a "special case", use fields defined above
+    if args.label in special_ents:
+        #; set keyattr and extend universal_meta
+        schema = special_ents[args.label]
+        universal_meta = special_ents[args.label]['owns'] + universal_meta
+
+    if schema is None:
+        #; Otherwise get the schema from led.schema
+        schema = led.schema['entity'].get(args.label) or \
+            led.schema['relation'].get(args.label)
+    #; if it's still None, there's no schema that matches this thing.
+    if schema is None:
+        #! This should never happen b/c we check for valid things before getting
+        #! to this point.
+        _log.error(
+            f"{xterm('RED')}No schema found for {args.label}. "
+            f"This shouldn't happen.{xterm('X')}"
+        )
+        return False
+    #; If the thing has a keyattr and the keyattr isn't comboid
+    if not schema['keyattr'] is None and schema['keyattr'] != 'comboid':
+        #; make sure the first input is for that keyattr
+        input = block_plain_text_input(
+            action_id = 'add_thing_keyattr',
+            label = schema['keyattr'],
+            initial_value = args.value,
+            focus_on_load = True,
+            block_id = 'keyattr',
+        )
+        blocks.append(input)
+
+    for attr in universal_meta:
+        #@ Check for special attributes
+        if attr in special_attrs:
+            input = special_attrs[attr]
+            blocks.append(input)
+            continue
+        #@ Get value_type
+        value_schema = led.schema['attribute'].get(attr)
+        if value_schema is None:
+            _log.error(f"{xterm('RED')}Could not find "
+                       f"attribute type {attr}{xterm('X')}")
+            continue
+        value_type = value_schema.get('value_type')
+        #@ Handle different attribute input types
+        input = add_attribute_value(label=attr, value_type=value_type)
+        #; add input to main blocks.
+        blocks.append(input)
+
+    #@ + Add New Attribute Block
+    #! There should be a check for how long the modal can be before this is added
+    blocks.append(get_add_attribute())
+
+    mymodal = {
+        "type": "modal",
+        # // "callback_id": f"set_confidence_{uuid4().hex[:8]}",
+        "callback_id": f"add_thing",
+        "title": {"type": "plain_text", "text": f"Add {args.label.upper()}"},
+        "submit": {"type": "plain_text", "text": "Submit"},
+        # // "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": blocks,
+        "private_metadata": mojo.channel_id,
+    }
+
+    tdb.close_client()
+    return mymodal
+
 def update_thing_modal(
     payload: Dict = None,
 )->Dict:
