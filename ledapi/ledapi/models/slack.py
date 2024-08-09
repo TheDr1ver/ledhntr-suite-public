@@ -731,6 +731,7 @@ def add_user_modal(
 def new_hits(
     data: Dict = {},
     interesting_things: List = None,
+    con_list: List = None,
 ):
     _log.debug(f"Building new_hits block")
     '''
@@ -862,6 +863,7 @@ def new_hits(
                 ]
             }
         )
+        thing_added = False
         for thing in things:
             keyval = next(iter(thing))
             #! DEBUG - this should never happen normally
@@ -869,6 +871,8 @@ def new_hits(
                 confidence = 0
             else:
                 confidence = thing[keyval]['confidence'][0]
+            if con_list and confidence not in con_list:
+                continue
             iid = thing[keyval]['iid']
             lines = [
                 f"`{keyval}`"
@@ -902,7 +906,14 @@ def new_hits(
                     "accessory": button,
                 }
             )
+            thing_added = True
+        #; If we didn't add anything, remove the heading.
+        if not thing_added:
+            blocks.pop()
 
+    #; This means all we have is the DB header, divider, and context date
+    if len(blocks) == 3:
+        return []
     return blocks
 
 def add_thing_modal(

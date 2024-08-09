@@ -366,6 +366,7 @@ async def mojo_parse_cmd(
     news.add_argument('--hours_back', type=int, help="Number of hours back to retrieve news (overrides days_back if set)")
     news.add_argument('--database', type=str, help="Database to use for news retrieval (defaults to 'all')")
     news.add_argument('--verbose', action='store_true', help="Enable verbose output")
+    news.add_argument('--con', type=str, default='0,1,2,3', help="Comma-separated confidence threshold (e.g. 0 or 1,2,3 or all)")
 
     try:
         args = parser.parse_args(cmd.split())
@@ -638,6 +639,14 @@ async def mojo_post_news(
         _log.error(f"{xterm('RED')}Error parsing cmd: {e}")
         _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
 
+    #; Check 'con' flag
+    con_list = None
+    if args.con:
+        if args.con == 'all':
+            con_list = [-1.0,0.0,1.0,2.0,3.0]
+        else:
+            con_list = list(map(float, args.con.split(',')))
+
     text_lines = []
 
     interesting_things = [
@@ -753,29 +762,41 @@ async def mojo_post_news(
         data = {db: thing_types}
         #; Generate pretty blocks with buttons.
         try:
-            blocks = new_hits(data, interesting_things)
+            blocks = new_hits(data, interesting_things, con_list)
             # // _log.debug(f"{xterm('CYAN')}Generated blocks: \n{pformat(blocks)}{xterm('X')}")
         except Exception as e:
             _log.error(f"{xterm('RED')}Failed generating blocks: {e}{xterm('X')}")
             _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        if not blocks:
+            continue
         text_lines.append(f"*{db}*")
         for tt, entries in thing_types.items():
             if tt in interesting_things:
-                something_posted = True
                 text_lines.append(f"*Type: {tt}*")
                 for e in entries:
                     for keyval, attributes in e.items():
-                        text_lines.append(f"```{keyval}```")
-                        '''
-                        for label, values in attributes.items():
-                            text_lines.append(f"\t{label}")
-                            if isinstance(values, list):
-                                for value in values:
-                                    text_lines.append(f"\t\t{value}")
-                            elif isinstance(values, str):
-                                text_lines.append(f"\t\t{values}")
-                        text_lines.append(f"```")
-                        '''
+                        if not con_list:
+                            text_lines.append(f"```{keyval}```")
+                            something_posted = True
+                            '''
+                            for label, values in attributes.items():
+                                text_lines.append(f"\t{label}")
+                                if isinstance(values, list):
+                                    for value in values:
+                                        text_lines.append(f"\t\t{value}")
+                                elif isinstance(values, str):
+                                    text_lines.append(f"\t\t{values}")
+                            text_lines.append(f"```")
+                            '''
+                        else:
+                            confidence = attributes.get('confidence')[0]
+                            # _log.debug(f"con: {confidence}")
+                            # _log.debug(f"con_list: {con_list}")
+                            if confidence is None:
+                                confidence = 0.0
+                            if confidence in con_list:
+                                text_lines.append(f"```{keyval}```")
+                                something_posted = True
             else:
                 _log.debug(f"{tt} not in {interesting_things}")
 
@@ -788,6 +809,7 @@ async def mojo_post_news(
             if plugin is None:
                 plugin:SlackClient = await get_plugin('slack_client.01')
                 _log.debug(f"plugin: {plugin}")
+            _log.debug(f"something_posted: {something_posted}, text:{text}")
             await plugin.post_message(
                 # channel=plugin.admin_channel,
                 channel=mojo.channel_id,
