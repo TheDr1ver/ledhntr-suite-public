@@ -373,6 +373,33 @@ class Thing(MutableMapping, metaclass=ABCMeta):
     def label(self):
         return self._label
 
+    def attrs(self,
+    verbose=False,
+    *args, **kwargs
+    ) -> Dict:
+        """Returns simple key/val dictionary based on Thing's 'has' field.
+
+        :param verbose: if True, includes ledid and date-seen, defaults to False
+        :type verbose: bool, optional
+        :return: Dictionary of label/value based on all attributes inside Thing's
+            'has' property.
+        :rtype: Dict
+        """
+        rez = {}
+        junk = ['date-seen', 'ledid']
+        if hasattr(self, 'has'):
+            for attr in self.has:
+                if not verbose and attr.label in junk:
+                    continue
+                if attr.label not in rez:
+                    rez[attr.label] = []
+                rez[attr.label].append(attr.value)
+        #; Sort it before returning
+        for key in rez:
+            rez[key].sort()
+
+        return dict(sorted(rez.items()))
+
     def to_dict(self) -> None:
         res = _to_dict(self)
         return res
