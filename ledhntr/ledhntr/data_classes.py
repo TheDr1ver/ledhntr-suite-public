@@ -374,8 +374,9 @@ class Thing(MutableMapping, metaclass=ABCMeta):
         return self._label
 
     def attrs(self,
-    verbose=False,
-    *args, **kwargs
+        labels = None,
+        verbose=False,
+        *args, **kwargs
     ) -> Dict:
         """Returns simple key/val dictionary based on Thing's 'has' field.
 
@@ -387,16 +388,26 @@ class Thing(MutableMapping, metaclass=ABCMeta):
         """
         rez = {}
         junk = ['date-seen', 'ledid']
+        if not isinstance(labels, list) and labels is not None:
+            labels = [labels]
         if hasattr(self, 'has'):
             for attr in self.has:
                 if not verbose and attr.label in junk:
                     continue
+                if labels and attr.label not in labels:
+                    continue
                 if attr.label not in rez:
-                    rez[attr.label] = []
-                rez[attr.label].append(attr.value)
+                    rez[attr.label] = attr.value
+                else:
+                    rez[attr.label] = [rez[attr.label]]
+                    rez[attr.label].append(attr.value)
+        #; If we only have one key, just return the value
+        if len(rez) == 1:
+            return next(iter(rez.values()))
         #; Sort it before returning
         for key in rez:
-            rez[key].sort()
+            if isinstance(rez[key], list):
+                rez[key].sort()
 
         return dict(sorted(rez.items()))
 
