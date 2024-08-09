@@ -49,7 +49,10 @@ COPY --chown=leduser:leduser ledhntr.cfg /home/leduser/.ledhntr/
 WORKDIR /ledhntr/ledapi
 
 # Run the server
-# CMD ["uvicorn", "ledapi.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+#. CMD [ \
+#.   "uvicorn", "ledapi.main:app", "--host", "0.0.0.0", "--port", "8000", \
+#.   "--reload", "--reload-dir", "/ledhntr/ledhntr-plugins" \
+#. ]
 # Using this for dev work #! SWITCH BACK TO ABOVE BEFORE MERGING WITH MAIN
 # @ I just want to leave the container running so I can get colored bash outputs
 # @ in my logs while dev'ing. Normally I won't have bash in this container.
