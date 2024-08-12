@@ -27,6 +27,7 @@ from slack_client import (
     block_context,
     block_datetime_picker,
     block_divider,
+    block_external_select,
     block_header,
     block_number,
     block_plain_text_input,
@@ -1037,8 +1038,10 @@ def add_thing_modal(
     return mymodal
 
 def edit_thing_modal(
-    mojo: MOJOCMD = None,
-    args: Namespace = None,
+    db_name: str = None,
+    label: str = None,
+    value: str = None,
+    channel_id: str = None,
 )->Dict:
     _log.debug(f"Building edit_thing modal...")
     #. There should be a translation layer before we get to edit_thing_modal
@@ -1057,21 +1060,23 @@ def edit_thing_modal(
     # // container = dumps(payload['container'])
     # // _log.debug(f"{xterm('CYAN')}MOJO: {pformat(mojo)}{xterm('X')}")
     tdb: TypeDBClient = get_tdb()
-    tdb.db_name = args.database
-    if not args.label:
+    tdb.db_name = db_name
+    if not label:
         # TODO - these errors should be sent to the user, not just logged to CLI
         _log.error(f"A thing label is required before we can edit anything.")
         return mymodal
-    if not args.value:
-        search_rez = tdb.find_things(args.label)
+
+    ent = Entity(label=label)
+    keyattr = Attribute(label=ent.keyattr, value=value)
+    ent.has.append(keyattr)
+    if not value:
+        search_rez = tdb.find_things(label)
     else:
-        ent = Entity(label=args.label)
         if ent.keyattr is None:
             _log.error(f"Cannot edit a type that doesn't have a keyattr")
             return mymodal
-        keyattr = Attribute(label=ent.keyattr, value=args.value)
-        ent.has.append(keyattr)
         search_rez = tdb.find_things(ent)
+
     #TODO If len(search_rez)==1 set the title, remove the keyval search input,
     #TODO and populate the rest of the modal with the result's editable attributes
     #TODO
@@ -1089,6 +1094,46 @@ def edit_thing_modal(
     #TODO   date-seen, date-discovered, keyattr, user-uuid, ledid, ledsrc,
     #TODO   hunt-name (for anything other than hunts)
     db_opts = []
+    #@ If we don't have exactly one thing that matches we need to narrow it down.
+    if len(search_rez) != 1:
+        all_dbs = tdb.get_all_dbs(readable=True)
+        #; Available Databases - Tuple of text,value
+        for db in all_dbs:
+            db_opts.append((db,db))
+
+        #; Generate multi-static select from config.
+        select_db_section = block_static_select(
+            block_id="db_name",
+            label="Database",
+            placeholder="Select",
+            options=db_opts,
+            action_id="select_db",
+            initial_option=(tdb.db_name, tdb.db_name),
+        )
+        #; Append them to the primary blocks
+        blocks.append(select_db_section)
+
+        #; Append keyval input
+        input = block_external_select(
+            block_id=ent.keyattr,
+            action_id='edit_thing_search',
+            label=ent.keyattr,
+            placeholder="Enter value",
+            min_query_length=2,
+        )
+        blocks.append(input)
+        mymodal = {
+            "type": "modal",
+            # // "callback_id": f"set_confidence_{uuid4().hex[:8]}",
+            "callback_id": f"edit_thing",
+            "title": {"type": "plain_text", "text": f"Edit {label.upper()}"},
+            "submit": {"type": "plain_text", "text": "Submit"},
+            # // "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": blocks,
+            "private_metadata": channel_id,
+        }
+        tdb.close_client()
+        return mymodal
 
     #; Universal "meta" attributes that could/should apply to every entity/relation
     #; Leaving out 'ref-link' for now to save space.
@@ -1116,21 +1161,21 @@ def edit_thing_modal(
 
     schema = None
     #; If the label is a "special case", use fields defined above
-    if args.label in special_ents:
+    if label in special_ents:
         #; set keyattr and extend universal_meta
-        schema = special_ents[args.label]
-        universal_meta = special_ents[args.label]['owns'] + universal_meta
+        schema = special_ents[label]
+        universal_meta = special_ents[label]['owns'] + universal_meta
 
     if schema is None:
         #; Otherwise get the schema from led.schema
-        schema = led.schema['entity'].get(args.label) or \
-            led.schema['relation'].get(args.label)
+        schema = led.schema['entity'].get(label) or \
+            led.schema['relation'].get(label)
     #; if it's still None, there's no schema that matches this thing.
     if schema is None:
         #! This should never happen b/c we check for valid things before getting
         #! to this point.
         _log.error(
-            f"{xterm('RED')}No schema found for {args.label}. "
+            f"{xterm('RED')}No schema found for {label}. "
             f"This shouldn't happen.{xterm('X')}"
         )
         return False
@@ -1138,9 +1183,9 @@ def edit_thing_modal(
     if not schema['keyattr'] is None and schema['keyattr'] != 'comboid':
         #; make sure the first input is for that keyattr
         input = block_plain_text_input(
-            action_id = 'add_thing_keyattr',
+            action_id = 'edit_thing_keyattr',
             label = schema['keyattr'],
-            initial_value = args.value,
+            initial_value = value,
             focus_on_load = True,
             block_id = 'keyattr',
         )
@@ -1171,12 +1216,12 @@ def edit_thing_modal(
     mymodal = {
         "type": "modal",
         # // "callback_id": f"set_confidence_{uuid4().hex[:8]}",
-        "callback_id": f"add_thing",
-        "title": {"type": "plain_text", "text": f"Add {args.label.upper()}"},
+        "callback_id": f"edit_thing",
+        "title": {"type": "plain_text", "text": f"Add {label.upper()}"},
         "submit": {"type": "plain_text", "text": "Submit"},
         # // "close": {"type": "plain_text", "text": "Cancel"},
         "blocks": blocks,
-        "private_metadata": mojo.channel_id,
+        "private_metadata": channel_id,
     }
 
     tdb.close_client()

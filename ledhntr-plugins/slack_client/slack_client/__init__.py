@@ -4,6 +4,7 @@ from .slack_client import (
     block_context,
     block_datetime_picker,
     block_divider,
+    block_external_select,
     block_header,
     block_number,
     block_plain_text_input,
