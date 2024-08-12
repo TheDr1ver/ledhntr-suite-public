@@ -1069,6 +1069,18 @@ async def blockaction_update_view(
         return view, False
     return view, value
 
+#~######################################
+#~ slackaction_edit_thing_search
+#~######################################
+def edit_thing_blocks(
+    db_name: str = None,
+    thing: Union[Entity, Relation] = None,
+)->Dict:
+    #TODO - Move me to Models.slack.py
+    blocks = {}
+
+    return blocks
+
 async def slackaction_edit_thing_search(
     plugin: SlackClient = None,
     payload: Dict = None,
@@ -1092,6 +1104,11 @@ async def slackaction_edit_thing_search(
     tdb.close_client()
     #@ Modify blocks
     #; Remove DB and Keyval input blocks
+    #; Just kidding... those are the only 2 blocks so we can just start from scratch
+    blocks = edit_thing_blocks(
+        db_name = tdb.db_name,
+        thing = rez,
+    )
     #; Add DB and Keyval as hard-coded labels
     #; Add context blocks (first/last seen, ledsrc, hunt-names)
     #; Populate changeable attribute fields

@@ -1115,7 +1115,7 @@ def edit_thing_modal(
 
         #; Append keyval input
         input = block_external_select(
-            block_id=ent.keyattr,
+            block_id='keyattr',
             action_id='edit_thing_search',
             label=ent.keyattr,
             placeholder="Enter value",
