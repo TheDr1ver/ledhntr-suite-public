@@ -343,6 +343,35 @@ def block_plain_text_input(
 
     return block
 
+def block_external_select(
+    block_id: Optional[str] = None,
+    label: str = None,
+    action_id: str = None,
+    placeholder: Optional[str] = None,
+    min_query_length: int = 3,
+)->Dict:
+
+    block = {
+        'type': 'section',
+        'text': {
+            'type': 'mrkdwn',
+            'text': label,
+        },
+        'accessory': {
+            'action_id': action_id,
+            'type': 'external_select',
+            'min_query_length': min_query_length,
+        }
+    }
+    if placeholder:
+        block['accessory']['placeholder'] = {
+            'type': 'plain_text',
+            'text': placeholder,
+        }
+    if not block_id is None:
+        block['block_id'] = block_id
+    return block
+
 def block_static_select(
     action_id: str = None,
     label: str = None,
