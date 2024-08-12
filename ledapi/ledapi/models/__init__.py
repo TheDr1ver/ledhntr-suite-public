@@ -40,6 +40,7 @@ from .slack import(
     add_attribute_value,
     add_thing_modal,
     add_user_modal,
+    edit_thing_modal,
     get_add_attribute,
     get_hunt_endpoints,
     new_hits,

@@ -50,6 +50,7 @@ from ledapi.models import(
     add_attribute_value,
     add_thing_modal,
     add_user_modal,
+    edit_thing_modal,
     get_add_attribute,
     get_hunt_endpoints,
     new_hits,
@@ -231,6 +232,35 @@ async def opts_add_thing_get_tag(
     tdb.close_client()
     return block
 
+async def opts_edit_thing_search(
+    payload: Dict = None,
+    user: User = None,
+)->Dict:
+    block = {
+        'options': [],
+    }
+    view = payload['view']
+    set_vals = view['state']['values']
+    input = payload['value']
+    #; Check if the DB is set and if set, that it's valid.
+    tdb = await check_db(set_vals)
+    if not tdb:
+        return block
+    #; Get matching things from DB
+    label = payload['view']['title'].get('text').split(' ')[-1].lower()
+    all_things = tdb.find_things(label)
+    for thing in all_things:
+        if input in thing.keyval:
+            opt = {
+                'text':{
+                    'type': 'plain_text',
+                    'text': thing.keyval,
+                },
+                'value': thing.keyval,
+            }
+            block['options'].append(opt)
+    return block
+
 async def opts_get_attr_labels(
     payload: Dict = None,
     user: User = None,
@@ -336,6 +366,8 @@ async def mojo_parse_cmd(
     #@ Define sub-parsers
     add = subparsers.add_parser('add', help="Add something to a database.",
                                 epilog="*Example*: `/mojo add ip 192.168.1.100`")
+    edit = subparsers.add_parser('edit', help="Edit something in the database.",
+                                epilog="*Example*: `/mojo edit ip 192.168.1.100`")
     epi = "*Example*: `/mojo addme` - the admins take care of the rest. It's really not that hard."
     addme = subparsers.add_parser('addme', help="Request to be added as a valid mojo user",
                                   epilog=epi)
@@ -346,17 +378,26 @@ async def mojo_parse_cmd(
     help = subparsers.add_parser('help', help="Display the help message and exit.")
 
     #@ Handle 'add' arguments
-    add.add_argument('pos', nargs='*', help='`[label value verbose]`')
+    add.add_argument('pos', nargs='*', help='`[label value database verbose]`')
     add.add_argument('--label', type=str, help="Label to add (e.g. ip)")
     add.add_argument('--value', type=str, help="Value of that label (e.g. 192.168.1.100)")
+    add.add_argument('--database', type=str, default='scratchpad', help="Database to use (defaults to 'scratchpad')")
     add.add_argument('--verbose', action='store_true', help="Enable verbose output")
+
+    #@ Handle 'edit' arguments
+    edit.add_argument('pos', nargs='*', help='`[label value database verbose]`')
+    edit.add_argument('--label', type=str, help="Label to edit (e.g. ip)")
+    edit.add_argument('--value', type=str, help="Value of that label (e.g. 192.168.1.100)")
+    edit.add_argument('--database', type=str, default='scratchpad', help="Database to use (defaults to 'scratchpad')")
+    edit.add_argument('--verbose', action='store_true', help="Enable verbose output")
 
     #@ Handle 'search' arguments
     # TODO
     '''
-    search.add_argument('pos', nargs='*', help='`[label value verbose]`')
+    search.add_argument('pos', nargs='*', help='`[label value database verbose]`')
     search.add_argument('--label', type=str, help="Label to search for (e.g. ip)")
     search.add_argument('--value', type=str, help="Value to search for (e.g. 192.168.1.100)")
+    search.add_argument('--database', type=str, default='scratchpad', help="Database to use (defaults to 'scratchpad')")
     search.add_argument('--verbose', action='store_true', help="Enable verbose output")
     '''
 
@@ -364,7 +405,7 @@ async def mojo_parse_cmd(
     news.add_argument('pos', nargs="*", help='`[days_back database verbose]`')
     news.add_argument('--days_back', type=int, default=1, help="Number of days back to retrieve news")
     news.add_argument('--hours_back', type=int, help="Number of hours back to retrieve news (overrides days_back if set)")
-    news.add_argument('--database', type=str, help="Database to use for news retrieval (defaults to 'all')")
+    news.add_argument('--database', type=str, default='all', help="Database to use for news retrieval (defaults to 'all')")
     news.add_argument('--verbose', action='store_true', help="Enable verbose output")
     news.add_argument('--con', type=str, default='0,1,2,3', help="Comma-separated confidence threshold (e.g. 0 or 1,2,3 or all)")
 
@@ -382,7 +423,7 @@ async def mojo_parse_cmd(
 
     #. Process positional arguments for 'search'
     #; commands with positional arguments [label value verbose]
-    lvv = ['add', 'search']
+    lvv = ['add', 'edit', 'search']
     if args.cmd in lvv:
         if args.pos:
             if args.label is None:
@@ -390,7 +431,9 @@ async def mojo_parse_cmd(
             if len(args.pos) > 1:
                 args.value = args.pos[1]
             if len(args.pos) > 2:
-                args.verbose = args.pos[2].lower() in ['true', '1', 'yes', 'verbose']
+                args.database = args.pos[2]
+            if len(args.pos) > 3:
+                args.verbose = args.pos[3].lower() in ['true', '1', 'yes', 'verbose']
 
     #. Process positional arguments for 'news'
     if args.cmd == 'news':
@@ -590,6 +633,78 @@ async def mojo_add_thing(
 
     return True
 
+async def mojo_edit_thing(
+    mojo: MOJOCMD = None,
+    user: User = None,
+)->bool:
+    _log.debug(f"Opening add_thing modal...")
+
+    #; parse args
+    try:
+        args = await mojo_parse_cmd(mojo.text)
+    except SystemExit as e:
+        _log.error(f"{xterm('RED')}Error parsing cmd: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+
+    plugin:SlackClient = await get_plugin()
+    #; Check valid thing type
+    # // valid_things = [thing['label'] for thing in led.schema['entity']]
+    valid_things = list(led.schema['entity'].keys()) + \
+        list(led.schema['relation'].keys())
+    if args.label not in valid_things:
+        matches = difflib.get_close_matches(
+            args.label,
+            valid_things,
+            n=1,
+            cutoff=0.6
+        )
+        if matches:
+            txt = f"{args.label} is an invalid thing type. Did you mean {matches[0]}?"
+        else:
+            txt = f"{args.label} is an invalid thing type.\nValid things are: `{', '.join(valid_things)}`"
+        await plugin.post_message(
+            channel=mojo.channel_id,
+            text=txt,
+            blocks_verbatim=True,
+            ephemeral=True,
+            user=mojo.user_id,
+        )
+        return True
+
+    #; Set user or default database
+    mojo.db_name = user.db_name or plugin.default_db
+    _log.debug(f"{xterm('CYAN')}Set user_db to {mojo.db_name}. user: {user.db_name} plugin: {plugin.default_db}{xterm('X')}")
+    #; Normalize params
+    db_name = args.database or mojo.db_name
+    label = args.label
+    value = args.value
+    channel_id = mojo.channel_id
+    #; Open modal
+    try:
+        mymodal = edit_thing_modal(
+            db_name,
+            label,
+            value,
+            channel_id,
+        )
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed building modal: {e}{xterm('X')}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}view modal:\n{pformat(mymodal)}{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}modal type: {type(mymodal)}{xterm('X')}")
+
+    try:
+        await plugin.views_open(
+            trigger_id=mojo.trigger_id,
+            view = mymodal,
+        )
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed opening modal: {e}{xterm('X')}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        return False
+
+    return True
+
 async def mojo_get_help(
     mojo: MOJOCMD = None,
     user: User = None,
@@ -625,8 +740,6 @@ async def mojo_get_help(
     except Exception as e:
         _log.error(f"{xterm('RED')}Failed posting message..: {e}")
         _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
-
-
 
 async def mojo_post_news(
     mojo: MOJOCMD = None,
@@ -943,7 +1056,7 @@ async def blockaction_update_view(
         _log.error(f"{xterm('RED')}No valid action was seen: {actions}{xterm('X')}")
         return view, False
     #; Get the value
-    if actions[0].get('type') == 'static_select':
+    if actions[0].get('type') in ['static_select', 'external_select']:
         value = actions[0]['selected_option'].get('value')
     elif actions[0].get('type') in ['button']:
         value = actions[0].get('value')\
@@ -955,6 +1068,36 @@ async def blockaction_update_view(
                    f"{pformat(actions[0])}{xterm('X')}")
         return view, False
     return view, value
+
+async def slackaction_edit_thing_search(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->bool:
+    view_id = payload['view']['id']
+    hash = payload['view']['hash']
+    #@ Get the update value
+    view, value = await blockaction_update_view(payload)
+    _log.debug(f"{xterm('CYAN')}Selected {value}...")
+    _log.debug(f"View: {pformat(view)}{xterm('X')}")
+    #@ Get thing details from TDB
+    label = payload['view']['title'].get('text').split(' ')[-1].lower()
+    set_vals = view['state']['values']
+    tdb:TypeDBClient = await check_db(set_vals)
+    if not tdb:
+        return False
+    so = Entity(label=label, has=[])
+    so.has.append(Attribute(label=so.keyattr, value=value))
+    rez = tdb.find_things(so)
+    tdb.close_client()
+    #@ Modify blocks
+    #; Remove DB and Keyval input blocks
+    #; Add DB and Keyval as hard-coded labels
+    #; Add context blocks (first/last seen, ledsrc, hunt-names)
+    #; Populate changeable attribute fields
+    #; Update modal view
+
+    return False
 
 #~######################################
 #~ slackaction_get_hunt_endpoints
@@ -1688,6 +1831,7 @@ async def mojocmd_conf(
         "check-schedules": (mojo_check_schedules, role_everyone),
         "news": (mojo_post_news, role_everyone),
         "add": (mojo_add_thing, role_hunter),
+        "edit": (mojo_edit_thing, role_hunter),
         "help": (mojo_get_help, role_everyone),
         #; mojo add_db 20240723_MyNewDB
         #. "add_db": (mojo_add_db, role_dbadmin)
@@ -1757,7 +1901,8 @@ async def slackaction_conf(
             "set_confidence_modal": (slackation_set_confidence_modal, role_everyone),
             'get_attr_labels': (slackation_get_attr_labels, role_hunter),
             'get_hunt_endpoints': (slackaction_get_hunt_endpoints, role_hunter),
-            "no_action": (slackaction_no_action, role_everyone)
+            "no_action": (slackaction_no_action, role_everyone),
+            'edit_thing_search': (slackaction_edit_thing_search, role_hunter),
         },
         'view_submission':{
             'add_user_modal': (slackaction_submit_add_user, role_dbadmin), #do the add-user stuff
@@ -1932,6 +2077,7 @@ async def slackoptions_conf(
     opts = {
         'add_thing_get_actor-name': (opts_add_thing_get_actor, role_hunter),
         'add_thing_get_tag': (opts_add_thing_get_tag, role_hunter),
+        'edit_thing_search': (opts_edit_thing_search, role_hunter),
         #. removed in favor of static population
         # // 'get_attr_labels': (opts_get_attr_labels, role_hunter),
     }
