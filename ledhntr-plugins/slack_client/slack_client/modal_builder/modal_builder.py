@@ -77,7 +77,7 @@ class ModalBuilder():
             self._log = logger
 
     #&##########################################################################
-    #& Block Kit Builders
+    #& Block Kit Builders and Helper functions
     #&##########################################################################
 
     #~ Actions
@@ -487,6 +487,7 @@ class ModalBuilder():
         submit: str = 'Submit',
         close: str = 'Close',
         emoji: bool = True,
+        private_metadata: str = None,
     )->Dict:
         modal = {
             'type': 'modal',
@@ -496,6 +497,8 @@ class ModalBuilder():
             'close': {'type': 'plain_text', 'text': close, 'emoji': emoji},
             'blocks': [],
         }
+        if private_metadata is not None:
+            modal['private_metadata'] = private_metadata
         return modal
 
     #&##########################################################################
@@ -742,6 +745,20 @@ class ModalBuilder():
         interesting_things: List = None,
         con_list: List = None,
     )->Dict:
+        """Return a block format for posting a message containing New Hits
+        When we run the "news" this is what generates the response.
+
+        :param data: _description_, defaults to {}
+        :type data: Dict, optional
+        :param interesting_things: _description_, defaults to None
+        :type interesting_things: List, optional
+        :param con_list: _description_, defaults to None
+        :type con_list: List, optional
+        :return: _description_
+        :rtype: Dict
+        """
+        #. This is ugly, but it works. Could probably use some freshening up
+        #. now that I've got a better understanding of the layout.
         blocks = []
         db = next(iter(data))
         new_stuff = data[db]
@@ -891,6 +908,23 @@ class ModalBuilder():
     #~ Add Thing Modal
     #. First we need to break out the mojo CMD and the args into individual params
     #. Then we can worry about converting the rest of the function.
+    @staticmethod
+    async def add_thing_modal(
+        db_name: str = None,
+        channel_id: str = None,
+        label: str = None,
+        value: str = None,
+        all_dbs: List[str] = None,
+        schema: Dict = None,
+    )->Dict:
+        blocks = []
+        modal = await ModalBuilder.get_modal_framework(
+            callback_id='add_thing',
+            title=f"Add {label.upper()}",
+            blocks=blocks,
+            private_metadata=channel_id
+        )
+
 
     #~ Edit Thing Modal
 
