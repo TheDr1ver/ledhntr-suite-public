@@ -11,7 +11,7 @@ from typing import(
 )
 from ledhntr.helpers import format_date, dumps, xterm
 
-from modal_builder.helpers import (
+from .helpers import (
     get_dispatch_action_config
 )
 
@@ -23,7 +23,7 @@ _log: logging.Logger = logging.getLogger('ledhntr')
 #~ Multiline Plain Text Input
 
 #~ Plain Text Input
-def plain_text_input_block(
+async def plain_text_input_block(
     action_id: str = None,
     label: str = None,
     emoji: Optional[bool] = False,
@@ -63,7 +63,7 @@ def plain_text_input_block(
         block['element']['max_length'] = max_length
     if dispatch_action_config:
         block['element']['dispatch_action_config'] = \
-        get_dispatch_action_config(dispatch_action_config)
+        await get_dispatch_action_config(dispatch_action_config)
 
     block['element']['multiline'] = multiline
     block['element']['focus_on_load'] = focus_on_load
@@ -75,7 +75,7 @@ def plain_text_input_block(
 
 
 #~ Number Picker
-def number_block(
+async def number_block(
     action_id: str = None,
     label: str = None,
     emoji: Optional[bool] = True,
@@ -116,7 +116,7 @@ def number_block(
         block['element']['max_value'] = str(max_value)
     if dispatch_action_config:
         block['element']['dispatch_action_config'] = \
-        get_dispatch_action_config(dispatch_action_config)
+        await get_dispatch_action_config(dispatch_action_config)
     block['optional'] = optional
     block['element']['focus_on_load'] = focus_on_load
     if block_id is not None:
@@ -129,7 +129,7 @@ def number_block(
 
 #~ External Select
 
-def external_select_block(
+async def external_select_block(
     block_id: Optional[str] = None,
     label: str = None,
     action_id: str = None,
@@ -162,13 +162,14 @@ def external_select_block(
     return block
 
 #~ Static Select
-def static_select_block(
+async def static_select_block(
     action_id: str = None,
     label: str = None,
     options: List[tuple] = None,
     initial_option: Optional[tuple] = None,
     placeholder: Optional[str] = None,
     block_id: Optional[str] = None,
+    focus_on_load: Optional[bool] = False,
 )->Dict:
     """Build static_select section
 
@@ -230,24 +231,27 @@ def static_select_block(
         }
         block['accessory']['options'].append(opt)
 
-    if isinstance(initial_option, tuple) and len(initial_option)==2:
-        init = {
-            'text': {
-                'type': 'plain_text',
-                'emoji': True,
-                'text': initial_option[0],
-            },
-            'value': initial_option[1],
-        }
-        block['accessory']['initial_option']=init
-    else:
-        _log.error(
-            f"{xterm('RED')}initial_option needs to be a tuple with "
-            f"exactly 2 values!{xterm('X')}"
-        )
+    if initial_option is not None:
+        if isinstance(initial_option, tuple) and len(initial_option)==2:
+            init = {
+                'text': {
+                    'type': 'plain_text',
+                    'emoji': True,
+                    'text': initial_option[0],
+                },
+                'value': initial_option[1],
+            }
+            block['accessory']['initial_option']=init
+        else:
+            _log.error(
+                f"{xterm('RED')}initial_option needs to be a tuple with "
+                f"exactly 2 values!{xterm('X')}"
+            )
 
     if block_id is not None:
         block['block_id'] = block_id
+    if focus_on_load:
+        block['focus_on_load'] = True
 
     _log.debug(f"Built block: {pformat(block)}")
     return block
@@ -259,7 +263,7 @@ def static_select_block(
 
 #~ Datetime picker
 
-def datetime_picker_block(
+async def datetime_picker_block(
     action_id: str = None,
     label: str = None,
     emoji: Optional[bool] = True,
@@ -296,7 +300,7 @@ def datetime_picker_block(
 
 #~ Checkboxes
 
-def checkbox_block(
+async def checkbox_block(
     action_id: str = None,
     label: str = None,
     options: List[tuple] = None,

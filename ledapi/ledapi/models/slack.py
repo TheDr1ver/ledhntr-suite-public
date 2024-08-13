@@ -23,18 +23,7 @@ from ledapi.config import(
 
 from ledapi.models import RoleEnum
 from slack_client import (
-    block_checkbox,
-    block_context,
-    block_datetime_picker,
-    block_divider,
-    block_external_select,
-    block_header,
-    block_number,
-    block_plain_text_input,
-    block_static_select,
-    get_con_format,
-    get_date,
-    get_link_formats,
+    ModalBuilder,
 )
 
 # import os
@@ -362,7 +351,9 @@ class SlackAction(BaseModel):
 #@### I save, so I don't have to keep reinstalling the damn plugin.
 #@##############################################################################
 
+'''
 def _get_actors()->Dict:
+
 
     block = {
         'type': 'section',
@@ -427,6 +418,7 @@ def get_hunt_endpoints(endpoints:Dict = None)->Dict:
 
     return block
 
+
 def get_add_attribute()->Dict:
     block = {
         'block_id': 'add_new_attribute_block',
@@ -445,6 +437,7 @@ def get_add_attribute()->Dict:
         ]
     }
     return block
+
 
 def _get_hunt_services()->Dict:
     #. Populate with enabled HNTR plugins
@@ -488,8 +481,9 @@ def _get_hunt_services()->Dict:
 
     return block
 
+
 def _get_tags()->Dict:
-    # TODO - replace with MB.external_select_block()
+
     block = {
         'type': 'section',
         'block_id': 'tag',
@@ -508,6 +502,7 @@ def _get_tags()->Dict:
         },
     }
     return block
+
 
 def add_attribute_label(label:str = None)->Dict:
     block = {
@@ -528,20 +523,6 @@ def add_attribute_label(label:str = None)->Dict:
             'focus_on_load': True,
         }
     }
-    '''
-    #; old external selector
-    'accessory': {
-        'action_id': 'get_attr_labels',
-        'type': 'external_select',
-        'placeholder': {
-            'type': 'plain_text',
-            'text': 'Select a label',
-            'emoji': True,
-        },
-        'min_query_length': 2,
-        'focus_on_load': True,
-    }
-    '''
     schema = led.schema['entity'].get(label)
     meta_attrs = Entity(label=label).meta_attrs
     if schema is None:
@@ -568,6 +549,7 @@ def add_attribute_label(label:str = None)->Dict:
         block['accessory']['options'].append(opt)
 
     return block
+
 
 def add_attribute_value(
     label: str = None,
@@ -677,7 +659,7 @@ def add_attribute_value(
             optional = label not in required,
         )
     return input
-
+'''
 def add_user_modal(
     userval: str = None,
 ):
@@ -949,12 +931,13 @@ def add_thing_modal(
     }
 
     #; attributes that have preset values
+    plugin_list = led.list_plugins()
     special_attrs = {
-        'actor-name': _get_actors(),
-        'hunt-service': _get_hunt_services(),
+        'actor-name': await ModalBuilder.actors_ext_opts(),
+        'hunt-service': await ModalBuilder.get_hunt_services(plugin_list),
         #; can hunt-endpoint be populated based on hunt-service value?
-        'hunt-endpoint': get_hunt_endpoints(),
-        'tag': _get_tags(),
+        'hunt-endpoint': await ModalBuilder.get_hunt_endpoints(),
+        'tag': await ModalBuilder.get_tags(),
     }
 
     #; Available Databases - Tuple of text,value
@@ -1019,7 +1002,7 @@ def add_thing_modal(
             continue
         value_type = value_schema.get('value_type')
         #@ Handle different attribute input types
-        input = add_attribute_value(label=attr, value_type=value_type)
+        input = await ModalBuilder.add_attribute_value(label=attr, value_type=value_type)
         #; add input to main blocks.
         blocks.append(input)
 
@@ -1154,12 +1137,13 @@ def edit_thing_modal(
     }
 
     #; attributes that have preset values
+    plugin_list = led.list_plugins()
     special_attrs = {
-        'actor-name': _get_actors(),
-        'hunt-service': _get_hunt_services(),
+        'actor-name': await ModalBuilder.actors_ext_opts(),
+        'hunt-service': await ModalBuilder.get_hunt_services(plugin_list),
         #; can hunt-endpoint be populated based on hunt-service value?
-        'hunt-endpoint': get_hunt_endpoints(),
-        'tag': _get_tags(),
+        'hunt-endpoint': await ModalBuilder.get_hunt_endpoints(),
+        'tag': await ModalBuilder.get_tags(),
     }
 
     schema = None
@@ -1208,7 +1192,7 @@ def edit_thing_modal(
             continue
         value_type = value_schema.get('value_type')
         #@ Handle different attribute input types
-        input = add_attribute_value(label=attr, value_type=value_type)
+        input = await ModalBuilder.add_attribute_value(label=attr, value_type=value_type)
         #; add input to main blocks.
         blocks.append(input)
 

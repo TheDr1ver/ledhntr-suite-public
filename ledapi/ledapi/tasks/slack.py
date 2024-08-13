@@ -77,12 +77,7 @@ from slack_sdk.web.async_client import AsyncSlackResponse
 # _log.debug(f"PYTHONPATH: {os.environ.get('PYTHONPATH')}")
 from slack_client import (
     SlackClient,
-    block_context,
-    block_header,
-    block_section_button,
-    block_section_mrkdwn,
-    get_con_format,
-    get_date,
+    ModalBuilder,
 )
 from typedb_client import TypeDBClient
 
@@ -1210,7 +1205,7 @@ async def slackaction_get_hunt_endpoints(
         endpoints[ac] = myplugin.api_confs[ac].to_dict().get('uri')
 
     #; Build new block
-    new_block = get_hunt_endpoints(endpoints)
+    new_block = await ModalBuilder.get_hunt_endpoints(endpoints)
     _log.debug(f"{xterm('CYAN')}Built new_block {pformat(new_block)}{xterm('X')}")
 
     #; Remove block_id for hunt-endpoints if one already exists
@@ -1273,7 +1268,7 @@ async def slackation_get_attr_labels(
     if value_type is None:
         _log.error(f"{xterm('RED')}No value_type found for {label}.{xterm('X')}")
         return False
-    new_input = add_attribute_value(label=label, value_type=value_type)
+    new_input = await ModalBuilder.add_attribute_value(label=label, value_type=value_type)
 
     #; Update the view with a new input
     #; Remove the label we just selected and add the fresh input
@@ -1332,7 +1327,21 @@ async def slackaction_add_new_attribute(
             block['accessory']['focus_on_load'] = False
     #; Update the view with a new input
     label = payload['view']['title'].get('text').split(' ')[-1].lower()
-    new_attr_label = add_attribute_label(label=label)
+
+    #; Get schema and meta attributes for building new_attr_label block
+    schema = led.schema['entity'].get(label)
+    meta_attrs = Entity(label=label).meta_attrs
+    if schema is None:
+        schema = led.schema['relation'].get(label)
+        meta_attrs = Relation(label=label).meta_attrs
+        if schema is None:
+            _log.error(f"Failed obtaining schema for {label}")
+            return False
+    new_attr_label = await ModalBuilder.add_attribute_label(
+        label=label,
+        schema=schema,
+        meta_attrs=meta_attrs,
+    )
     view['blocks'].pop() #; Remove the 'add attribute' button
     view['blocks'].append(new_attr_label) #; Add the new label
     result = None

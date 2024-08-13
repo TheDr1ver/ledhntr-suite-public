@@ -14,7 +14,33 @@ from ledhntr.helpers import format_date, dumps, xterm
 
 _log: logging.Logger = logging.getLogger('ledhntr')
 
-def get_con_format(key: int = None):
+async def get_action_ids(
+    payload: Dict = None,
+)->Union[List[str], False]:
+    """Given a block_action or view_submission payload, extract the action_ids
+
+    :param payload: Payload sent by view_submission or block_action, defaults to None
+    :type payload: Dict, optional
+    :return: list of action_ids passed or False if not block_actions or
+        view_submission payload type
+    :rtype: Union[List[str], False]
+    """
+    action_ids = []
+    if payload['type'] == 'block_actions':
+        term = "actions:action_id"
+        for aid in payload['actions']:
+            action_id = aid['action_id']
+            action_ids.append(action_id)
+    elif payload['type'] == 'view_submission':
+        action_id = payload['view']['callback_id']
+        term = "view:callback_id"
+        action_ids.append(action_id)
+    else:
+        return False
+    _log.debug(f"Retrieved {term} {action_ids} from payload.")
+    return action_ids
+
+async def get_con_format(key: int = None)->str:
     confidence_formats = {
         -1: ":x: False-Positive",
         0: ":question: Unknown",
@@ -24,14 +50,14 @@ def get_con_format(key: int = None):
     }
     return confidence_formats[key]
 
-def get_date(date: datetime = None):
+async def get_date(date: datetime = None)->str:
     if date is None:
         date = datetime.now(timezone.utc)
     epoch = int(date.timestamp())
     slack_format = f"<!date^{epoch}^{{date_num}} {{time_secs}}|{date}>"
     return slack_format
 
-def get_dispatch_action_config(
+async def get_dispatch_action_config(
     trigger:str = None,
 )->Union[Dict,None]:
     """Configure dispatch action
@@ -66,7 +92,7 @@ def get_dispatch_action_config(
 
     return frame
 
-def get_link_formats():
+async def get_link_formats()->Dict:
     link_formats = {
         'domain': {
             'Censys': "https://search.censys.io/search?resource=hosts&sort=RELEVANCE&per_page=25&virtual_hosts=EXCLUDE&q=%22{value}%22",
@@ -85,3 +111,18 @@ def get_link_formats():
     #; Duplicate values for similar entities
     link_formats['hostname'] = link_formats['domain']
     return link_formats
+
+async def get_opt(
+    text: str = None,
+    value: str = None,
+    emoji: Optional[bool] = True,
+)->Dict:
+    opt = {
+        'value': value,
+        'text': {
+            'type': 'plain_text',
+            'emoji': emoji,
+            'text': text,
+        }
+    }
+    return opt

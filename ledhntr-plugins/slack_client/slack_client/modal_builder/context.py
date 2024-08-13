@@ -13,7 +13,7 @@ from ledhntr.helpers import format_date, dumps, xterm
 _log: logging.Logger = logging.getLogger('ledhntr')
 
 #~ Plain Text/MRKDWN
-def context_block(
+async def context_block(
     elements: List[tuple] = None,
     block_id: Optional[str] = None,
 ):

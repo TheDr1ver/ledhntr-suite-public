@@ -15,7 +15,7 @@ _log: logging.Logger = logging.getLogger('ledhntr')
 
 #~ MRKDWN
 
-def mrkdwn_block(
+async def mrkdwn_block(
     text: str = None,
     verbatim: Optional[bool] = True,
     block_id: Optional[str] = None
@@ -56,7 +56,7 @@ def mrkdwn_block(
 #~ Multi Conversations Select
 
 #~ Button
-def button_block(
+async def button_block(
     text: str = None,
     button_text: Optional[str] = "Click Me",
     value: str = None,

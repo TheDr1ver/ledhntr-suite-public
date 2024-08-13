@@ -34,7 +34,7 @@ from ledhntr.helpers import LEDConfigParser
 from ledhntr.helpers import format_date, dumps, xterm
 from ledhntr.plugins.connector import ConnectorPlugin
 
-from modal_builder import ModalBuilder
+from .modal_builder import ModalBuilder
 
 #&##########################################################################
 #& HELPER FUNCTIONS
@@ -46,41 +46,8 @@ _log: logging.Logger = logging.getLogger('ledhntr')
 #& COMMON MODAL LAYOUTS
 #&##########################################################################
 
-def invalid_command_modal(cmd: str = None):
-    return {"type": "modal",
-        "callback_id": "invalid_command",
-        "title": {
-            "type": "plain_text",
-            "text": "Invalid Command"
-        },
-        "blocks": [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f":no_entry: You have entered an invalid command: {cmd}"
-                }
-            }
-        ]
-    }
 
-def unauthorized_modal():
-    return {"type": "modal",
-        "callback_id": "unauthorized_modal",
-        "title": {
-            "type": "plain_text",
-            "text": "Unauthorized"
-        },
-        "blocks": [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": ":no_entry: You are not authorized"
-                }
-            }
-        ]
-    }
+
 
 #&##########################################################################
 #& DECORATORS
@@ -102,12 +69,12 @@ def check_client(func):
             kwargs['channel'] = kwargs['channel'].lstrip('#')
         if not self.client:
             # // _log.debug(f"self.client not defined. Reloading client.")
-            self.reload_web_client()
+            await self.reload_web_client()
         else:
             _log.debug(f"{xterm('YELLOW')}self.client set.")# token: {self.client.token}")
             _log.debug(f"self.client.auth_test: {await self.client.auth_test()}{xterm('X')}")
         if not await self.client.auth_test():
-            self.reload_web_client()
+            await self.reload_web_client()
         return await func(self, *args, **kwargs)
     return check_client_wrapper
 
@@ -184,7 +151,7 @@ class SlackClient(ConnectorPlugin):
     #& LOAD CLIENT
     #&##########################################################################
 
-    def reload_web_client(
+    async def reload_web_client(
         self,
         token: Optional[str] = None,
     )->AsyncWebClient:
@@ -204,46 +171,6 @@ class SlackClient(ConnectorPlugin):
             self.client = AsyncWebClient(token=token)
             _log.debug(f"Explicit token set: {token}.")
         return self.client
-
-    #&##########################################################################
-    #& GLOBAL RESPONSES
-    #&##########################################################################
-
-    #~##################
-    #~ Invalid Command
-    #~##################
-
-    @check_client
-    async def invalid_command(
-        self,
-        trigger_id: str = None,
-        cmd: str = None,
-        **kwargs
-    )->None:
-        _log = self._log
-        await self.client.views_open(
-            trigger_id=trigger_id,
-            view=invalid_command_modal(cmd=cmd),
-        )
-        return None
-
-    #~##################
-    #~ UNAUTHORIZED
-    #~##################
-
-    @check_client
-    async def unauthorized_resp(
-        self,
-        trigger_id: str = None,
-        **kwargs
-    )->None:
-        _log = self._log
-        _log.debug(f"Unauthorized operation.")
-        await self.client.views_open(
-            trigger_id=trigger_id,
-            view=unauthorized_modal(),
-        )
-        return None
 
     #&##########################################################################
     #& HANDLE CHANNELS
@@ -282,7 +209,6 @@ class SlackClient(ConnectorPlugin):
         _log.debug(f"No channel found called {channel}.")
         return convo_list
 
-
     #&##########################################################################
     #& HANDLE MESSAGES AND RESPONSES
     #&##########################################################################
@@ -313,16 +239,10 @@ class SlackClient(ConnectorPlugin):
         """
         _log = self._log
         if blocks is None:
-            blocks = [
-            {
-                'type': 'section',
-                'text': {
-                    'type': 'mrkdwn',
-                    'verbatim': blocks_verbatim,
-                    'text': text,
-                },
-            }
-        ]
+            blocks = [await ModalBuilder.mrkdwn_block(
+                text=text,
+                verbatim=blocks_verbatim
+            )]
         resp_url = response_url
         resp_payload = {
             "response_type": response_type,
@@ -337,6 +257,94 @@ class SlackClient(ConnectorPlugin):
         except Exception as e:
             _log.error(f"Error posting to {resp_url}")
             return False
+
+    @check_client
+    async def conversations_history(
+        self,
+        channel: str = None,
+        inclusive: Optional[bool] = None,
+        latest: Optional[str] = None,
+        limit: Optional[int] = None,
+        oldest: Optional[str] = None,
+        **kwargs
+    )->bool:
+        _log = self.log
+        try:
+            response = await self.client.conversations_history(
+                channel=channel,
+                inclusive=inclusive,
+                latest=latest,
+                limit=limit,
+                oldest=oldest,
+                **kwargs,
+            )
+        except SlackApiError as e:
+            _log.error(f"{xterm('RED')}Error getting convo history {e.response['error']}")
+            return False
+        except Exception as e:
+            _log.error(f"Error getting convo history: {e}")
+            return False
+
+        return response.data
+
+    @check_client
+    async def conversations_replies(
+        self,
+        channel: str = None,
+        ts: str = None,
+        inclusive: Optional[bool] = None,
+        latest: Optional[str] = None,
+        limit: Optional[int] = None,
+        oldest: Optional[str] = None,
+        **kwargs
+    )->bool:
+        _log = self.log
+        try:
+            response = await self.client.conversations_replies(
+                channel=channel,
+                ts=ts,
+                inclusive=inclusive,
+                latest=latest,
+                limit=limit,
+                oldest=oldest,
+                **kwargs,
+            )
+        except SlackApiError as e:
+            _log.error(f"{xterm('RED')}Error getting convo history {e.response['error']}")
+            return False
+        except Exception as e:
+            _log.error(f"Error getting convo history: {e}")
+            return False
+
+        return response.data
+
+    @check_client
+    async def delete_message(
+        self,
+        channel: str = None,
+        ts: str = None,
+        **kwargs,
+    )->bool:
+        _log.debug(f"Deleting message {ts} from channel {channel}")
+        try:
+            resp = await self.client.chat_delete(
+                channel=channel,
+                ts=ts,
+                **kwargs
+            )
+        except SlackApiError as e:
+            _log.error(
+                f"{xterm('RED')}Error deleting message {e.response['error']}"
+                f"{xterm('X')}"
+            )
+            _log.error(f"{xterm('RED')}Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+            return False
+        except Exception as e:
+            _log.error(f"{xterm('RED')}Error deleting message: {e}{xterm('X')}")
+            _log.error(f"{xterm('RED')}Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+            return False
+        _log.debug(f"Successfully deleted message: {resp.data}")
+        return True
 
     @check_client
     async def post_message(
@@ -370,28 +378,13 @@ class SlackClient(ConnectorPlugin):
         if channel.startswith('#'):
             channel = channel.lstrip('#')
         if blocks is None:
-            blocks = [
-            {
-                'type': 'section',
-                'text': {
-                    'type': 'mrkdwn',
-                    'verbatim': blocks_verbatim,
-                    'text': text,
-                },
-            }
-        ]
-        # // _log.debug(f"Posting {text} to {channel}")
+            blocks = [await ModalBuilder.mrkdwn_block(
+                text=text,
+                verbatim=blocks_verbatim
+            )]
+
         if thread_ts is not None:
             thread_ts = str(thread_ts)
-
-        '''#. Removed because we fixed the nginx POST issues
-        if len(text) > 3000:
-            _log.warning(
-                f"{xterm('YELLOW')}TEXT IS {len(text)} CHARS LONG! TRUNCATING."
-                f"{xterm('X')}"
-            )
-            text = text[0:2999]
-        '''
 
         def chunk_blocks_by_size(blocks, block_limit, size_limit):
             chunks = []
@@ -438,10 +431,10 @@ class SlackClient(ConnectorPlugin):
                         parse=parse,
                         **kwargs,
                     )
-                _log.debug(f"{xterm('CYAN')}SUCCESS")
-                _log.debug(f"num_blocks: {len(blocks_chunk)}")
-                _log.debug(f"blocks bytes: {len(dumps(blocks_chunk, compactly=True))}")
-                _log.debug(f"thread_ts: {thread_ts}")
+                # // _log.debug(f"{xterm('CYAN')}SUCCESS")
+                # // _log.debug(f"num_blocks: {len(blocks_chunk)}")
+                # // _log.debug(f"blocks bytes: {len(dumps(blocks_chunk, compactly=True))}")
+                # // _log.debug(f"thread_ts: {thread_ts}")
                 # // _log.debug(f"blocks: {blocks_chunk}{xterm('X')}")
                 return response
             except SlackApiError as e:
@@ -474,133 +467,6 @@ class SlackClient(ConnectorPlugin):
                     return False
 
         return response
-        """
-        if len(blocks) > 50:
-            _log.warning(
-            f"{xterm('YELLOW')}MORE THAN 50 BLOCKS PARSED: {len(blocks)}!"
-            f"{xterm('X')}"
-        )
-            overflow = len(blocks)-50
-            blocks = blocks[0:48]
-            blocks.append({
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": (f":rotating_light: {len(overflow)} TOO "
-                                    "MANY BLOCKS :rotating_light:")
-                    }
-                ]
-            })
-        parse = True
-        if blocks_verbatim:
-            parse = False
-        try:
-            if ephemeral:
-                response = await self.client.chat_postEphemeral(
-                    channel=channel,
-                    text=text,
-                    blocks=blocks,
-                    thread_ts=thread_ts,
-                    parse=parse,
-                    **kwargs,
-                )
-            else:
-                response = await self.client.chat_postMessage(
-                    channel=channel,
-                    text=text,
-                    blocks=blocks,
-                    thread_ts=thread_ts,
-                    parse=parse,
-                    **kwargs,
-                )
-        except SlackApiError as e:
-            _log.error(f"{xterm('RED')}SlackError sending message {e.response['error']}")
-            # _log.error(f"Full error: {e}")
-            _log.error(f"channel: {channel}")
-            _log.error(f"text: {text}")
-            _log.error(f"blocks: {pformat(blocks)}")
-            _log.error(f"thread_ts: {thread_ts}")
-            _log.error(f"parse: {parse}")
-            for k, v in kwargs.items():
-                _log.error(f"{k}: {v}")
-            _log.error(xterm('X'))
-            '''
-            _log.error(f"self.client: {self.client}")
-            _log.error(f"self.client.token: {self.client.token}")
-            _log.error(f"self.client.auth_test: {await self.client.auth_test()}")
-            '''
-            return False
-        except Exception as e:
-            _log.error(f"Error sending message: {e}")
-            return False
-
-        _log.debug(f"Successful post!:{xterm('MAGENTA')}"
-                   f"{pformat(response.data)}{xterm('X')}")
-        return response
-        """
-
-    @check_client
-    async def conversations_history(
-        self,
-        channel: str = None,
-        inclusive: Optional[bool] = None,
-        latest: Optional[str] = None,
-        limit: Optional[int] = None,
-        oldest: Optional[str] = None,
-        **kwargs
-    )->bool:
-        _log = self.log
-        try:
-            response = await self.client.conversations_history(
-                channel=channel,
-                inclusive=inclusive,
-                latest=latest,
-                limit=limit,
-                oldest=oldest,
-                **kwargs,
-            )
-        except SlackApiError as e:
-            _log.error(f"{xterm('RED')}Error getting convo history {e.response['error']}")
-            return False
-        except Exception as e:
-            _log.error(f"Error getting convo history: {e}")
-            return False
-
-        # // _log.debug(f"Successfully pulled history!: {pformat(response.data)}")
-        return response.data
-
-    @check_client
-    async def conversations_replies(
-        self,
-        channel: str = None,
-        ts: str = None,
-        inclusive: Optional[bool] = None,
-        latest: Optional[str] = None,
-        limit: Optional[int] = None,
-        oldest: Optional[str] = None,
-        **kwargs
-    )->bool:
-        _log = self.log
-        try:
-            response = await self.client.conversations_replies(
-                channel=channel,
-                ts=ts,
-                inclusive=inclusive,
-                latest=latest,
-                limit=limit,
-                oldest=oldest,
-                **kwargs,
-            )
-        except SlackApiError as e:
-            _log.error(f"{xterm('RED')}Error getting convo history {e.response['error']}")
-            return False
-        except Exception as e:
-            _log.error(f"Error getting convo history: {e}")
-            return False
-
-        # // _log.debug(f"Successfully pulled history!: {pformat(response.data)}")
-        return response.data
 
     @check_client
     async def update_message(
@@ -644,8 +510,6 @@ class SlackClient(ConnectorPlugin):
                 text = text,
                 blocks = blocks,
             )
-            # // _log.debug(f"{xterm('MAGENTA')}response: {response}")
-            # // _log.debug(f"{response.data}{xterm('X')}")
         except SlackApiError as e:
             _log.error(
                 f"{xterm('RED')}Error sending message {e.response['error']}"
@@ -696,7 +560,7 @@ class SlackClient(ConnectorPlugin):
             raise
 
     #&##########################################################################
-    #& HANDLE MODALs
+    #& HANDLE MODALS
     #&##########################################################################
 
     @check_client
@@ -741,55 +605,43 @@ class SlackClient(ConnectorPlugin):
             raise
         return None
 
+    #~########################
+    #~ INVALID COMMAND POPUP
+    #~########################
+
     @check_client
-    async def delete_message(
+    async def invalid_command(
         self,
-        channel: str = None,
-        ts: str = None,
-        **kwargs,
-    )->bool:
-        _log.debug(f"Deleting message {ts} from channel {channel}")
-        try:
-            resp = await self.client.chat_delete(
-                channel=channel,
-                ts=ts,
-                **kwargs
-            )
-        except SlackApiError as e:
-            _log.error(
-                f"{xterm('RED')}Error deleting message {e.response['error']}"
-                f"{xterm('X')}"
-            )
-            _log.error(f"{xterm('RED')}Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
-            return False
-        except Exception as e:
-            _log.error(f"{xterm('RED')}Error deleting message: {e}{xterm('X')}")
-            _log.error(f"{xterm('RED')}Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
-            return False
-        _log.debug(f"Successfully deleted message: {resp.data}")
-        return True
+        trigger_id: str = None,
+        cmd: str = None,
+        **kwargs
+    )->None:
+        _log = self._log
+        await self.views_open(
+            trigger_id=trigger_id,
+            view=await ModalBuilder.invalid_command_modal(cmd=cmd),
+        )
+        return None
+
+    #~########################
+    #~ UNAUTHORIZED POPUP
+    #~########################
+
+    @check_client
+    async def unauthorized_resp(
+        self,
+        trigger_id: str = None,
+        **kwargs
+    )->None:
+        _log = self._log
+        _log.debug(f"Unauthorized operation.")
+        await self.views_open(
+            trigger_id=trigger_id,
+            view=await ModalBuilder.unauthorized_modal(),
+        )
+        return None
 
     #&##########################################################################
     #& INTERACTIVITY
     #& Slack Actions, Slack Events, and Slash-Commands
     #&##########################################################################
-
-    async def get_action_ids(
-        self,
-        payload: Dict = None,
-    )->Union[List[str], False]:
-        _log = self._log
-        action_ids = []
-        if payload['type'] == 'block_actions':
-            term = "actions:action_id"
-            for aid in payload['actions']:
-                action_id = aid['action_id']
-                action_ids.append(action_id)
-        elif payload['type'] == 'view_submission':
-            action_id = payload['view']['callback_id']
-            term = "view:callback_id"
-            action_ids.append(action_id)
-        else:
-            return False
-        _log.debug(f"Retrieved {term} {action_ids} from payload.")
-        return action_ids
