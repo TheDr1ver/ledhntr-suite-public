@@ -659,7 +659,7 @@ def add_attribute_value(
             optional = label not in required,
         )
     return input
-'''
+
 def add_user_modal(
     userval: str = None,
 ):
@@ -720,85 +720,6 @@ def new_hits(
     con_list: List = None,
 ):
     _log.debug(f"Building new_hits block")
-    '''
-        {
-        "blocks": [
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": ":collision: NEW HITS [My_DB]",
-                    "emoji": true
-                }
-            },
-            {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": "<!date^1721825208^{date_num} {time_secs}|2024-07-24>"
-                    }
-                ]
-            },
-            {
-                "type": "divider"
-            },
-            {
-                "type": "rich_text",
-                "elements": [
-                    {
-                        "type": "rich_text_section",
-                        "elements": [
-                            {
-                                "type": "text",
-                                "text": "DOMAINS",
-                                "style": {
-                                    "bold": true
-                                }
-                            }
-                        ]
-                    }
-                ]
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "`example.com`\nVT | Censys | Shodan",
-                    "verbatim": true
-                },
-                "accessory": {
-                    "type": "button",
-                    "text": {
-                        "type": "plain_text",
-                        "text": ":fire: High",
-                        "emoji": true
-                    },
-                    "value": "click_me_123",
-                    "action_id": "button-action"
-                }
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "`example2.com`\nVT | Censys | Shodan",
-                    "verbatim": true
-                },
-                "accessory": {
-                    "type": "button",
-                    "text": {
-                        "type": "plain_text",
-                        "text": ":shrug: Unknown",
-                        "emoji": true
-                    },
-                    "value": "click_me_123",
-                    "action_id": "button-action"
-                }
-            }
-        ]
-    }
-    '''
     blocks = []
     db = next(iter(data))
     new_stuff = data[db]
@@ -901,7 +822,7 @@ def new_hits(
     if len(blocks) == 3:
         return []
     return blocks
-
+'''
 def add_thing_modal(
     mojo: MOJOCMD = None,
     args: Namespace = None,

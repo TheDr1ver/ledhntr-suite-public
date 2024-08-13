@@ -46,13 +46,10 @@ from ledapi.models import(
     ConmanObject,
     MOJOCMD,
     UserModel,
-    add_attribute_label,
-    add_attribute_value,
+    RoleEnum,
     add_thing_modal,
     add_user_modal,
     edit_thing_modal,
-    get_add_attribute,
-    get_hunt_endpoints,
     new_hits,
     role_admin,
     role_dbadmin,
@@ -1072,7 +1069,7 @@ async def blockaction_update_view(
 #~######################################
 #~ slackaction_edit_thing_search
 #~######################################
-def edit_thing_blocks(
+async def edit_thing_blocks(
     db_name: str = None,
     thing: Union[Entity, Relation] = None,
 )->Dict:
@@ -1080,31 +1077,31 @@ def edit_thing_blocks(
     blocks = {}
 
     #; Set Header
-    blocks.append(block_header(f"{thing.label.upper()}: {thing.keyval.upper()}"))
+    blocks.append(await ModalBuilder.block_header(f"{thing.label.upper()}: {thing.keyval.upper()}"))
     #; Handle Date Context
     date_context = []
     fs = thing.attrs('first-seen')
     if fs:
-        date_context.append(('mrkdwn', f'*first-seen*\n{get_date(fs)}', True))
+        date_context.append(('mrkdwn', f'*first-seen*\n{await ModalBuilder.get_date(fs)}', True))
     ls = thing.attrs('last-seen')
     if ls:
-        date_context.append(('mrkdwn', f'*last-seen*\n{get_date(ls)}', True))
+        date_context.append(('mrkdwn', f'*last-seen*\n{await ModalBuilder.get_date(ls)}', True))
     disco = thing.attrs('date-discovered')
     if disco:
-        date_context.append(('mrkdwn', f'*discovered*\n{get_date(disco)}', True))
+        date_context.append(('mrkdwn', f'*discovered*\n{await ModalBuilder.get_date(disco)}', True))
 
-    blocks.append(block_context(date_context, 'date-context'))
+    blocks.append(await ModalBuilder.block_context(date_context, 'date-context'))
 
     #; Handle LEDSRC
     ledsrc = thing.attrs('ledsrc')
     if ledsrc:
         if not isinstance(ledsrc, list):
             ledsrc = [ledsrc]
-        blocks.append(block_section_mrkdwn(
+        blocks.append(await ModalBuilder.block_section_mrkdwn(
             text=f"*LEDSRC*"
         ))
         for attr in ledsrc:
-            blocks.append(block_section_button(
+            blocks.append(await ModalBuilder.block_section_button(
                 text=attr.value,
                 button_text=":mag_right:",
                 value=f"({db_name},{attr.label},{attr.value})",
@@ -1116,11 +1113,11 @@ def edit_thing_blocks(
     if hunts:
         if not isinstance(hunts, list):
             hunts = [hunts]
-        blocks.append(block_section_mrkdwn(
+        blocks.append(await ModalBuilder.block_section_mrkdwn(
             text=f"*HUNT-NAMES*"
         ))
         for attr in hunts:
-            blocks.append(block_section_button(
+            blocks.append(await ModalBuilder.block_section_button(
                 text=attr.value,
                 button_text=":mag_right:",
                 value=f"({db_name},{attr.label},{attr.value})",
@@ -1276,7 +1273,7 @@ async def slackation_get_attr_labels(
     #; Add the new input
     view['blocks'].append(new_input)
     #; Add back in the 'Add Attribute' button
-    view['blocks'].append(get_add_attribute())
+    view['blocks'].append(await ModalBuilder.get_add_attribute())
     #! Check if block count is above a certain threshold, then potentially
     #! remove the 'add new attribute' button as well.
     result = None
@@ -1591,7 +1588,7 @@ async def slackaction_set_confidence(
             channel=plugin.admin_channel,
             text=(f"<@{payload['user']['id']}> successfully set `{db_name} "
                   f"{result.label} {result.keyval}` to "
-                  f"{get_con_format(int(value))}"),
+                  f"{await ModalBuilder.get_con_format(int(value))}"),
             blocks_verbatim = True,
         )
 
@@ -1657,7 +1654,7 @@ async def slackaction_set_confidence(
 
         for block in updated_blocks:
             if block['block_id'] == block_id:
-                block['accessory']['text']['text'] = get_con_format(int(value))
+                block['accessory']['text']['text'] = await ModalBuilder.get_con_format(int(value))
 
         #; Update the old message
         resp = await plugin.update_message(
@@ -1817,7 +1814,10 @@ async def slackaction_open_add_user_modal(
     # open the modal
     await plugin.views_open(
         trigger_id=payload['trigger_id'],
-        view=add_user_modal(action['value'])
+        view=await ModalBuilder.add_user_modal(
+            userval=action['value'],
+            roles=[role for role in RoleEnum.valid_roles()],
+        )
     )
     return True
 

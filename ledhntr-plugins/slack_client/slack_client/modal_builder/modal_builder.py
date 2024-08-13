@@ -54,7 +54,9 @@ from .section import (
     button_block,
     mrkdwn_block,
 )
-# from rich_text import ()
+from rich_text import (
+    basic_rich_text,
+)
 from .helpers import (
     get_action_ids,
     get_con_format,
@@ -337,6 +339,14 @@ class ModalBuilder():
             block_id=block_id,
         )
 
+    #~ Rich Text
+    @staticmethod
+    async def basic_rich_text(
+        text: str = None,
+        bold: bool = False,
+    )->Dict:
+        return await basic_rich_text(text=text, bold=bold)
+
     #~ Section
     @staticmethod
     async def button_block(
@@ -399,7 +409,7 @@ class ModalBuilder():
             block_id=block_id,
         )
 
-    #~ Rich Text
+
 
     #~ Helpers
     @staticmethod
@@ -465,6 +475,28 @@ class ModalBuilder():
         emoji: Optional[bool] = True,
     )->Dict:
         return get_opt(text=text, value=value, emoji=emoji)
+
+    #&##########################################################################
+    #& Modal Framework
+    #&##########################################################################
+    #~ Build Modal Framework
+    @staticmethod
+    async def get_modal_framework(
+        callback_id: str = None,
+        title: str = None,
+        submit: str = 'Submit',
+        close: str = 'Close',
+        emoji: bool = True,
+    )->Dict:
+        modal = {
+            'type': 'modal',
+            'callback_id': callback_id,
+            'title': {'type': 'plain_text', 'text': title},
+            'submit': {'type': 'plain_text', 'text': submit, 'emoji':emoji},
+            'close': {'type': 'plain_text', 'text': close, 'emoji': emoji},
+            'blocks': [],
+        }
+        return modal
 
     #&##########################################################################
     #& Selections, Buttons, and other input fields
@@ -741,8 +773,116 @@ class ModalBuilder():
         return modal
 
     #~ Add User Modal
+    @staticmethod
+    async def add_user_modal(
+        userval: str = None,
+        roles: List[str] = None,
+    )->Dict:
+        username = userval.split(',')[0]
+        slack_id = f"{userval.split(',')[1]},{userval.split(',')[2]}"
+        modal = await ModalBuilder.get_modal_framework(
+            callback_id='add_user_modal',
+            title='Add User',
+        )
+        modal['blocks'].append(
+            await plain_text_input_block(
+                block_id='user_block',
+                action_id='username',
+                placeholder='Enter the LEDHNTR Username',
+                initial_value=username,
+                label='LEDHNTR Username'
+            )
+        )
+        modal['blocks'].append(
+            await plain_text_input_block(
+                block_id='slackid_block',
+                action_id='slack_id',
+                placeholder='SlackID (SlackUserID,SlackTeamID) DO NOT MODIFY',
+                initial_value=slack_id,
+                label='SlackID (SlackUserID,SlackTeamID) DO NOT MODIFY',
+            )
+        )
+        options = [
+            await ModalBuilder.get_opt(text=role.capitalize(), value=role)
+            for role in roles
+        ]
+        modal['blocks'].append(
+            await static_select_block(
+                block_id='role_block',
+                action_id='role',
+                placeholder='Select a role',
+                options=options,
+                label='Role',
+            )
+        )
+        return modal
+
 
     #~ New Hits
+    @staticmethod
+    async def new_hits(
+        data: Dict = {},
+        interesting_things: List = None,
+        con_list: List = None,
+    )->Dict:
+        blocks = []
+        db = next(iter(data))
+        new_stuff = data[db]
+        #; Format links for quick context lookups
+        link_formats = await get_link_formats()
+
+        #; Check for interesting things first:
+        #; If there's nothing interesting, return an empty block
+        if not any(thing_type in interesting_things for thing_type in new_stuff):
+            return []
+
+        blocks.append(await ModalBuilder.header_block(f":collision: NEW HITS [{db}]"))
+        blocks.append(await ModalBuilder.divider_block())
+        blocks.append(
+            await context_block(elements=[('mrkdwn', await get_date())])
+        )
+        for thing_type, things in new_stuff.items():
+            if thing_type.lower() not in interesting_things:
+                ModalBuilder._log.debug(f"{thing_type} is not interesting. Skipping.")
+                continue
+            blocks.append(await basic_rich_text(text=thing_type.upper(), bold=True))
+            thing_added = False
+            for thing in things:
+                keyval = next(iter(thing))
+                #! DEBUG - this should never happen normally
+                if 'confidence' not in thing[keyval]:
+                    confidence = 0
+                else:
+                    confidence = thing[keyval]['confidence'][0]
+                if con_list and confidence not in con_list:
+                    continue
+                iid = thing[keyval]['iid']
+                lines = [
+                    f"`{keyval}`"
+                ]
+                if thing_type.lower() in link_formats:
+                    links = ""
+                    for text, link in link_formats[thing_type.lower()].items():
+                        links += f"<{link.format(value=keyval)}|{text}> | "
+                    links = links.rstrip(" | ")
+                    lines.append(links)
+                mrkdwn = "\n".join(lines)
+                button = await button_block(
+                    text=await get_con_format(int(confidence)),
+                    button_text=mrkdwn,
+                    value=f"{db}|{iid}",
+                    action_id='set_confidence_modal',
+                    verbatim=True,
+                )
+                blocks.append(button)
+                thing_added = True
+            #; If we didn't add anything, remove the heading.
+            if not thing_added:
+                blocks.pop()
+        #; This means all we have is the DB header, divider, and context date
+        if len(blocks) == 3:
+            return []
+        return blocks
 
     #~ Add Thing Modal
 
