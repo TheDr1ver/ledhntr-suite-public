@@ -77,7 +77,12 @@ from slack_sdk.web.async_client import AsyncSlackResponse
 # _log.debug(f"PYTHONPATH: {os.environ.get('PYTHONPATH')}")
 from slack_client import (
     SlackClient,
+    block_context,
+    block_header,
+    block_section_button,
+    block_section_mrkdwn,
     get_con_format,
+    get_date,
 )
 from typedb_client import TypeDBClient
 
@@ -1078,6 +1083,67 @@ def edit_thing_blocks(
 )->Dict:
     #TODO - Move me to Models.slack.py
     blocks = {}
+
+    #; Set Header
+    blocks.append(block_header(f"{thing.label.upper()}: {thing.keyval.upper()}"))
+    #; Handle Date Context
+    date_context = []
+    fs = thing.attrs('first-seen')
+    if fs:
+        date_context.append(('mrkdwn', f'*first-seen*\n{get_date(fs)}', True))
+    ls = thing.attrs('last-seen')
+    if ls:
+        date_context.append(('mrkdwn', f'*last-seen*\n{get_date(ls)}', True))
+    disco = thing.attrs('date-discovered')
+    if disco:
+        date_context.append(('mrkdwn', f'*discovered*\n{get_date(disco)}', True))
+
+    blocks.append(block_context(date_context, 'date-context'))
+
+    #; Handle LEDSRC
+    ledsrc = thing.attrs('ledsrc')
+    if ledsrc:
+        if not isinstance(ledsrc, list):
+            ledsrc = [ledsrc]
+        blocks.append(block_section_mrkdwn(
+            text=f"*LEDSRC*"
+        ))
+        for attr in ledsrc:
+            blocks.append(block_section_button(
+                text=attr.value,
+                button_text=":mag_right:",
+                value=f"({db_name},{attr.label},{attr.value})",
+                action_id="pivot_attr",
+            ))
+
+    #; Handle Hunt Names
+    hunts = thing.attrs('hunt-name')
+    if hunts:
+        if not isinstance(hunts, list):
+            hunts = [hunts]
+        blocks.append(block_section_mrkdwn(
+            text=f"*HUNT-NAMES*"
+        ))
+        for attr in hunts:
+            blocks.append(block_section_button(
+                text=attr.value,
+                button_text=":mag_right:",
+                value=f"({db_name},{attr.label},{attr.value})",
+                action_id="pivot_attr"
+            ))
+
+    #; Add Confidence Selector
+
+    #; Add Actors
+
+    #; Add Tags
+
+    #; Add Notes
+
+    #; Populate other existing attributes
+
+    #; Add Other Things Dropdown
+
 
     return blocks
 

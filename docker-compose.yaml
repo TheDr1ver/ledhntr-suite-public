@@ -31,7 +31,11 @@ services:
       args:
         # typedb_client is required by default, but you can list other plugins
         # you want to install here in a space-delimited manner
-        PLUGINS: "shodan censys"
+        # PLUGINS: "typedb_client shodan censys"
+        # If left blank, make sure ledhtr.cfg has [core][plugin_dir_list] = /ledhntr/ledhntr-plugins/
+        # This will effectively use all available plugins instead of installing
+        # select ones.
+        PLUGINS: ""
     image: ledapi-app
     container_name: ledapi-container
     volumes:

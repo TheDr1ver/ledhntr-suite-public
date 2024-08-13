@@ -25,9 +25,6 @@ from ledapi.helpers import result_error_catching
 
 from ledhntr.data_classes import Attribute, Entity, Relation
 
-# from typedb_client.typedb_client.typedb_client import TypeDBClient
-# tdb: TypeDBClient
-
 router = APIRouter()
 
 #@##############################################################################

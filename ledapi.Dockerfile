@@ -19,7 +19,7 @@ RUN chown -R leduser:leduser /ledhntr
 # Switch to leduser
 USER leduser
 ENV PATH="/home/leduser/.local/bin:${PATH}"
-ENV PYTHONPATH="$PYTHONPATH:/ledhntr/ledapi:/home/leduser/.ledhntr/plugins"
+ENV PYTHONPATH="$PYTHONPATH:/ledhntr/ledapi:/home/leduser/.ledhntr/plugins:/ledhntr/ledhntr-plugins"
 
 WORKDIR /ledhntr
 
@@ -34,7 +34,6 @@ RUN pip install --no-cache-dir -e /ledhntr/ledhntr
 
 # Install plugins
 WORKDIR /ledhntr/ledhntr-plugins
-RUN ledhntr install ./typedb_client/
 RUN set -ex \
   && plugins=$(echo $PLUGINS | tr " " "\n") \
   && for plugin in $plugins; do \

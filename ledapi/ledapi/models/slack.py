@@ -37,7 +37,9 @@ from slack_client import (
     get_link_formats,
 )
 
-from typedb_client import TypeDBClient
+# import os
+# _log.debug(f"PYTHONPATH: {os.environ.get('PYTHONPATH')}")
+from typedb_client import TypeDBClient #working?
 
 #@##############################################################################
 #@### Pydantic API models
@@ -487,6 +489,7 @@ def _get_hunt_services()->Dict:
     return block
 
 def _get_tags()->Dict:
+    # TODO - replace with MB.external_select_block()
     block = {
         'type': 'section',
         'block_id': 'tag',
