@@ -34,7 +34,12 @@ from ledhntr.helpers import LEDConfigParser
 from ledhntr.helpers import format_date, dumps, xterm
 from ledhntr.plugins.connector import ConnectorPlugin
 
-from .modal_builder import ModalBuilder
+# import os
+# _log: logging.Logger = logging.getLogger('ledhntr')
+# _log.debug(f"PYTHONPATH: {os.environ.get('PYTHONPATH')}")
+# _log.debug(f"Current DIR: {os.path.abspath(__file__)}")
+from slack_client.modal_builder import ModalBuilder
+from slack_client.modal_builder.helpers import get_action_ids
 
 #&##########################################################################
 #& HELPER FUNCTIONS
@@ -148,6 +153,23 @@ class SlackClient(ConnectorPlugin):
         self.client = None
 
     #&##########################################################################
+    #& Helpers
+    #&##########################################################################
+    @staticmethod
+    async def get_action_ids(
+        payload: Dict = None,
+    )->Union[List[str], False]:
+        """Given a block_action or view_submission payload, extract the action_ids
+
+        :param payload: Payload sent by view_submission or block_action, defaults to None
+        :type payload: Dict, optional
+        :return: list of action_ids passed or False if not block_actions or
+            view_submission payload type
+        :rtype: Union[List[str], False]
+        """
+        return await get_action_ids(payload=payload)
+
+    #&##########################################################################
     #& LOAD CLIENT
     #&##########################################################################
 
@@ -208,6 +230,42 @@ class SlackClient(ConnectorPlugin):
                     return False
         _log.debug(f"No channel found called {channel}.")
         return convo_list
+
+    #&##########################################################################
+    #& GET USER INFO
+    #&##########################################################################
+
+    @check_client
+    async def users_info(
+        self,
+        user_ids: List[str] = None,
+        **kwargs
+    )->Dict:
+        """Retrieve user information from a list of user_ids
+
+        :param user_ids: list of Slack User IDs, defaults to None
+        :type user_ids: List[str], required
+        :return: Key/val dictionary where the user ID is the keys and the values
+            is the data returned
+        :rtype: Dict
+        """
+        rez = {}
+        _log = self.log
+        for user_id in user_ids:
+            try:
+                response = await self.client.users_info(
+                    user_id,
+                    **kwargs,
+                )
+            except SlackApiError as e:
+                _log.error(f"Error getting convo history {e.response['error']}")
+                continue
+            except Exception as e:
+                _log.error(f"Error getting convo history: {e}")
+                continue
+
+            rez[user_id]=response.data
+        return rez
 
     #&##########################################################################
     #& HANDLE MESSAGES AND RESPONSES

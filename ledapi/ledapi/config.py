@@ -10,6 +10,7 @@ from pprint import pformat
 from redis.asyncio.client import Redis
 from rq import Queue, Worker, Connection, get_current_job
 from typing import (Optional, Dict, List)
+from typedb_client import TypeDBClient
 
 #@##############################################################################
 #@ LEDHNTR CONFIGS AND LOGGING
@@ -18,7 +19,7 @@ from typing import (Optional, Dict, List)
 led = LEDHNTR()
 def get_tdb(
     old_plugin: Optional[object] = None,
-):
+)->TypeDBClient:
     #~ NOTE - I'm not sure if creating a bunch of database connections is a good idea,
     #~ but I think it's worse if we try reusing the same one for all operations/jobs
     '''
@@ -219,6 +220,7 @@ class WorkersQueueManager(object):
                 _log.debug(f"{xterm('YELLOW')}USING EXISTING OBJECT {loaded_plugin} FOR WORKER {worker_name}{xterm('RESET')}")
                 continue
             #. Load Plugin modules
+            _log.debug(f"Loading plugin {details['_plugin_name']}")
             plugin = led.load_plugin(details['_plugin_name'], duplicate=True)
             _log.debug(f"{xterm('GREEN')}LOADED PLUGIN {plugin} FOR WORKER {worker_name}{xterm('RESET')}")
             #. Set plugin attributes based on conf file

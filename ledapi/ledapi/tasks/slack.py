@@ -47,17 +47,12 @@ from ledapi.models import(
     MOJOCMD,
     UserModel,
     RoleEnum,
-    add_thing_modal,
-    add_user_modal,
-    edit_thing_modal,
-    new_hits,
     role_admin,
     role_dbadmin,
     role_hunter,
     role_conman,
     role_everyone,
     role_public,
-    update_thing_modal,
 )
 from ledapi.user import User, check_role, dep_check_user_role, get_user_by_slack_id
 from ledapi.worker_manager import(
@@ -610,8 +605,19 @@ async def mojo_add_thing(
     mojo.db_name = user.db_name or plugin.default_db
     _log.debug(f"{xterm('CYAN')}Set user_db to {mojo.db_name}. user: {user.db_name} plugin: {plugin.default_db}{xterm('X')}")
     #; Open modal
+    tdb:TypeDBClient = get_tdb()
+    all_dbs = tdb.get_all_dbs(readable=True)
+    tdb.close_client()
     try:
-        mymodal = add_thing_modal(mojo, args)
+        mymodal = await ModalBuilder.add_thing_modal(
+            db_name=mojo.db_name,
+            channel_id=mojo.channel_id,
+            label=args.label,
+            value=args.value,
+            all_dbs=all_dbs,
+            ledschema=led.schema,
+            plugin_list=led.list_plugins(),
+        )
     except Exception as e:
         _log.error(f"{xterm('RED')}Failed building modal: {e}{xterm('X')}")
         _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
@@ -675,14 +681,32 @@ async def mojo_edit_thing(
     db_name = args.database or mojo.db_name
     label = args.label
     value = args.value
-    channel_id = mojo.channel_id
+    tdb:TypeDBClient = get_tdb()
+    tdb.db_name=db_name
+    all_dbs = [db for db in tdb.get_all_dbs(readable=True)]
+    if db_name not in all_dbs:
+        _log.error(f"{db_name} is not a valid database")
+        return False
+    so = Entity(label=label)
+    if value is None:
+        things = tdb.find_things(label)
+    else:
+        keyattr = Attribute(label=so.keyattr, value=value)
+        so.has.append(keyattr)
+        things = tdb.find_things(so)
+    tdb.close_client()
+
     #; Open modal
     try:
-        mymodal = edit_thing_modal(
-            db_name,
-            label,
-            value,
-            channel_id,
+        mymodal = await ModalBuilder.edit_thing_modal(
+            db_name=db_name,
+            label=label,
+            value=value,
+            container={'channel_id': mojo.channel_id},
+            things = things,
+            all_dbs = all_dbs,
+            ledschema = led.schema,
+            plugin_list = led.list_plugins(),
         )
     except Exception as e:
         _log.error(f"{xterm('RED')}Failed building modal: {e}{xterm('X')}")
@@ -872,7 +896,7 @@ async def mojo_post_news(
         data = {db: thing_types}
         #; Generate pretty blocks with buttons.
         try:
-            blocks = new_hits(data, interesting_things, con_list)
+            blocks = await ModalBuilder.new_hits(data, interesting_things, con_list)
             # // _log.debug(f"{xterm('CYAN')}Generated blocks: \n{pformat(blocks)}{xterm('X')}")
         except Exception as e:
             _log.error(f"{xterm('RED')}Failed generating blocks: {e}{xterm('X')}")
@@ -1074,7 +1098,7 @@ async def edit_thing_blocks(
     thing: Union[Entity, Relation] = None,
 )->Dict:
     #TODO - Move me to Models.slack.py
-    blocks = {}
+    blocks = []
 
     #; Set Header
     blocks.append(await ModalBuilder.block_header(f"{thing.label.upper()}: {thing.keyval.upper()}"))
@@ -1149,29 +1173,74 @@ async def slackaction_edit_thing_search(
     #@ Get the update value
     view, value = await blockaction_update_view(payload)
     _log.debug(f"{xterm('CYAN')}Selected {value}...")
-    _log.debug(f"View: {pformat(view)}{xterm('X')}")
+    _log.debug(f"View: {pformat(view)}")
+    _log.debug(f"Payload: \n{pformat(payload)}{xterm('X')}")
     #@ Get thing details from TDB
     label = payload['view']['title'].get('text').split(' ')[-1].lower()
-    set_vals = view['state']['values']
+    set_vals = payload['view']['state']['values']
     tdb:TypeDBClient = await check_db(set_vals)
     if not tdb:
         return False
     so = Entity(label=label, has=[])
     so.has.append(Attribute(label=so.keyattr, value=value))
     rez = tdb.find_things(so)
+    all_dbs = tdb.get_all_dbs(readable=True)
     tdb.close_client()
     #@ Modify blocks
     #; Remove DB and Keyval input blocks
     #; Just kidding... those are the only 2 blocks so we can just start from scratch
-    blocks = edit_thing_blocks(
-        db_name = tdb.db_name,
-        thing = rez,
+    # blocks = await edit_thing_blocks(
+    #     db_name = tdb.db_name,
+    #     thing = rez,
+    # )
+    # TODO - Move this User_UUID crap into the User object maybe
+    thing = rez[0]
+    user_uuids = (
+        thing.attrs('user-uuid')
+        if isinstance(thing.attrs('user-uuid'), list)
+        else [thing.attrs('user-uuid')]
     )
+    if user_uuids:
+        user_ids = []
+        for uuid in user_uuids:
+            if uuid == '00000000-0000-0000-0000-000000000000':
+                continue
+                slack_id = "MOJOBOT" #TODO - FIXME
+                user_ids.append(slack_id)
+            else:
+                slack_id = User.load_by_uuid(uuid).slack_id
+                user_ids.append(slack_id)
+        user_info = await plugin.users_info(user_ids=user_ids)
+    else:
+        user_info = None
+
+    modal = await ModalBuilder.edit_thing_modal(
+        db_name=tdb.db_name,
+        label=label,
+        container=payload.get('container'),
+        things=rez,
+        all_dbs=all_dbs,
+        ledschema=led.schema,
+        plugin_list=led.list_plugins(),
+        user_info=user_info,
+    )
+    _log.debug(f"Response modal:\n{pformat(modal)}")
+    view['blocks'] = modal['blocks']
     #; Add DB and Keyval as hard-coded labels
     #; Add context blocks (first/last seen, ledsrc, hunt-names)
     #; Populate changeable attribute fields
     #; Update modal view
 
+    try:
+        result = await plugin.views_update(
+            view=view,
+            view_id=view_id,
+            hash=hash,
+        )
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed updating view: {e}{xterm('X')}")
+    if result:
+        return True
     return False
 
 #~######################################
@@ -1376,8 +1445,64 @@ async def slackation_set_confidence_modal(
         "close": {"type": "plain_text", "text": "Cancel"},
         "blocks": update_thing_modal(payload),
     }'''
+    db_name = payload['actions'][0]['value'].split('|')[0]
+    iid = payload['actions'][0]['value'].split('|')[1]
+    container = payload['container']
+    tdb:TypeDBClient = get_tdb()
+    all_dbs = tdb.get_all_dbs(readable=True)
+    if db_name not in all_dbs:
+        _log.warning(
+            f"{xterm('YELLOW')}{db_name} is an invalid DB. Must be one of:"
+            f" {all_dbs}{xterm('X')}"
+        )
+        return False
+
+    tdb.db_name = db_name
+    so = Entity(label='entity')
+    so.iid = iid
+    rez = tdb.find_things(so)
+    tdb.close_client()
+    if not rez:
+        _log.error(f"Could not find object in {db_name} with iid {iid}")
+        return False
+    else:
+        thing = rez[0]
+
+    things = [thing]
+    label = thing.label
+    ledschema = led.schema
+    plugin_list = led.list_plugins()
+    user_uuids = (
+        thing.attrs('user-uuid')
+        if isinstance(thing.attrs('user-uuid'), list)
+        else [thing.attrs('user-uuid')]
+    )
+    if user_uuids:
+        user_ids = []
+        for uuid in user_uuids:
+            if uuid == '00000000-0000-0000-0000-000000000000':
+                continue
+                slack_id = "MOJOBOT" #TODO - FIXME
+                user_ids.append(slack_id)
+            else:
+                slack_id = User.load_by_uuid(uuid).slack_id
+                user_ids.append(slack_id)
+        user_info = await plugin.users_info(user_ids=user_ids)
+    else:
+        user_info = None
+
     try:
-        mymodal = update_thing_modal(payload)
+        # // mymodal = update_thing_modal(payload)
+        mymodal = await ModalBuilder.edit_thing_modal(
+            db_name=db_name,
+            label=label,
+            container=container,
+            things=things,
+            all_dbs=all_dbs,
+            ledschema=ledschema,
+            plugin_list=plugin_list,
+            user_info=user_info,
+        )
     except Exception as e:
         _log.error(f"{xterm('RED')}Failed building modal: {e}{xterm('X')}")
         _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
@@ -1987,22 +2112,22 @@ async def slackaction_conf(
     opts = {
         'block_actions':{
             'add_new_attribute': (slackaction_add_new_attribute, role_hunter),
-            "open_add_user_modal": (slackaction_open_add_user_modal, role_dbadmin),
-            "check_job_status": (slackaction_check_job_status, role_everyone),
-            #. role_everyone can open the dialog, but only con_man can change the confidence
-            "set_confidence_modal": (slackation_set_confidence_modal, role_everyone),
+            'check_job_status': (slackaction_check_job_status, role_everyone),
+            'edit_thing_search': (slackaction_edit_thing_search, role_hunter),
             'get_attr_labels': (slackation_get_attr_labels, role_hunter),
             'get_hunt_endpoints': (slackaction_get_hunt_endpoints, role_hunter),
-            "no_action": (slackaction_no_action, role_everyone),
-            'edit_thing_search': (slackaction_edit_thing_search, role_hunter),
+            'no_action': (slackaction_no_action, role_everyone),
+            'open_add_user_modal': (slackaction_open_add_user_modal, role_dbadmin),
+            #. role_everyone can open the dialog, but only con_man can change the confidence
+            'set_confidence_modal': (slackation_set_confidence_modal, role_everyone),
         },
         'view_submission':{
-            'add_user_modal': (slackaction_submit_add_user, role_dbadmin), #do the add-user stuff
             # // #. slackaction_update_thing() lets you set confidence, add notes and tags
             # // #; 'update_thing': (slackation_update_thing, role_conman),
-            "add_thing": (slackaction_add_thing, role_hunter),
-            "set_confidence": (slackaction_set_confidence, role_everyone),
-            "update_thing_submit": (update_thing_submit, role_conman)
+            'add_thing': (slackaction_add_thing, role_hunter),
+            'add_user_modal': (slackaction_submit_add_user, role_dbadmin), #do the add-user stuff
+            'set_confidence': (slackaction_set_confidence, role_everyone),
+            'update_thing_submit': (update_thing_submit, role_conman)
         }
     }
 

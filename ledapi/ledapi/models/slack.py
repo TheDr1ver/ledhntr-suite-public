@@ -822,7 +822,7 @@ def new_hits(
     if len(blocks) == 3:
         return []
     return blocks
-'''
+
 def add_thing_modal(
     mojo: MOJOCMD = None,
     args: Namespace = None,
@@ -1087,6 +1087,8 @@ def edit_thing_modal(
             f"This shouldn't happen.{xterm('X')}"
         )
         return False
+    """
+    #. IDK about all this yet... I think I just copy/pasted this from the 'add' modal
     #; If the thing has a keyattr and the keyattr isn't comboid
     if not schema['keyattr'] is None and schema['keyattr'] != 'comboid':
         #; make sure the first input is for that keyattr
@@ -1116,6 +1118,7 @@ def edit_thing_modal(
         input = await ModalBuilder.add_attribute_value(label=attr, value_type=value_type)
         #; add input to main blocks.
         blocks.append(input)
+        """
 
     #@ + Add New Attribute Block
     #! There should be a check for how long the modal can be before this is added
@@ -1134,6 +1137,7 @@ def edit_thing_modal(
 
     tdb.close_client()
     return mymodal
+
 
 def update_thing_modal(
     payload: Dict = None,
@@ -1256,3 +1260,4 @@ def update_thing_modal(
     }
 
     return mymodal
+'''

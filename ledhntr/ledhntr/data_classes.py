@@ -399,7 +399,8 @@ class Thing(MutableMapping, metaclass=ABCMeta):
                 if attr.label not in rez:
                     rez[attr.label] = attr.value
                 else:
-                    rez[attr.label] = [rez[attr.label]]
+                    if not isinstance(rez[attr.label], list):
+                        rez[attr.label] = [rez[attr.label]]
                     rez[attr.label].append(attr.value)
         #; If we only have one key, just return the value
         if len(rez) == 1:
@@ -407,9 +408,15 @@ class Thing(MutableMapping, metaclass=ABCMeta):
         #; Sort it before returning
         for key in rez:
             if isinstance(rez[key], list):
-                rez[key].sort()
+                # // rez[key].sort()
+                rez[key] = sorted(
+                    [item for sublist in rez[key] for item in (sublist if isinstance(sublist, list) else [sublist])]
+                )
 
-        return dict(sorted(rez.items()))
+        final = dict(sorted(rez.items()))
+        if final == {}:
+            final = None
+        return final
 
     def to_dict(self) -> None:
         res = _to_dict(self)
