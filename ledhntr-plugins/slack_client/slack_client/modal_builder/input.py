@@ -277,9 +277,9 @@ async def static_select_block(
     if block_id is not None:
         block['block_id'] = block_id
     if focus_on_load:
-        block['focus_on_load'] = True
+        block['accessory']['focus_on_load'] = True
 
-    _log.debug(f"Built block: {pformat(block)}")
+    # // _log.debug(f"Built block: {pformat(block)}")
     return block
 
 

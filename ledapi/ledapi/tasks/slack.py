@@ -47,6 +47,7 @@ from ledapi.models import(
     MOJOCMD,
     UserModel,
     RoleEnum,
+    ThingSubmission,
     role_admin,
     role_dbadmin,
     role_hunter,
@@ -60,6 +61,7 @@ from ledapi.worker_manager import(
     poll_job,
 )
 from ledapi.tasks import(
+    add_thing_task,
     get_news_conf,
     set_confidence_task,
 )
@@ -124,13 +126,9 @@ async def check_db(set_vals:Dict = None)->Union[TypeDBClient,False]:
             f"{xterm('YELLOW')}DB selection requried for actor lookup{xterm('X')}"
         )
         return False
-    tdb:TypeDBClient = get_tdb()
-    db_names = tdb.get_all_dbs(readable=True)
-    if db_name not in db_names:
-        _log.warning(
-            f"{xterm('YELLOW')}{db_name} is an invalid DB. Must be one of:"
-            f" {db_names}{xterm('X')}"
-        )
+    #; Get TypeDB Client
+    if (tdb := get_tdb(db_name=db_name)) is None:
+        _log.error(f"Invalid database: {db_name}")
         return False
 
     tdb.db_name = db_name
@@ -681,12 +679,12 @@ async def mojo_edit_thing(
     db_name = args.database or mojo.db_name
     label = args.label
     value = args.value
-    tdb:TypeDBClient = get_tdb()
-    tdb.db_name=db_name
-    all_dbs = [db for db in tdb.get_all_dbs(readable=True)]
-    if db_name not in all_dbs:
-        _log.error(f"{db_name} is not a valid database")
+    #; Get TypeDB Client
+    if (tdb := get_tdb(db_name=db_name)) is None:
+        _log.error(f"Invalid database: {db_name}")
         return False
+    tdb:TypeDBClient
+    all_dbs = tdb.get_all_dbs(readable=True)
     so = Entity(label=label)
     if value is None:
         things = tdb.find_things(label)
@@ -841,57 +839,6 @@ async def mojo_post_news(
         if not interesting:
             _log.debug(f"{xterm('YELLOW')}nothing interesting found in {db}.{xterm('X')}")
             continue
-        """
-        for thing_type, things in thing_types.items():
-            text_lines = []
-            data = {db: {thing_type: things}}
-            #; Generate pretty blocks with buttons.
-            try:
-                blocks = new_hits(data)
-                # // _log.debug(f"{xterm('CYAN')}Generated blocks: \n{pformat(blocks)}{xterm('X')}")
-            except Exception as e:
-                _log.error(f"{xterm('RED')}Failed generating blocks: {e}{xterm('X')}")
-                _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
-            text_lines.append(f"*{db}*")
-            # // for tt, entries in thing_types.items():
-            if thing_type in interesting_things:
-                something_posted = True
-                text_lines.append(f"*Type: {thing_type}*")
-                # // for e in entries:
-                for e in things:
-                    for keyval, attributes in e.items():
-                        text_lines.append(f"```{keyval}```")
-                        '''
-                        for label, values in attributes.items():
-                            text_lines.append(f"\t{label}")
-                            if isinstance(values, list):
-                                for value in values:
-                                    text_lines.append(f"\t\t{value}")
-                            elif isinstance(values, str):
-                                text_lines.append(f"\t\t{values}")
-                        text_lines.append(f"```")
-                        '''
-            else:
-                _log.debug(f"{thing_type} not in {interesting_things}")
-
-            # // if not text_lines:
-            # //     text_lines = [f"No news from the last {args.hours_back} hours from {db}."]
-            text = "\n".join(text_lines)
-            if not blocks:
-                blocks = None
-            try:
-                await plugin.post_message(
-                    # channel=plugin.admin_channel,
-                    channel=mojo.channel_id,
-                    text=text,
-                    blocks=blocks,
-                    blocks_verbatim=True,
-                )
-            except Exception as e:
-                _log.error(f"{xterm('RED')}Failed posting message..: {e}")
-                _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
-        # // _log.debug(f"MOJOCMD: {pformat(mojo)}")
-        """
         text_lines = []
         data = {db: thing_types}
         #; Generate pretty blocks with buttons.
@@ -943,7 +890,7 @@ async def mojo_post_news(
             if plugin is None:
                 plugin:SlackClient = await get_plugin('slack_client.01')
                 _log.debug(f"plugin: {plugin}")
-            _log.debug(f"something_posted: {something_posted}, text:{text}")
+            # // _log.debug(f"something_posted: {something_posted}, text:{text}")
             await plugin.post_message(
                 # channel=plugin.admin_channel,
                 channel=mojo.channel_id,
@@ -1077,14 +1024,25 @@ async def blockaction_update_view(
         _log.error(f"{xterm('RED')}No valid action was seen: {actions}{xterm('X')}")
         return view, False
     #; Get the value
+    '''
     if actions[0].get('type') in ['static_select', 'external_select']:
         value = actions[0]['selected_option'].get('value')
     elif actions[0].get('type') in ['button']:
         value = actions[0].get('value')\
-    # TODO - handle other action types
     else:
         value = False
-    if not value:
+    '''
+    value = await SlackClient.get_state_vals_by_type(
+        data=payload['actions'][0]
+    )
+    value = value[0]
+    #! DEBUG
+    _log.debug(
+        f"{xterm('GREEN')}Updating view but keeping payload "
+        f"{pformat(json.loads(view['private_metadata']))}"
+    )
+
+    if value is None:
         _log.error(f"{xterm('RED')}Invalid selected_option: "
                    f"{pformat(actions[0])}{xterm('X')}")
         return view, False
@@ -1214,6 +1172,7 @@ async def slackaction_edit_thing_search(
     else:
         user_info = None
 
+    _log.debug(f"{xterm('GREEN')}metadata_in: {view.get('private_metadata')}")
     modal = await ModalBuilder.edit_thing_modal(
         db_name=tdb.db_name,
         label=label,
@@ -1223,9 +1182,12 @@ async def slackaction_edit_thing_search(
         ledschema=led.schema,
         plugin_list=led.list_plugins(),
         user_info=user_info,
+        private_metadata=view.get('private_metadata'),
     )
     _log.debug(f"Response modal:\n{pformat(modal)}")
     view['blocks'] = modal['blocks']
+    view['private_metadata'] = modal['private_metadata']
+    _log.debug(f"{xterm('GREEN')}metadata_out: {view.get('private_metadata')}")
     #; Add DB and Keyval as hard-coded labels
     #; Add context blocks (first/last seen, ledsrc, hunt-names)
     #; Populate changeable attribute fields
@@ -1448,7 +1410,10 @@ async def slackation_set_confidence_modal(
     db_name = payload['actions'][0]['value'].split('|')[0]
     iid = payload['actions'][0]['value'].split('|')[1]
     container = payload['container']
-    tdb:TypeDBClient = get_tdb()
+    if (tdb := get_tdb(db_name=db_name)) is None:
+        _log.error(f"Invalid database: {db_name}")
+        return False
+    tdb:TypeDBClient
     all_dbs = tdb.get_all_dbs(readable=True)
     if db_name not in all_dbs:
         _log.warning(
@@ -1472,6 +1437,7 @@ async def slackation_set_confidence_modal(
     label = thing.label
     ledschema = led.schema
     plugin_list = led.list_plugins()
+    # TODO - Move this User_UUID crap into the User object maybe
     user_uuids = (
         thing.attrs('user-uuid')
         if isinstance(thing.attrs('user-uuid'), list)
@@ -1565,6 +1531,7 @@ async def slackaction_add_thing(
                 continue
             if attr_label == 'keyattr':
                 attr_label = new_thing.keyattr
+            '''
             data_type = data.get('type')
             if data_type in ['plain_text_input', 'number_input']:
                 val = data.get('value')
@@ -1600,6 +1567,11 @@ async def slackaction_add_thing(
                     f"{xterm('RED')}Unknown data type: {data_type}. "
                     f"Skipping {attr_label}.{xterm('X')}"
                 )
+            '''
+            values = await plugin.get_state_vals_by_type(data)
+            for value in values:
+                attr = Attribute(label=attr_label, value=value)
+                new_thing.has.append(attr)
 
     #; Attach submitting user
     new_thing.has.append(Attribute(label='user-uuid', value=user.uuid))
@@ -1615,8 +1587,10 @@ async def slackaction_add_thing(
 
     if not message_failed:
         #; Get tdb client
-        tdb:TypeDBClient = get_tdb()
-        tdb.db_name = db_name
+        if (tdb := get_tdb(db_name=db_name)) is None:
+            _log.error(f"Invalid database: {db_name}")
+            return False
+        tdb: TypeDBClient
         #; Validate database
         if not tdb.check_db(db_name=db_name):
             msg = f"Database {db_name} does not exist!"
@@ -1638,7 +1612,7 @@ async def slackaction_add_thing(
     #; Set params for successful result or ephemeral failure message
         #; Also set params if it failed
         params = dict(
-            channel = payload['view']['private_metadata'],
+            channel = payload['view']['private_metadata'].get('channel_id'),
             text = (f"Failed adding {new_thing}. "
                     f"Check error log."),
             ephemeral = True,
@@ -1661,7 +1635,7 @@ async def slackaction_add_thing(
     #; Send same message to user
 
     params = dict(
-        channel = payload['view']['private_metadata'],
+        channel = payload['view']['private_metadata'].get('channel_id'),
         text = (f"Successfully added `{rez}` to {db_name}!"),
                 # // f"`{db_name}`!\n```{rez.to_dict()}```"),
         ephemeral = True,
@@ -1671,6 +1645,97 @@ async def slackaction_add_thing(
 
     await plugin.post_message(**params)
 
+    return {'response_action': 'clear'}
+
+
+#~######################################
+#~ slackaction_edit_thing
+#~######################################
+
+async def slackaction_edit_thing(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->Dict:
+    _log.debug(f"Editing thing...")
+
+    state_values = payload['view']['state'].get('values')
+    pmd = payload['view'].get('private_metadata')
+    pmd = json.loads(pmd)
+    iid = pmd.get('iid')
+    db_name = pmd.get('db_name')
+    if any(x is None for x in [iid, db_name]):
+        _log.error(
+            f"User attempted to edit thing with missing iid or db_name. "
+            f"iid: {iid} db_name: {db_name}"
+        )
+        return {'response_action': 'clear'}
+    #; Get TypeDB Client
+    if (tdb := get_tdb(db_name=db_name)) is None:
+        _log.error(f"Invalid database: {db_name}")
+        return {'response_action': 'clear'}
+    tdb:TypeDBClient
+    so = Entity(label='entity')
+    so.iid = iid
+    #; Pull the Thing object from the DB based on private_metadata
+    thing = tdb.find_things(so)[0]
+    #; Loop through all state_values that were set, add them as attributes
+    for block_id, actions in state_values.items():
+        #TODO - Extract label from block_id
+        label = block_id
+        for action_id, data in actions.items():
+            # // _log.debug(f"Action: {action_id} Data: {data}")
+            values = await plugin.get_state_vals_by_type(data)
+            if values is None:
+                continue
+            for value in values:
+                attr = Attribute(label=label, value=value)
+                if attr not in thing.has:
+                    thing.has.append(attr)
+    #; Call tdb.add_thing() in the ledapi/tasks/hunter.py tasks
+
+    thingsub = ThingSubmission(
+        db_name = db_name,
+        label = thing.label,
+        thing_type = thing.thingtype,
+        attributes = thing.attrs()
+    )
+
+    #@ Actually set the confidence inside the database
+    msg = None
+    try:
+        result = await add_thing_task(thingsub, user)
+        params = dict(
+            channel=plugin.admin_channel,
+            text=(f"<@{payload['user']['id']}> successfully modified `{db_name} "
+                  f"{result.label} {result.keyval}` to \n"
+                  f"```{pformat(result)}```"),
+            blocks_verbatim = True,
+        )
+    except SlackApiError as e:
+        msg = f"Error from SlackAPI: {e}"
+        msg += f"\nTraceback: \n{pformat(traceback.format_exc())}"
+        _log.error(msg)
+    except Exception as e:
+        msg = f"Error from LEDAPI: {e}"
+        msg += f"\nTraceback: \n{pformat(traceback.format_exc())}"
+        _log.error(msg)
+    if msg:
+        params = dict(
+            channel = payload['user']['id'],
+            text = msg,
+            ephemeral = True,
+            blocks_verbatim = True,
+            user=user.slack_id,
+        )
+
+    #@ Actually add the thing (this also handles updates and deconflicts meta attributes)
+    _log.debug(f"Updated thing: {xterm('CYAN')}{pformat(thing.to_dict())}")
+    #; Post @user updated <blah> + diff changes in channel
+    # TODO - calc diff changes instead of dumping the whole Thing
+    #; Print the result of this operation
+    await plugin.post_message(**params)
+    #; Close modal
     return {'response_action': 'clear'}
 
 #~######################################
@@ -1687,10 +1752,16 @@ async def slackaction_set_confidence(
     # // value_str = payload['actions'][0]['selected_option']['value']
 
     try:
+        '''
         value_str = (
             payload['view']['state']['values']
             [next(iter(payload['view']['state']['values']))]
             ['new_confidence']['selected_option']['value']
+        )
+        '''
+        value_str = (
+            payload['view']['state']['values'].get('confidence')
+            ['set_confidence']['selected_option']['value']
         )
     except Exception as e:
         _log.error(f"{xterm('RED')}Failed getting value str: {e}{xterm('X')}")
@@ -1788,10 +1859,6 @@ async def slackaction_set_confidence(
             text = message['text'],
             blocks = updated_blocks,
         )
-        #! WHY ISN'T UPDATE_MESSAGE WORKING?!
-        # // _log.debug(f"update responses: {pformat(resp.data)}")
-
-
     else:
         params = dict(
             channel = payload['user']['id'],
@@ -2119,6 +2186,7 @@ async def slackaction_conf(
             'no_action': (slackaction_no_action, role_everyone),
             'open_add_user_modal': (slackaction_open_add_user_modal, role_dbadmin),
             #. role_everyone can open the dialog, but only con_man can change the confidence
+            'set_confidence': (slackaction_set_confidence, role_conman),
             'set_confidence_modal': (slackation_set_confidence_modal, role_everyone),
         },
         'view_submission':{
@@ -2126,7 +2194,7 @@ async def slackaction_conf(
             # // #; 'update_thing': (slackation_update_thing, role_conman),
             'add_thing': (slackaction_add_thing, role_hunter),
             'add_user_modal': (slackaction_submit_add_user, role_dbadmin), #do the add-user stuff
-            'set_confidence': (slackaction_set_confidence, role_everyone),
+            'edit_thing': (slackaction_edit_thing, role_hunter),
             'update_thing_submit': (update_thing_submit, role_conman)
         }
     }

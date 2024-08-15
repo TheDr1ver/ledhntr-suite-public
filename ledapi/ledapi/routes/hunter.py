@@ -8,6 +8,7 @@ from rq import Queue, Worker
 from ledapi.models import(
     HuntSubmission,
     JobSubmission,
+    ThingSubmission,
     role_hunter
 )
 from ledapi.user import(
@@ -26,6 +27,7 @@ from ledapi.tasks import(
     get_hunts,
     # run_hunt,
     hunt_handler,
+    add_thing_handler,
 )
 
 from ledapi.worker_manager import(
@@ -182,6 +184,24 @@ async def add_hunt_ep(
     user: User = Depends(dep_check_user_role(role_hunter))
 ):
     _log.debug(f"Adding hunt: {hunt}")
+
+#~ Add thing
+#@ TBD - need to model out ThingSubmission
+@router.post("/add-thing")
+async def add_thing_ep(
+    thing: ThingSubmission = None,
+    user: User = Depends(dep_check_user_role(role_hunter))
+):
+    _log.debug(f"Adding thing: {thing}")
+    msg_400 = f"Unable add {thing} to {thing.db_name}"
+    msg_500 = f"Failed enabling hunt"
+    response = handle_response(
+        add_thing_handler,
+        msg_400,
+        msg_500,
+        thing,
+        user
+    )
 
 #~ Enable/Disable hunt by DB+Name
 @router.get("/enable-hunt/{db_name}/{hunt_name}")

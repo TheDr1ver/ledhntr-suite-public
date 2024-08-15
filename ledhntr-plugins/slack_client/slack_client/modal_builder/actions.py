@@ -17,6 +17,29 @@ _log: logging.Logger = logging.getLogger('ledhntr')
 
 #~ Selects with Initial Options
 
+#~ Generic Action block
+async def action_block(
+    elements: List[dict] = None,
+    block_id: Optional[str] = None,
+)->Dict:
+    """Returns a generic action block with populated elements
+
+    :param elements: list of element dicts to include in the action block, defaults to None
+    :type elements: List[dict], optional
+    :return: Action block dictionary
+    :rtype: Dict
+    """
+    if len(elements) > 25:
+        _log.error(f"There is a maximum limit of 25 blocks per action.")
+        return {}
+    block = {
+        'type': 'actions',
+        'elements': elements,
+    }
+    if block_id:
+        block['block_id'] = block_id
+    return block
+
 #~ Button
 async def action_button_block(
     button_text: Optional[str] = "Click Me",

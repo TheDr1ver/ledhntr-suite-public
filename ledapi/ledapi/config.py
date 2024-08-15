@@ -9,7 +9,7 @@ import redis as syncredis
 from pprint import pformat
 from redis.asyncio.client import Redis
 from rq import Queue, Worker, Connection, get_current_job
-from typing import (Optional, Dict, List)
+from typing import (Optional, Dict, List, Union)
 from typedb_client import TypeDBClient
 
 #@##############################################################################
@@ -19,16 +19,18 @@ from typedb_client import TypeDBClient
 led = LEDHNTR()
 def get_tdb(
     old_plugin: Optional[object] = None,
-)->TypeDBClient:
-    #~ NOTE - I'm not sure if creating a bunch of database connections is a good idea,
-    #~ but I think it's worse if we try reusing the same one for all operations/jobs
-    '''
-    if 'typedb_client' in led.plugins:
-        tdb = led.plugins['typedb_client']
-    else:
-        tdb = led.load_plugin('typedb_client')
-    '''
-    tdb = led.load_plugin('typedb_client', duplicate=True)
+    db_name: Optional[str] = None,
+)->Union[TypeDBClient,None]:
+    """get TypeDB Client
+
+    :param old_plugin: old TypeDB Plugin if we're worried about replacing one, defaults to None
+    :type old_plugin: Optional[object], optional
+    :param db_name: db_name we want to check if valid and set tdb.db_name to, defaults to None
+    :type db_name: Optional[str], optional
+    :return: Returns either TDB Client or None.
+    :rtype: TypeDBClient
+    """
+    tdb:TypeDBClient = led.load_plugin('typedb_client', duplicate=True)
     ignore_attrs = [
         'client',
         'session',
@@ -47,6 +49,12 @@ def get_tdb(
             setattr(tdb, k, v)
         if old_plugin.client and old_plugin.client.is_open():
             old_plugin.close_client()
+    if db_name:
+        all_dbs = tdb.get_all_dbs(readable=True)
+        if db_name not in all_dbs:
+            tdb.close_client()
+            return None
+        tdb.db_name = db_name
     return tdb
 
 _log = led.logger

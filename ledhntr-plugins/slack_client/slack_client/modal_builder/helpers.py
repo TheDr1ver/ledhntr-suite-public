@@ -126,3 +126,53 @@ async def get_opt(
         }
     }
     return opt
+
+async def get_state_vals_by_type(
+    data:Dict = None,
+)->Union[None, List[str]]:
+    """Retruns values set in payload.view.state.values.block_id.action_id
+
+    :param data: dict pulled from payload.view.state.values.block_id.action_id,
+        defaults to None
+    :type data: Dict, required
+    :return: List of values returend from that single input or None
+    :rtype: Union[None, List[str]]
+    """
+    data_type = data.get('type')
+    if data_type in ['plain_text_input', 'number_input', 'button']:
+        if data.get('value') is None:
+            val = None
+        else:
+            val = [data.get('value')]
+    elif data_type in ['static_select', 'external_select']:
+        if data.get('selected_option') is None:
+            val = None
+        elif data.get('selected_option').get('value') is None:
+            val = None
+        else:
+            val = [data.get('selected_option').get('value')]
+    elif data_type in ['checkboxes', 'multi_external_select']:
+        opts = data.get('selected_options')
+        val = []
+        for opt in opts:
+            v = opt.get('value')
+            if v is None:
+                continue
+            if data_type == 'checkboxes':
+                if v == 'on':
+                    v = True
+            val.append(v)
+        if not val:
+            val = None
+    elif data_type == 'datetimepicker':
+        if data.get('selected_date_time') is None:
+            val = None
+        else:
+            val = [format_date(data.get('selected_date_time'))]
+    else:
+        _log.error(
+            f"{xterm('RED')}Unknown data type: {data_type}. "
+            f"Skipping {pformat(data)}.{xterm('X')}"
+        )
+        val = None
+    return val

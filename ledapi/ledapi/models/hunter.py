@@ -1,5 +1,5 @@
 from pydantic import BaseModel, model_validator
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Union
 
 from ledhntr.data_classes import(
     Attribute,
@@ -17,6 +17,92 @@ from ledapi.config import(
 #@##############################################################################
 #@### Pydantic API models
 #@##############################################################################
+class ThingSubmission(BaseModel):
+    db_name: str = 'scratchpad'
+    label: str = None
+    thing_type: str = None
+    attributes: Dict = None
+    thing: Optional[Union[Relation, Entity]] = None
+    # // thing: Optional[Union[Relation,Entity]] = None
+    # FUTURE: Players
+    """Validate a ThingSubmission - usually for when adding a thing to a database
+
+    db_name: (str) Database name you're adding the thing to
+    label: (str) Label of the thing you're adding
+    thing_type: (str) either 'entity' or 'relation'
+    attributes: (dict) Dictionary of attribute_label: [value1,value2]
+    thing: This should be self-populated below, but I wasn't sure if it still
+        should be defined up here regardless.
+
+    Make sure if you're adding a thing that has a keyattr (as MOST do), that
+    you include one and only one keyattr + keyval pair in your attributes.
+    """
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    #~ Check for required fields
+    @model_validator(mode="before")
+    @classmethod
+    def check_values(cls, values):
+        required = ['db_name', 'label', 'thing_type',]
+        missing = [f for f in required if f not in values or values[f] is None]
+        if missing:
+            raise ValueError(f"Missing required fields: {missing}")
+        return values
+
+    #~ Check that DB actually exists
+    @model_validator(mode="before")
+    @classmethod
+    def check_db(cls, values):
+        db_name = values.get('db_name')
+        if (tdb := get_tdb(db_name=db_name)) is None:
+            _log.error(f"Invalid database: {db_name}")
+            raise ValueError(f"Invalid db_name: {db_name}")
+        return values
+
+    #~ Check thing_type == 'Entity' or 'Relation'
+    @model_validator(mode="before")
+    @classmethod
+    def check_thing_type(cls, values):
+        thing_type = values.get('thing_type')
+        if thing_type.lower() not in ['entity', 'relation']:
+            raise ValueError(f"thing_type must be 'entity' or 'relation', not {thing_type}")
+        return values
+
+    #~ Make sure we have a keyattr and value
+    @model_validator(mode="before")
+    @classmethod
+    def check_keyattr(cls, values):
+        thing_type = values.get('thing_type')
+        if thing_type.lower()=='entity':
+            thing = Entity(label=values.get('label'))
+        elif thing_type.lower()=='relation':
+            thing = Relation(label=values.get('label'))
+        attributes = values.get('attributes')
+        if thing.keyattr:
+            if attributes.get(thing.keyattr) in [None, {}, []]:
+                raise ValueError(
+                    f"{thing_type} {values.get('label')} must have a valid value,"
+                    f" not {attributes.get(thing.keyattr)}."
+                )
+            keyattr_vals = attributes.get(thing.keyattr)
+            if not isinstance(keyattr_vals, list):
+                keyattr_vals = [keyattr_vals]
+            elif len(keyattr_vals) != 1:
+                raise ValueError(
+                    f"{thing_type} requires exactly ONE keyval, not "
+                    f"{attributes.get(thing.keyattr)}."
+                )
+        for label, attr_values in attributes.items():
+            if not isinstance(attr_values, list):
+                attr_values = [attr_values]
+            for value in attr_values:
+                attr = Attribute(label=label, value=value)
+                thing.has.append(attr)
+        values['thing'] = thing
+        return values
+
 class HuntSubmission(BaseModel):
     plugin: str = None
     endpoint: str = None
@@ -90,7 +176,7 @@ class HuntSubmission(BaseModel):
                 if endpoint in valid_endpoints:
                     return values
         raise ValueError(f"Invalid endpoint: {endpoint}. Must be one of {valid_endpoints}.")
-    
+
     #~ Check that DB actually exists
     @model_validator(mode="before")
     @classmethod

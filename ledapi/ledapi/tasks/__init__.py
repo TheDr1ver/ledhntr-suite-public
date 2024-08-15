@@ -1,4 +1,6 @@
 from .hunter import (
+    add_thing_handler,
+    add_thing_task,
     get_hunts,
     # run_hunt,
     hunt_handler,

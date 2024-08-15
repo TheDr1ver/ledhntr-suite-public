@@ -8,7 +8,7 @@ from pprint import pformat
 from redis.asyncio.client import Redis
 from rq import Queue, Worker
 from rq.job import Job, Dependency
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from ledhntr.data_classes import(
     Attribute,
@@ -39,11 +39,33 @@ from ledapi.worker_manager import(
 )
 from ledapi.models import(
     JobSubmission,
+    ThingSubmission,
 )
 
 #&##############################################################################
 #& Internal Functions
 #&##############################################################################
+#~######################################
+#~ Add Thing Task
+#~######################################
+async def add_thing_task(
+    thing: ThingSubmission,
+    user: User,
+)->Union[Relation,Entity]:
+
+    _log.debug(f"Adding thing {thing.thing} to database")
+    if (tdb := get_tdb(db_name=thing.db_name)) is None:
+        _log.error(f"Invalid database: {thing.db_name}")
+        return False
+    try:
+        rez = tdb.add_thing(thing.thing, return_things=True)
+    except Exception as e:
+        _log.error(f"Failed finding hunts: {e}")
+        _log.error(f"Traceback: {traceback.format_exc()}")
+        tdb.close_client()
+        raise Exception
+    # return rez.to_dict()
+    return rez
 
 #~######################################
 #~ run_hunt() tasks
@@ -399,6 +421,28 @@ async def run_hunt_job_queue(
 #&##############################################################################
 #& API Endpoint-Facing Functions
 #&##############################################################################
+
+#~##########################
+#~ Add a thing to the database
+#~##########################
+async def add_thing_handler(
+    thing: ThingSubmission,
+    user: User,
+):
+    worker_name = await get_available_worker('typedb_client')
+    queue = wqm.conf[worker_name]['queue']
+    _log.debug(f"Enqueuing add_thing_handler")
+
+    job = queue.enqueue_call(
+        add_thing_task,
+        args=[thing, user],
+        timeout=60,
+        result_ttl=60*24,
+    )
+
+    response = await two_sec_grace(worker_name, job.id)
+
+    return response
 
 #~##########################
 #~ List all Active Hunts

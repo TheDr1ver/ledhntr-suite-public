@@ -6,6 +6,7 @@ This class is used to build out Modals in the Slack Client
 
 """
 import asyncio
+import json
 import logging
 import traceback
 
@@ -36,6 +37,7 @@ from ledhntr.plugins.connector import ConnectorPlugin
 
 #& Import Block Kit Builders
 from .actions import (
+    action_block,
     action_button_block,
 )
 from .context import (
@@ -81,7 +83,42 @@ class ModalBuilder():
     #& Block Kit Builders and Helper functions
     #&##########################################################################
 
+    #~ Generic Elements
+    @staticmethod
+    async def button_element(
+        text:str = None,
+        value:str = None,
+        action_id: str = None,
+    )->Dict:
+        button = {
+            'type': 'button',
+            'text': {
+                'type': 'plain_text',
+                'text': text,
+                'emoji': True,
+            },
+            'value': value,
+            'action_id': action_id,
+        }
+        return button
+
     #~ Actions
+    #; Generic Action Block
+    @staticmethod
+    async def action_block(
+        elements: List[dict] = None,
+    )->Dict:
+        """Returns a generic action block with populated elements
+
+        :param elements: list of element dicts to include in the action block, defaults to None
+        :type elements: List[dict], optional
+        :return: Action block dictionary
+        :rtype: Dict
+        """
+        return await action_block(
+            elements=elements,
+        )
+
     @staticmethod
     async def action_button_block(
         button_text: Optional[str] = "Click Me",
@@ -664,6 +701,7 @@ class ModalBuilder():
         label: str = None,
         value_type:str = None,
         initial_value:Union[datetime,str,int,float,bool] = None,
+        optional: bool = False,
     )->Dict:
         """Return section block with proper formatting based on value_type fed
 
@@ -738,7 +776,7 @@ class ModalBuilder():
                 label = label,
                 options = [(label, 'on')],
                 initial_options = initial_value,
-                optional = label not in required,
+                optional = optional or label not in required,
             )
         elif value_type == 'double':
             input = await number_block(
@@ -748,7 +786,7 @@ class ModalBuilder():
                 initial_value = initial_value,
                 min_value = min_value,
                 max_value = max_value,
-                optional = label not in required,
+                optional = optional or label not in required,
             )
         elif value_type == 'datetime':
             input = await datetime_picker_block(
@@ -756,7 +794,7 @@ class ModalBuilder():
                 action_id = f"add_attr_{label}",
                 label = label,
                 initial_date_time = initial_value,
-                optional = label not in required,
+                optional = optional or label not in required,
             )
         else: #@ implied value_type == 'string'
             input = await plain_text_input_block(
@@ -767,9 +805,47 @@ class ModalBuilder():
                 multiline = label in multi_line_attrs,
                 min_length=min_length,
                 max_length=max_length,
-                optional = label not in required,
+                optional = optional or label not in required,
             )
         return input
+
+    @classmethod
+    async def edit_attribute_display(
+        cls,
+        label: str = None,
+        values: List[str] = None,
+        parent_iid: str = None,
+        counter: Optional[int]=0,
+    )->List[Dict]:
+        blocks = []
+        blocks.append(await mrkdwn_block(
+            text=f"*{label}*",
+            verbatim=True,
+            block_id=f"{label}_heading"
+        ))
+        for value in values:
+            blocks.append(await context_block(
+                elements=[('mrkdwn', f'`{value}`', True)],
+                block_id=f"{label}_value_{counter}"
+            ))
+            pivot_button = await cls.button_element(
+                text="Pivot :mag_right:",
+                value=f"{label}|{value}",
+                action_id=f"pivot_attribute"
+            )
+            delete_button = await cls.button_element(
+                text="DELETE :wastebasket:",
+                value=f"{label}|{value}|{parent_iid}",
+                action_id=f"delete_attribute",
+            )
+            blocks.append(await action_block(
+                elements=[pivot_button,delete_button],
+                block_id=f"{label}_buttons_{counter}"
+            ))
+            counter += 1
+        return blocks
+
+
 
     #&##########################################################################
     #& Message Layouts
@@ -840,12 +916,21 @@ class ModalBuilder():
                     lines.append(links)
                 mrkdwn = "\n".join(lines)
                 button = await button_block(
+                    text=mrkdwn,
+                    button_text=await get_con_format(int(confidence)),
+                    value=f"{db}|{iid}",
+                    action_id='set_confidence_modal',
+                    verbatim=True,
+                )
+                '''
+                button = await cls.action_button_block(
                     text=await get_con_format(int(confidence)),
                     button_text=mrkdwn,
                     value=f"{db}|{iid}",
                     action_id='set_confidence_modal',
                     verbatim=True,
                 )
+                '''
                 blocks.append(button)
                 thing_added = True
             #; If we didn't add anything, remove the heading.
@@ -1047,11 +1132,12 @@ class ModalBuilder():
 
 
         #@ build modal framework
+        private_metadata=dumps({'channel_id': channel_id})
         modal = await cls.get_modal_framework(
             callback_id='add_thing',
             title=f"Add {label.upper()}",
             blocks=blocks,
-            private_metadata=channel_id if channel_id is not None else ""
+            private_metadata=private_metadata,
         )
         return modal
 
@@ -1068,6 +1154,7 @@ class ModalBuilder():
         ledschema: Dict = None,
         plugin_list: Dict = None,
         user_info: Optional[Dict] = None,
+        private_metadata: Optional[str] = None,
     )->Dict:
         cls._log.debug(f"Building edit_thing modal...")
         blocks = []
@@ -1115,9 +1202,23 @@ class ModalBuilder():
                 text=msg
             )
             return modal
+        #; Process private_metadata
+        pmd = {}
+        if private_metadata is not None:
+            pmd = json.loads(private_metadata)
+        if pmd.get('channel_id') is None:
+            pmd['channel_id'] = channel_id
+
+        pmd=dumps(pmd, compactly=True)
         #; We found ONE THING! GREAT! Populate the modal
         if len(things) == 1:
+            #; Let the thing iid and db_name come along for the ride
+            #; this is necessary for the final "edit" operation
+            #; since we're not including these values in the inputs.
+            container['iid'] = things[0].iid
+            container['db_name'] = db_name
             modal = await cls.thing_inspect_modal(
+                callback_id='edit_thing',
                 container=container,
                 db_name=db_name,
                 label=label,
@@ -1125,6 +1226,7 @@ class ModalBuilder():
                 plugin_list=plugin_list,
                 thing=things[0],
                 user_info=user_info,
+                private_metadata=pmd,
             )
             modal['blocks'].append(
                 await cls.get_add_attribute()
@@ -1163,15 +1265,9 @@ class ModalBuilder():
                 callback_id='edit_thing',
                 title=f"Edit {label.upper()}",
                 blocks=blocks,
-                private_metadata=channel_id if channel_id is not None else ""
+                private_metadata=pmd,
             )
             return modal
-
-        #; Finally, if there's only one thing left, we need to populate the rest
-        #;  of the modal
-        #TODO - Finally, when we have one and ONLY ONE thing we can populate the
-        #TODO       rest of the modal using thing_inspect_modal()
-        #TODO - Don't forget to #; Add Other Things Dropdown before returning!
 
         #; Otherwise, if there's more than one thing, we need to narrow it down
         #TODO - What happens when we have more than one thing that matches the query?
@@ -1181,6 +1277,7 @@ class ModalBuilder():
     @classmethod
     async def thing_inspect_modal(
         cls,
+        callback_id: str = "inspect_thing",
         container: Dict = None,
         db_name: str = None,
         label: str = None,
@@ -1188,6 +1285,7 @@ class ModalBuilder():
         plugin_list: Dict = None,
         thing: Union[Entity,Relation] = None,
         user_info: Optional[Dict] = None,
+        private_metadata: Optional[Dict] = None,
     )->Dict:
         cls._log.debug(f"Building update_thing modal...")
         blocks = []
@@ -1312,26 +1410,44 @@ class ModalBuilder():
             for lvl in range(-1,4)
         ]
         blocks.append(await static_select_block(
+                block_id="confidence",
                 label="Select Level of Confidence",
                 placeholder=await get_con_format(confidence),
                 options= options,
-                action_id="new_confidence",
+                action_id="set_confidence",
             ))
 
+        #TODO - I apparently forgot about actors and tags?
+
         #; Add Notes
-        notes = (
-            notes
-            if isinstance(thing.attrs('note'), list)
-            else [thing.attrs('note')]
-        )
+        if thing.attrs('note'):
+            notes = (
+                thing.attrs('note')
+                if isinstance(thing.attrs('note'), list)
+                else [thing.attrs('note')]
+            )
+            blocks.append(await mrkdwn_block(
+                text=f"*NOTES*"
+            ))
+            note_context = []
+            for note in notes:
+                date_context.append(
+                    ('mrkdwn', f'```note```', True)
+                )
+            blocks.append(await context_block(note_context))
+
+        '''
         for note in notes:
             blocks.append(await plain_text_input_block(
+                    block_id='note',
                     label='Note',
                     action_id='inspect_note',
                     placeholder='',
                     initial_value=note,
                     multiline=True,
+                    optional=True,
                 ))
+        '''
 
         #; Populate other existing attributes
         skip_me = [
@@ -1342,6 +1458,7 @@ class ModalBuilder():
         if thing.label not in special_ents:
             universal_meta = list(thing.attrs().keys())
 
+        counter=0
         for attr in universal_meta:
             #; Check for special attributes
             if attr in special_attrs and special_attrs[attr]:
@@ -1349,6 +1466,9 @@ class ModalBuilder():
                 continue
             #; Check if attr is skippable
             if attr in skip_me:
+                continue
+            #; If attr is keyval type, skip it
+            if attr == thing.keyattr:
                 continue
             #; Get value_type
             value_schema = ledschema['attribute'].get(attr)
@@ -1359,17 +1479,42 @@ class ModalBuilder():
                 continue
             value_type = value_schema.get('value_type')
             #; handle all other attribute input types
+            if thing.attrs(attr) is None:
+                continue
             initial_values = (
                 thing.attrs(attr)
                 if isinstance(thing.attrs(attr), list)
                 else [thing.attrs(attr)]
             )
+            #; Add the heading
+            blocks.append(await mrkdwn_block(
+                text=f"*{attr.upper()}*"
+            ))
+            '''
             for iv in initial_values:
+                #TODO - Change this to plaintext values + `PIVOT` and `DELETE` actions
+                #TODO - call it edit_attribute_display()
                 blocks.append(await cls.add_attribute_value(
                         label=attr,
                         value_type=value_type,
                         initial_value=iv,
                     ))
+            '''
+            blocks += await cls.edit_attribute_display(
+                label=attr,
+                values=initial_values,
+                counter=counter,
+            )
+            counter += (len(blocks)/2)-1
+
+        #; Process private_metadata
+        pmd = {}
+        if private_metadata is not None:
+            pmd = json.loads(private_metadata)
+        for k, v in container.items():
+            pmd[k] = v
+
+        pmd=dumps(pmd, compactly=True)
 
         #; Build Modal framework and return
         if len(thing.keyval) >= 25:
@@ -1378,8 +1523,8 @@ class ModalBuilder():
             title = thing.keyval
         modal = await cls.get_modal_framework(
             title=title,
-            callback_id='inspect_thing',
+            callback_id=callback_id,
             blocks=blocks,
-            private_metadata=dumps(container),
+            private_metadata=pmd,
         )
         return modal

@@ -39,7 +39,10 @@ from ledhntr.plugins.connector import ConnectorPlugin
 # _log.debug(f"PYTHONPATH: {os.environ.get('PYTHONPATH')}")
 # _log.debug(f"Current DIR: {os.path.abspath(__file__)}")
 from slack_client.modal_builder import ModalBuilder
-from slack_client.modal_builder.helpers import get_action_ids
+from slack_client.modal_builder.helpers import(
+    get_action_ids,
+    get_state_vals_by_type,
+)
 
 #&##########################################################################
 #& HELPER FUNCTIONS
@@ -168,6 +171,21 @@ class SlackClient(ConnectorPlugin):
         :rtype: Union[List[str], False]
         """
         return await get_action_ids(payload=payload)
+
+    @staticmethod
+    async def get_state_vals_by_type(
+    data:Dict = None,
+    )->Union[None, List[str]]:
+        """Retruns values set in payload.view.state.values.block_id.action_id
+
+        :param data: dict pulled from payload.view.state.values.block_id.action_id,
+            defaults to None
+        :type data: Dict, required
+        :return: List of values returend from that single input or None
+        :rtype: Union[None, List[str]]
+        """
+        return await get_state_vals_by_type(data=data)
+
 
     #&##########################################################################
     #& LOAD CLIENT
@@ -443,6 +461,9 @@ class SlackClient(ConnectorPlugin):
 
         if thread_ts is not None:
             thread_ts = str(thread_ts)
+
+        _log.debug(f"TEXT:{xterm('MAGENTA')} \n{pformat(text)}")
+        _log.debug(f"BLOCKS:{xterm('MAGENTA')} \n{pformat(blocks)}")
 
         def chunk_blocks_by_size(blocks, block_limit, size_limit):
             chunks = []
