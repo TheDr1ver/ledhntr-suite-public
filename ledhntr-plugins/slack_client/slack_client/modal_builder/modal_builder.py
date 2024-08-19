@@ -816,6 +816,7 @@ class ModalBuilder():
         values: List[str] = None,
         parent_iid: str = None,
         counter: Optional[int]=0,
+        db_name: str = None,
     )->List[Dict]:
         blocks = []
         blocks.append(await mrkdwn_block(
@@ -830,12 +831,12 @@ class ModalBuilder():
             ))
             pivot_button = await cls.button_element(
                 text="Pivot :mag_right:",
-                value=f"{label}|{value}",
-                action_id=f"pivot_attribute"
+                value=f"({db_name},{label},{value})",
+                action_id=f"pivot_attr"
             )
             delete_button = await cls.button_element(
                 text="DELETE :wastebasket:",
-                value=f"{label}|{value}|{parent_iid}",
+                value=f"({db_name},{label},{value},{parent_iid})",
                 action_id=f"delete_attribute",
             )
             blocks.append(await action_block(
@@ -1387,7 +1388,7 @@ class ModalBuilder():
             for attr in ledsrc:
                 blocks.append(await button_block(
                     text=f"`{attr}`",
-                    button_text=":mag_right:",
+                    button_text="Pivot :mag_right:",
                     value=f"({db_name},ledsrc,{attr})",
                     action_id="pivot_attr",
                 ))
@@ -1403,7 +1404,7 @@ class ModalBuilder():
             for attr in hunts:
                 blocks.append(await button_block(
                     text=f"`{attr}`",
-                    button_text=":mag_right:",
+                    button_text="Pivot :mag_right:",
                     value=f"({db_name},hunt-name,{attr})",
                     action_id="pivot_attr"
                 ))
@@ -1512,6 +1513,7 @@ class ModalBuilder():
                 label=attr,
                 values=initial_values,
                 counter=counter,
+                db_name=db_name,
             )
             counter += (len(blocks)/2)-1
 

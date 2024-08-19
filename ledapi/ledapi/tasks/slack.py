@@ -530,7 +530,7 @@ async def mojo_addme(
             'type': 'section',
             'text': {
                 'type': 'mrkdwn',
-                'text': f"User <@{mojo.user_id}> has requested an account."
+                'text': text,
             },
             'accessory': {
                 'type': 'button',
@@ -902,7 +902,7 @@ async def mojo_post_news(
             _log.error(f"{xterm('RED')}Failed posting message..: {e}")
             _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
 
-    if not something_posted and mojo.user_id!="AUTO-MOJO":
+    if not something_posted and mojo.user_id!="MOJOBOT":
         await plugin.post_message(
             channel=mojo.channel_id,
             text=(f"Nothing interesting found for last `{args.hours_back} hours` "
@@ -943,12 +943,21 @@ async def mojo_clear_schedules(
             }
         }
         blocks.append(block_section)
+    '''
     await slack_post_message(
         mojo.slackbot_token,
         mojo.admin_channel,
         text,
         blocks,
     )
+    '''
+    plugin:SlackClient = await get_plugin()
+    resp = await plugin.post_message(
+        channel=mojo.channel_id,
+        text=text,
+        blocks=blocks
+    )
+    _log.debug(f"message response:\n{pformat(resp.data)}")
 
 async def mojo_check_schedules(
     mojo: MOJOCMD = None,
@@ -986,12 +995,22 @@ async def mojo_check_schedules(
             }
         }
         blocks.append(block_section)
-    await slack_post_message(
+    # // plugin:SlackClient = await get_plugin()
+    '''
+    resp = await slack_post_message(
         mojo.slackbot_token,
         mojo.admin_channel,
         text,
         blocks,
     )
+    '''
+    plugin:SlackClient = await get_plugin()
+    resp = await plugin.post_message(
+        channel=mojo.channel_id,
+        text=text,
+        blocks=blocks
+    )
+    _log.debug(f"message response:\n{pformat(resp.data)}")
 
 
 #~######################################
@@ -1048,9 +1067,8 @@ async def blockaction_update_view(
         return view, False
     return view, value
 
-#~######################################
-#~ slackaction_edit_thing_search
-#~######################################
+
+'''
 async def edit_thing_blocks(
     db_name: str = None,
     thing: Union[Entity, Relation] = None,
@@ -1085,7 +1103,7 @@ async def edit_thing_blocks(
         for attr in ledsrc:
             blocks.append(await ModalBuilder.block_section_button(
                 text=attr.value,
-                button_text=":mag_right:",
+                button_text="Pivot :mag_right:",
                 value=f"({db_name},{attr.label},{attr.value})",
                 action_id="pivot_attr",
             ))
@@ -1101,7 +1119,7 @@ async def edit_thing_blocks(
         for attr in hunts:
             blocks.append(await ModalBuilder.block_section_button(
                 text=attr.value,
-                button_text=":mag_right:",
+                button_text="Pivot :mag_right:",
                 value=f"({db_name},{attr.label},{attr.value})",
                 action_id="pivot_attr"
             ))
@@ -1120,6 +1138,10 @@ async def edit_thing_blocks(
 
 
     return blocks
+'''
+#~######################################
+#~ slackaction_edit_thing_search
+#~######################################
 
 async def slackaction_edit_thing_search(
     plugin: SlackClient = None,
@@ -1809,7 +1831,7 @@ async def slackaction_set_confidence(
             _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
         #; When calling an edit block manually there will be no old message
         #; to update
-        if container.get('message_id') is None:
+        if container.get('message_ts') is None:
             await plugin.post_message(**params)
             return {'response_action': 'clear'}
 
@@ -2171,7 +2193,7 @@ async def mojocmd_conf(
             resp = await func_perms[0](mojo, user)
         except Exception as e:
             _log.error(f"Failed running {func_perms[0]}: {e}")
-            # // _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
     else:
         _log.debug(f"Invalid command: {cmd}")
         await plugin.invalid_command(
