@@ -675,7 +675,7 @@ class ModalBuilder():
     )->Dict:
         block = await static_select_block(
             action_id='get_attr_labels',
-            label="*Attribute Label",
+            label="*Attribute Label*",
             options=[],
             placeholder="Select a label",
             focus_on_load=True,
@@ -1138,7 +1138,7 @@ class ModalBuilder():
 
 
         #@ build modal framework
-        private_metadata=dumps({'channel_id': channel_id})
+        private_metadata=dumps({'channel_id': channel_id, 'label': label.lower()})
         modal = await cls.get_modal_framework(
             callback_id='add_thing',
             title=f"Add {label.upper()}",
@@ -1214,6 +1214,7 @@ class ModalBuilder():
             pmd = json.loads(private_metadata)
         if pmd.get('channel_id') is None:
             pmd['channel_id'] = channel_id
+        pmd['label']=label
 
         pmd=dumps(pmd, compactly=True)
         #; We found ONE THING! GREAT! Populate the modal
@@ -1223,6 +1224,7 @@ class ModalBuilder():
             #; since we're not including these values in the inputs.
             container['iid'] = things[0].iid
             container['db_name'] = db_name
+            container['value']=things[0].keyval
             modal = await cls.thing_inspect_modal(
                 callback_id='edit_thing',
                 container=container,

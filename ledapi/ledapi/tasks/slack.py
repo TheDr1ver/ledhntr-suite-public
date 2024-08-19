@@ -1354,7 +1354,11 @@ async def slackaction_add_new_attribute(
         elif block.get('accessory') and block.get('accessory').get('focus_on_load'):
             block['accessory']['focus_on_load'] = False
     #; Update the view with a new input
-    label = payload['view']['title'].get('text').split(' ')[-1].lower()
+    #TODO - CHANGE THIS TO CONTAINER VALUES
+    # // label = payload['view']['title'].get('text').split(' ')[-1].lower()
+    pmd = json.loads(payload['view']['private_metadata'])
+    label = pmd.get('label')
+    keyval = pmd.get('keyval')
 
     #; Get schema and meta attributes for building new_attr_label block
     schema = led.schema['entity'].get(label)
@@ -1371,7 +1375,13 @@ async def slackaction_add_new_attribute(
         meta_attrs=meta_attrs,
     )
     view['blocks'].pop() #; Remove the 'add attribute' button
-    view['blocks'].append(new_attr_label) #; Add the new label
+    if not new_attr_label.get('accessory').get('options'):
+        cant_add = await ModalBuilder.mrkdwn_block(
+            text=f"No additional attributes supported for {label}"
+        )
+        view['blocks'].append(cant_add)
+    else:
+        view['blocks'].append(new_attr_label) #; Add the new label
     result = None
     _log.debug(f"{xterm('CYAN')}Sending view: {pformat(view)}{xterm('X')}")
     try:
