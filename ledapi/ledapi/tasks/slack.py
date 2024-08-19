@@ -1601,6 +1601,8 @@ async def slackaction_add_thing(
                 )
             '''
             values = await plugin.get_state_vals_by_type(data)
+            if values is None:
+                continue
             for value in values:
                 attr = Attribute(label=attr_label, value=value)
                 new_thing.has.append(attr)
@@ -1665,9 +1667,10 @@ async def slackaction_add_thing(
     )
     await plugin.post_message(**params)
     #; Send same message to user
-
+    pmd = json.loads(payload['view']['private_metadata'])
+    channel_id=pmd.get('channel_id')
     params = dict(
-        channel = payload['view']['private_metadata'].get('channel_id'),
+        channel = channel_id,
         text = (f"Successfully added `{rez}` to {db_name}!"),
                 # // f"`{db_name}`!\n```{rez.to_dict()}```"),
         ephemeral = True,
