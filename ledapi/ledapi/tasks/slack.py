@@ -1701,7 +1701,7 @@ async def slackaction_edit_thing(
         attributes = thing.attrs()
     )
 
-    #@ Actually set the confidence inside the database
+    #@ Actually add the thing to the database
     msg = None
     try:
         result = await add_thing_task(thingsub, user)
@@ -1791,12 +1791,18 @@ async def slackaction_set_confidence(
         #@ update original message with new confidence and alert group that a user changed it.
         try:
             container = json.loads(payload['view']['private_metadata'])
-            _log.debug(f"{xterm('GREEN')}container message_ts: {container['message_ts']}")
-            _log.debug(f"{xterm('GREEN')}container thread_ts: {container.get('thread_ts')}")
+            # _log.debug(f"{xterm('GREEN')}container message_ts: {container['message_ts']}")
+            # _log.debug(f"{xterm('GREEN')}container thread_ts: {container.get('thread_ts')}")
         except Exception as e:
             _log.error(f"{xterm('RED')}{pformat(payload['view']['private_metadata'])}{xterm('X')}")
             _log.error(f"{xterm('RED')}{pformat(container)}{xterm('X')}")
             _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        #; When calling an edit block manually there will be no old message
+        #; to update
+        if container.get('message_id') is None:
+            await plugin.post_message(**params)
+            return {'response_action': 'clear'}
+
         #; Get the old message
         oldest = container.get('thread_ts')
         old_message = await plugin.conversations_history(
