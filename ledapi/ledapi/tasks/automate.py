@@ -138,7 +138,7 @@ async def auto_hunt_conf(
     job_data.hunt_name = hunt_name
     job_data.plugin = plugin
     job_data.forced = forced
-    user.user_id = "AUTOMATED"
+    user.user_id = "MOJOBOT"
     slack_format = False
 
     worker_name = await get_available_worker('maintenance')
@@ -303,13 +303,13 @@ async def post_news(
         channel_id = x['id']
         mojo = MOJOCMD(
             command="mojo",
-            text="news --hours_back=1",
-            user_id="AUTO-MOJO",
-            user_name="AUTO-MOJO",
+            text="news --hours_back=2",
+            user_id="MOJOBOT",
+            user_name="MOJOBOT",
             channel_name=bot.admin_channel,
             channel_id=channel_id,
         )
-        user = User(user_id="AUTO-MOJO")
+        user = User(user_id="MOJOBOT")
         await mojo_post_news(mojo, user)
     return True
 
