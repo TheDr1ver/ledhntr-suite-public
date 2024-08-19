@@ -1443,7 +1443,10 @@ class ModalBuilder():
                 date_context.append(
                     ('mrkdwn', f'```note```', True)
                 )
-            blocks.append(await context_block(note_context))
+            if note_context:
+                blocks.append(await context_block(note_context))
+            else:
+                blocks.pop()
 
         '''
         for note in notes:
