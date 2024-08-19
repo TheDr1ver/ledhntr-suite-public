@@ -701,12 +701,12 @@ class Censys(HNTRPlugin):
                         'registered_country_code': 'registered-country-code',
                     }
                     has = []
-                    rel = self._generate_relation_from_data(
+                    rel = self._generate_entity_from_data(
                         data=data,
                         datakey_attrlbls=datakey_attrlbls,
                         label='geoloc',
                         has=has,
-                        players = {'located-in': [ent_ip]}
+                        # players = {'located-in': [ent_ip]}
                     )
                     # rel = self.check_dateseen(rel, last_updated)
                     if rel not in things:
@@ -723,12 +723,12 @@ class Censys(HNTRPlugin):
                         'country_code': 'country-code',
                     }
                     has = []
-                    asn_rel = self._generate_relation_from_data(
+                    asn_rel = self._generate_entity_from_data(
                         data = data,
                         datakey_attrlbls=datakey_attrlbls,
                         label = 'autonomous-system',
                         has=has,
-                        players = {'linked': [ent_ip]}
+                        # players = {'linked': [ent_ip]}
                     )
                     # If you figure out how to avoid the duplicate links, this
                     # will probably need to be removed and asn_rel will need to
@@ -923,12 +923,12 @@ class Censys(HNTRPlugin):
                 'registered_country_code': 'registered-country-code',
             }
             has = [loc_updated]
-            rel = self._generate_relation_from_data(
+            rel = self._generate_entity_from_data(
                 data=data,
                 datakey_attrlbls=datakey_attrlbls,
                 label='geoloc',
                 has=has,
-                players = {'located-in': [ent_ip]}
+                # players = {'located-in': [ent_ip]}
             )
             # things['Relations'].append(rel)
             if rel:
@@ -951,12 +951,12 @@ class Censys(HNTRPlugin):
                 'country_code': 'country-code',
             }
             has = [asn_updated]
-            asn_rel = self._generate_relation_from_data(
+            asn_rel = self._generate_entity_from_data(
                 data = data,
                 datakey_attrlbls=datakey_attrlbls,
                 label = 'autonomous-system',
                 has=has,
-                players = {'linked': [ent_ip]}
+                # players = {'linked': [ent_ip]}
             )
             # Add CIDR
             '''
@@ -1110,16 +1110,16 @@ class Censys(HNTRPlugin):
             }
             has = [provider, host_ip, seen]
             # has = [provider]
-            service_rel = self._generate_relation_from_data(
+            service_rel = self._generate_entity_from_data(
                 data=data,
                 datakey_attrlbls=datakey_attrlbls,
                 label='network-service',
                 has=has,
-                players = {
-                    'running-on': [ent_ip],
-                    'serves': [],
-                    'related': [],
-                }
+                # players = {
+                #     'running-on': [ent_ip],
+                #     'serves': [],
+                #     'related': [],
+                # }
             )
             # software
             if 'software' in service:
