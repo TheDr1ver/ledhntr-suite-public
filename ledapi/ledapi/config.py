@@ -314,6 +314,7 @@ async def get_plugin(worker_name:Optional[str] = None):
         if not len(worker_name.split('.')) > 1 :
             worker_name+=".01"
         await wqm.check_config(worker_name)
+        job_id = get_current_job().id
     plugin = wqm.conf[worker_name]['_plugin']
     _log.debug(f"{xterm('BLUE')}Job {job_id} worker_name: {worker_name} plugin: {plugin}{xterm('X')}")
     return plugin
