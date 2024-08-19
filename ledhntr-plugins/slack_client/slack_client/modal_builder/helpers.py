@@ -2,6 +2,7 @@
 ModalBuilder Helper Functions
 '''
 import logging
+import re
 from datetime import datetime, timezone, timedelta
 from pprint import pformat
 from typing import(
@@ -175,4 +176,9 @@ async def get_state_vals_by_type(
             f"Skipping {pformat(data)}.{xterm('X')}"
         )
         val = None
+    #; Get value from db|iid|value format
+    if val is not None:
+        match = re.match(r".*?\|0x[0-9a-f]+\|(.*)", val)
+        if match:
+            val = match.group(1)
     return val
