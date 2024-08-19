@@ -908,6 +908,12 @@ class ModalBuilder():
                 lines = [
                     f"`{keyval}`"
                 ]
+                if not (hunt_names := thing[keyval].get('hunt-name')) is None:
+                    hunts_string=""
+                    for hunt_name in hunt_names:
+                        hunts_string+=f"`{hunt_name}` "
+                    hunts_string.rstrip()
+                    lines.append(hunts_string)
                 if thing_type.lower() in link_formats:
                     links = ""
                     for text, link in link_formats[thing_type.lower()].items():
