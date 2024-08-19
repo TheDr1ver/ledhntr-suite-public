@@ -177,8 +177,13 @@ async def get_state_vals_by_type(
         )
         val = None
     #; Get value from db|iid|value format
+    parsed_val = []
     if val is not None:
-        match = re.match(r".*?\|0x[0-9a-f]+\|(.*)", val)
-        if match:
-            val = match.group(1)
+        for v in val:
+            match = re.match(r".*?\|0x[0-9a-f]+\|(.*)", v)
+            if match:
+                new_v = match.group(1)
+                parsed_val.append(new_v)
+        if parsed_val:
+            val = parsed_val
     return val
