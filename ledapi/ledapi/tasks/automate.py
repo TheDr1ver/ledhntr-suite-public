@@ -49,7 +49,6 @@ from ledapi.models import(
 from ledapi.tasks import(
     hunt_handler,
     mojo_post_news,
-    slack_post_message,
     get_news_conf,
 )
 from ledapi.user import User
@@ -172,122 +171,6 @@ async def post_news(
     chat_clients: List[str] = [],
     channel: str = "#mojo-dev", # TODO - Get rid of this and roll it into a ConnectorPlugin
 ):
-    """
-    bot_post_funcs = {
-        'slackbot': slack_post_message,
-    }
-
-    text_lines = []
-
-    interesting_things = [
-        'domain',
-        'hostname',
-        'ip',
-        'jarm',
-        'ja3s',
-        'ssl',
-        'http',
-    ]
-
-    news_results = await get_news_conf(hours_back)
-    _log.debug(f"{xterm('CYAN')}{pformat(news_results)}{xterm('X')}")
-    new_things = news_results.get('new_things')
-    if not new_things:
-        return None
-
-    #; Load the plugins
-    bots = []
-    # // _log.debug(f"{xterm('CYAN')}wqm.conf: {wqm.conf}")
-    for cc in chat_clients:
-        # // _log.debug(f"Checking for client {cc}")
-        for conf, data in wqm.conf.items():
-            '''
-            worker_name = await get_available_worker('maintenance')
-            _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
-            await wqm.check_config(worker_name)
-            _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
-            queue = wqm.conf[worker_name]['queue']
-            queue: Queue
-            '''
-            if not conf.startswith(cc):
-                # // _log.debug(f"{conf} doesn't start with {cc}")
-                continue
-            await wqm.check_config(conf)
-            plugin = wqm.conf[conf]['_plugin']
-            bots.append(plugin)
-
-    if verbose:
-        for bot in bots:
-            #; This is something else that should be specific to the chat
-            #; plugin, but again... MVP... just trying to get it out the door.
-            text = f"```{new_things}```"
-            '''
-            blocks = [
-                {
-                    'type': 'section',
-                    'text': {
-                        'type': 'mrkdwn',
-                        'text': f"```{new_things}```",
-                        'verbatim': True,
-                    }
-                }
-            ]
-
-            await bot_post_funcs[bot](
-                token,
-                channel,
-                text,
-                blocks,
-            )
-            '''
-            if isinstance(bot, SlackClient):
-                await bot.post_message(
-                    channel = bot.admin_channel,
-                    text = text,
-                    blocks = None,
-                    blocks_verbatim=True,
-                )
-        return True
-
-    for db, thing_types in new_things.items():
-        if not thing_types:
-            continue
-        interesting = False
-        for tt in thing_types.items():
-            if tt in interesting_things:
-                interesting = True
-                break
-        if not interesting:
-            continue
-        text_lines.append(f"*{db}*")
-        for tt, entries in thing_types.keys():
-            if tt in interesting_things:
-                # // text_lines.append(f"*Type: {tt}*")
-                for e in entries:
-                    for keyval, attributes in e.items():
-                        text_lines.append(f"```{keyval}```")
-                        '''
-                        for label, values in attributes.items():
-                            text_lines.append(f"\t{label}")
-                            for value in values:
-                                text_lines.append(f"\t\t{value}")
-                        text_lines.append(f"```")
-                        '''
-            else:
-                _log.debug(f"{tt} not in {interesting_things}")
-
-    text = "\n".join(text_lines)
-    for bot in bots:
-        if isinstance(bot, SlackClient):
-            await bot.post_message(
-                channel = bot.admin_channel,
-                text = text,
-                blocks = None,
-                blocks_verbatim=True,
-            )
-
-    return True
-    """
     bots = []
     for cc in chat_clients:
         # // _log.debug(f"Checking for client {cc}")
