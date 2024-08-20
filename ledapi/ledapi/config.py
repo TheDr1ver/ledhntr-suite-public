@@ -234,7 +234,10 @@ class WorkersQueueManager(object):
             #. Set plugin attributes based on conf file
             for k, v in details['settings'].items():
                 if not hasattr(plugin, k):
-                    _log.debug(f"plugin {plugin} has no attribute {k}")
+                    _log.warning(
+                        f"plugin {plugin} has no attribute {k} "
+                        f"to place value {v}"
+                    )
                     continue
                 setattr(plugin, k, v)
             #. Reload HNTR APIConf Details
@@ -286,7 +289,7 @@ class WorkersQueueManager(object):
         #&
         #& TODO - Finally Need to write the Slack bot plugin to get to MVP
 
-        _log.debug(f"init worker_queues: {pformat(init_queues)}")
+        # // _log.debug(f"init worker_queues: {pformat(init_queues)}")
 
     async def check_config(
         self,
