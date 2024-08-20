@@ -67,7 +67,7 @@ from .helpers import (
     get_link_formats,
     get_opt,
 )
-
+_log: logging.Logger = logging.getLogger('ledhntr')
 class ModalBuilder():
     _log: logging.Logger = logging.getLogger('ledhntr')
     def __init__(
@@ -552,9 +552,17 @@ class ModalBuilder():
     async def actors_ext_opts(
         existing: Union[List[str],str] = None,
     )->Dict:
-        if not isinstance(existing, list):
+        _log.debug(f"EXISTING: {existing}")
+        options = None
+        if existing is not None and not isinstance(existing, list):
             existing = [existing]
-        options = [await get_opt(attr, attr) for attr in existing]
+        if existing is not None:
+            options = [
+                await get_opt(attr, attr)
+                for attr in existing
+                if attr is not None
+            ]
+        _log.debug(f"OPTIONS: {options}")
         if options:
             block = await external_select_block(
                 block_id='actor-name',
@@ -573,6 +581,7 @@ class ModalBuilder():
                 min_query_length=3,
                 multi=True,
             )
+        _log.debug(f"BLOCK:\n{pformat(block)}")
         return block
 
     #~ Get hunt endpoints Selection box
@@ -645,15 +654,23 @@ class ModalBuilder():
     async def get_tags(
         existing: Union[List[str],str] = None,
     )->Dict:
-        if not isinstance(existing, list):
+        _log.debug(f"{xterm('MAGENTA')}existing: {existing}")
+        options = None
+        if existing is not None and not isinstance(existing, list):
             existing = [existing]
-        options = [await get_opt(attr, attr) for attr in existing]
+        if existing is not None:
+            options = [
+                await get_opt(attr, attr)
+                for attr in existing
+                if attr is not None
+            ]
+        _log.debug(f"{xterm('MAGENTA')}options: {options}")
         if options:
             block = await external_select_block(
                 block_id='tag',
                 label='Tags',
                 action_id='opts_get_tags',
-                initial_options=existing,
+                initial_options=options,
                 min_query_length=3,
                 multi=True,
             )
@@ -666,6 +683,7 @@ class ModalBuilder():
                 min_query_length=3,
                 multi=True,
             )
+        _log.debug(f"{xterm('MAGENTA')}block: {block}")
         return block
 
     #~ Add Attribute Label Selector
@@ -1179,6 +1197,7 @@ class ModalBuilder():
                 callback_id="edit_thing_error",
                 text=":warning: A label is required to edit something."
             )
+            cls._log.debug(f"{xterm('CYAN')}Finished Modal: \n{pformat(modal)}")
             return modal
 
         if things is not None:
@@ -1201,6 +1220,7 @@ class ModalBuilder():
                 callback_id='edit_thing_error',
                 text=msg
             )
+            cls._log.debug(f"{xterm('CYAN')}Finished Modal: \n{pformat(modal)}")
             return modal
         elif ent.keyattr == 'comboid':
             msg = f":warning: At this time, keyattrs of 'comboid' are uneditable."
@@ -1210,6 +1230,7 @@ class ModalBuilder():
                 callback_id='edit_thing_error',
                 text=msg
             )
+            cls._log.debug(f"{xterm('CYAN')}Finished Modal: \n{pformat(modal)}")
             return modal
         #; Process private_metadata
         pmd = {}
@@ -1241,6 +1262,7 @@ class ModalBuilder():
             modal['blocks'].append(
                 await cls.get_add_attribute()
             )
+            cls._log.debug(f"{xterm('CYAN')}Finished Modal: \n{pformat(modal)}")
             return modal
         else:
             #; If no things have been found yet, we need to present a simple form that lets us search
@@ -1275,8 +1297,9 @@ class ModalBuilder():
                 callback_id='edit_thing',
                 title=f"Edit {label.upper()}",
                 blocks=blocks,
-                private_metadata=pmd,
+                private_metadata=dumps(pmd, compactly=True),
             )
+            cls._log.debug(f"{xterm('CYAN')}Finished Modal: \n{pformat(modal)}")
             return modal
 
         #; Otherwise, if there's more than one thing, we need to narrow it down
@@ -1474,14 +1497,19 @@ class ModalBuilder():
 
         #; Populate other existing attributes
         skip_me = [
-            'confidence', 'date-discovered', 'first-seen', 'last-seen',
-            'date-seen', 'ledsrc', 'hunt-name', 'user-uuid', 'note',
-            'hunt-endpoint', 'hunt-service', 'hunt-string', 'last-hunted',
-            'first-hunted', 'frequency', 'ledid'
+            'confidence', 'date-discovered', 'date-seen', 'first-hunted',
+            'first-seen', 'frequency', 'hunt-endpoint', 'hunt-name',
+            'hunt-service', 'hunt-string', 'last-hunted', 'last-seen', 'ledid',
+            'ledsrc', 'note', 'user-uuid',
         ]
 
         if thing.label not in special_ents:
-            universal_meta = list(thing.attrs().keys()) + thing.meta_attrs + ['actor-name']
+            for x in list(thing.attrs().keys()):
+                if x not in universal_meta:
+                    universal_meta.append(x)
+            for meta in thing.meta_attrs:
+                if meta not in universal_meta:
+                    universal_meta.append(meta)
 
         counter=0
         for attr in universal_meta:

@@ -48,6 +48,7 @@ from ledapi.models import(
     UserModel,
     RoleEnum,
     ThingSubmission,
+    ThingUpdate,
     role_admin,
     role_dbadmin,
     role_hunter,
@@ -64,6 +65,7 @@ from ledapi.tasks import(
     add_thing_task,
     get_news_conf,
     set_confidence_task,
+    replace_attributes_task,
 )
 
 from slack_sdk.web.async_client import AsyncSlackResponse
@@ -475,74 +477,6 @@ async def mojo_addme(
     _log.debug(f"Processing addme comand")
     _log.debug(f"mojo: {mojo}")
 
-    '''
-    admin_channel = "#mojo-dev"
-    slack_token = wqm.conf[worker_name]['settings']['token']
-    client = WebClient(token=slack_token)
-
-    try:
-        response = client.chat_postMessage(
-            channel=admin_channel,
-            text=f"User <@{mojo.user_id}> has requested an account.",
-            blocks = [
-                {
-                    'type': 'section',
-                    'text': {
-                        'type': 'mrkdwn',
-                        'text': f"User <@{mojo.user_id}> has requested an account."
-                    },
-                    'accessory': {
-                        'type': 'button',
-                        'text': {'type': 'plain_text', 'text': 'Add User'},
-                        'action_id': 'open_add_user_modal',
-                        'value': f"{mojo.user_name},{mojo.user_id},{mojo.team_id}",
-                    }
-                }
-            ]
-        )
-    except SlackApiError as e:
-        _log.error(f"Error sending message: {e.response['error']}")
-
-    '''
-    #; Old method
-    '''
-    channel = "#mojo-dev"
-    # slack_token = wqm.conf[worker_name]['settings']['token']
-    slack_token = mojo.slackbot_token
-    text = f"User <@{mojo.user_id}> has requested an account."
-    blocks = [
-        {
-            'type': 'section',
-            'text': {
-                'type': 'mrkdwn',
-                'text': f"User <@{mojo.user_id}> has requested an account."
-            },
-            'accessory': {
-                'type': 'button',
-                'text': {'type': 'plain_text', 'text': 'Add User'},
-                'action_id': 'open_add_user_modal',
-                'value': f"{mojo.user_name},{mojo.user_id},{mojo.team_id}",
-            }
-        }
-    ]
-
-    await slack_post_message(
-        slack_token,
-        channel,
-        text,
-        blocks,
-    )
-
-
-    rez = {
-        "response_type": "ephemeral",
-        "text": f"Request for account received: <@{mojo.user_id}>"
-    }
-    _log.debug(f"Returning rez: {rez}")
-
-    return rez
-    '''
-
     text = f"User <@{mojo.user_id}> has requested an account."
     blocks = [
         {
@@ -689,15 +623,7 @@ async def mojo_check_schedules(
             }
         }
         blocks.append(block_section)
-    # // plugin:SlackClient = await get_plugin()
-    '''
-    resp = await slack_post_message(
-        mojo.slackbot_token,
-        mojo.admin_channel,
-        text,
-        blocks,
-    )
-    '''
+
     plugin:SlackClient = await get_plugin()
     resp = await plugin.post_message(
         channel=mojo.channel_id,
@@ -738,14 +664,7 @@ async def mojo_clear_schedules(
             }
         }
         blocks.append(block_section)
-    '''
-    await slack_post_message(
-        mojo.slackbot_token,
-        mojo.admin_channel,
-        text,
-        blocks,
-    )
-    '''
+
     plugin:SlackClient = await get_plugin()
     resp = await plugin.post_message(
         channel=mojo.channel_id,
@@ -1036,6 +955,56 @@ async def mojo_post_news(
 #@##############################################################################
 async def action_no_action(plugin, payload, user): return True
 
+async def action_multiselect_handler(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+    attr_label: str = None,
+)->bool:
+    _log.debug(f"Updating {attr_label}(s)...")
+    #; Get view, value, pmd
+    view, value, pmd = await plugin.blockaction_update_view(payload)
+    if not isinstance(value, list):
+        value = [value]
+    #; Parse stuff we care about
+    db_name = pmd.get('db_name')
+    iid = pmd.get('iid')
+
+    thingup = ThingUpdate(
+        db_name = db_name,
+        iid = iid,
+        attr_label = attr_label,
+        attr_values = value
+    )
+
+    #@ Actually update the values
+    msg = None
+    try:
+        result = await replace_attributes_task(thingup, user)
+        params = dict(
+            channel = plugin.admin_channel,
+            text=(f"<@{payload['user']['id']}> successfully modified `{db_name} "
+                  f"{result.label} {result.keyval}` to \n"
+                  f"```{pformat(result)}```"),
+            blocks_verbatim = True,
+        )
+    except Exception as e:
+        msg = f"Error from LEDAPI: {e}"
+        msg += f"\nTraceback: \n{pformat(traceback.format_exc())}"
+        _log.error(msg)
+    if msg:
+        params = dict(
+            channel = payload['user']['id'],
+            text = msg,
+            ephemeral = True,
+            blocks_verbatim = True,
+            user=user.slack_id,
+        )
+    _log.debug(f"Updated thing: {xterm('CYAN')}{pformat(result.to_dict())}")
+    await plugin.post_message(**params)
+    return True
+
+
 async def action_add_new_attribute(
     plugin: SlackClient = None,
     payload: Dict = None,
@@ -1111,7 +1080,7 @@ async def action_attach_note(
     plugin: SlackClient = None,
     payload: Dict = None,
     user: User = None,
-):
+)->bool:
     _log.debug(f"Attaching note...")
     #; Parse payload metadata
     pmd = json.loads(payload['view'].get('private_metadata'))
@@ -1122,6 +1091,7 @@ async def action_attach_note(
     hash = payload['view']['hash']
     #; Get action value and view for updating
     view, value, pmd = await plugin.blockaction_update_view(payload)
+    value = value[0]
     #; Load TypeDBClient and check db_name
     if (tdb := get_tdb(db_name=db_name)) is None:
         _log.error(f"Invalid database: {db_name}")
@@ -1309,6 +1279,33 @@ async def action_check_job_status(
 
     return rez
 
+async def action_opts_get_actors(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->bool:
+    await action_multiselect_handler(
+        plugin=plugin,
+        payload=payload,
+        user=user,
+        attr_label='actor-name',
+    )
+
+async def action_opts_get_tags(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->bool:
+    _log.debug(f"Updating tags...")
+    await action_multiselect_handler(
+        plugin=plugin,
+        payload=payload,
+        user=user,
+        attr_label='tag'
+    )
+    return True
+
+
 async def action_opts_get_things(
     plugin: SlackClient = None,
     payload: Dict = None,
@@ -1318,13 +1315,14 @@ async def action_opts_get_things(
     hash = payload['view']['hash']
     #@ Get the update value
     view, value, pmd = await plugin.blockaction_update_view(payload)
+    value = value[0]
     _log.debug(f"{xterm('CYAN')}Selected {value}...")
     _log.debug(f"View: {pformat(view)}")
     _log.debug(f"Payload: \n{pformat(payload)}{xterm('X')}")
     #@ Get thing details from TDB
     label = payload['view']['title'].get('text').split(' ')[-1].lower()
-    set_vals = payload['view']['state']['values']
-    tdb:TypeDBClient = await check_db(set_vals)
+    #; Check if the DB is set and if set, that it's valid.
+    tdb:TypeDBClient = await check_db(payload)
     if not tdb:
         return False
     so = Entity(label=label, has=[])
@@ -1414,6 +1412,7 @@ async def action_get_attr_labels(
     hash = payload['view']['hash']
 
     view, label, pmd = await plugin.blockaction_update_view(payload)
+    label = label[0]
     if not label:
         return False
     #; Get the value_type
@@ -1460,6 +1459,7 @@ async def action_get_hunt_endpoints(
     hash = payload['view']['hash']
 
     view, plugin_name, pmd = await plugin.blockaction_update_view(payload)
+    plugin_name = plugin_name[0]
     _log.debug(f"{xterm('CYAN')}Searching for {plugin_name} endpoints...{xterm('X')}")
 
     #; Get valid endpoints and URI paths for plugin_name
@@ -1532,18 +1532,16 @@ async def action_select_db(
     plugin: SlackClient = None,
     payload: Dict = None,
     user: User = None,
-)->Dict:
+)->bool:
     _log.debug(f"selecting database")
     _log.debug(f"{xterm('YELLOW')}{pformat(payload)}")
-    #; Parse payload metadata
-    pmd = json.loads(payload['view'].get('private_metadata'))
-
     #; Get view_id and hash
     view_id = payload['view']['id']
     hash = payload['view']['hash']
     #; Generate updated view, input value from this action, and
     #; parsed private_metadata
     view, selected_db, pmd = await plugin.blockaction_update_view(payload)
+    selected_db = selected_db[0]
     pmd['db_name'] = selected_db
     # label = pmd.get('label')
     # db_name = pmd.get('db_name')
@@ -2124,10 +2122,6 @@ async def submit_edit_thing(
                   f"```{pformat(result)}```"),
             blocks_verbatim = True,
         )
-    except SlackApiError as e:
-        msg = f"Error from SlackAPI: {e}"
-        msg += f"\nTraceback: \n{pformat(traceback.format_exc())}"
-        _log.error(msg)
     except Exception as e:
         msg = f"Error from LEDAPI: {e}"
         msg += f"\nTraceback: \n{pformat(traceback.format_exc())}"
@@ -2142,7 +2136,7 @@ async def submit_edit_thing(
         )
 
     #@ Actually add the thing (this also handles updates and deconflicts meta attributes)
-    _log.debug(f"Updated thing: {xterm('CYAN')}{pformat(thing.to_dict())}")
+    _log.debug(f"Updated thing: {xterm('CYAN')}{pformat(result.to_dict())}")
     #; Post @user updated <blah> + diff changes in channel
     # TODO - calc diff changes instead of dumping the whole Thing
     #; Print the result of this operation
@@ -2281,6 +2275,15 @@ async def slackaction_conf(
             'attach_note': (action_attach_note, role_conman),
             'check_job_status': (action_check_job_status, role_everyone),
             'opts_get_things': (action_opts_get_things, role_hunter),
+            #TODO
+            #. These two get called when you add a tag or remove a tag
+            #. So as long as the input field is populating with the current
+            #. values we should be good for just setting actors and tags
+            #. for the selected thing to whatever gets passed as selected_options
+            #. with each addition or removal.
+            'opts_get_tags': (action_opts_get_tags, role_hunter),
+            'opts_get_actors': (action_opts_get_actors, role_hunter),
+            #TODO
             'get_attr_labels': (action_get_attr_labels, role_hunter),
             'get_hunt_endpoints': (action_get_hunt_endpoints, role_hunter),
             'no_action': (action_no_action, role_everyone),
