@@ -31,6 +31,7 @@ from .job import(
 from .hunter import(
     HuntSubmission,
     ThingSubmission,
+    ThingUpdate,
 )
 
 from .slack import(
