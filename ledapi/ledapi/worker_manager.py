@@ -97,7 +97,7 @@ async def async_worker_process(worker_name):
     _log.debug(f"Worker {worker_name} not found. Starting new process.")
     with Connection(redis_sync_client):
         worker = Worker([wqm.conf[worker_name]['queue']], name=worker_name)
-        _log.debug(f"WORKER STATE: {worker.state}")
+        _log.debug(f"{worker_name} STATE: {worker.state}")
         await worker.work()
 
 def worker_process(worker_name):
