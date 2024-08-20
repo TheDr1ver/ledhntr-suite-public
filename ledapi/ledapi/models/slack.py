@@ -363,7 +363,7 @@ def _get_actors()->Dict:
             'text': 'Actors',
         },
         'accessory': {
-            'action_id': 'add_thing_get_actor-name',
+            'action_id': 'opts_get_actors',
             'type': 'multi_external_select',
             'placeholder': {
                 'type': 'plain_text',
@@ -492,7 +492,7 @@ def _get_tags()->Dict:
             'text': 'Tags',
         },
         'accessory': {
-            'action_id': 'add_thing_get_tag',
+            'action_id': 'opts_get_tags',
             'type': 'multi_external_select',
             'placeholder': {
                 'type': 'plain_text',
@@ -1023,7 +1023,7 @@ def edit_thing_modal(
         #; Append keyval input
         input = block_external_select(
             block_id='keyattr',
-            action_id='edit_thing_search',
+            action_id='opts_get_things',
             label=ent.keyattr,
             placeholder="Enter value",
             min_query_length=2,

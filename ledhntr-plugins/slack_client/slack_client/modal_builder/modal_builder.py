@@ -559,7 +559,7 @@ class ModalBuilder():
             block = await external_select_block(
                 block_id='actor-name',
                 label='Actors',
-                action_id='add_thing_get_actor-name',
+                action_id='opts_get_actors',
                 initial_options=options,
                 min_query_length=3,
                 multi=True,
@@ -568,7 +568,7 @@ class ModalBuilder():
             block = await external_select_block(
                 block_id='actor-name',
                 label='Actors',
-                action_id='add_thing_get_actor-name',
+                action_id='opts_get_actors',
                 placeholder="Select related actors",
                 min_query_length=3,
                 multi=True,
@@ -652,7 +652,7 @@ class ModalBuilder():
             block = await external_select_block(
                 block_id='tag',
                 label='Tags',
-                action_id='add_thing_get_tag',
+                action_id='opts_get_tags',
                 initial_options=existing,
                 min_query_length=3,
                 multi=True,
@@ -661,7 +661,7 @@ class ModalBuilder():
             block = await external_select_block(
                 block_id='tag',
                 label='Tags',
-                action_id='add_thing_get_tag',
+                action_id='opts_get_tags',
                 placeholder='Select related tags',
                 min_query_length=3,
                 multi=True,
@@ -1219,7 +1219,6 @@ class ModalBuilder():
             pmd['channel_id'] = channel_id
         pmd['label']=label
 
-        pmd=dumps(pmd, compactly=True)
         #; We found ONE THING! GREAT! Populate the modal
         if things is not None and len(things) == 1:
             #; Let the thing iid and db_name come along for the ride
@@ -1237,7 +1236,7 @@ class ModalBuilder():
                 plugin_list=plugin_list,
                 thing=things[0],
                 user_info=user_info,
-                private_metadata=pmd,
+                private_metadata=dumps(pmd, compactly=True),
             )
             modal['blocks'].append(
                 await cls.get_add_attribute()
@@ -1259,7 +1258,7 @@ class ModalBuilder():
             if things is None:
                 blocks.append(await external_select_block(
                         block_id='keyattr',
-                        action_id='edit_thing_search',
+                        action_id='opts_get_things',
                         label=ent.keyattr,
                         placeholder='Enter value',
                         min_query_length=2,
@@ -1267,7 +1266,7 @@ class ModalBuilder():
             else:
                 blocks.append(await external_select_block(
                         block_id='keyattr',
-                        action_id='edit_thing_search',
+                        action_id='opts_get_things',
                         label=ent.keyattr,
                         placeholder=value,
                         min_query_length=2,
@@ -1486,12 +1485,12 @@ class ModalBuilder():
 
         counter=0
         for attr in universal_meta:
+            #; Check if attr is skippable
+            if attr in skip_me:
+                continue
             #; Check for special attributes
             if attr in special_attrs and special_attrs[attr]:
                 blocks.append(special_attrs[attr])
-                continue
-            #; Check if attr is skippable
-            if attr in skip_me:
                 continue
             #; If attr is keyval type, skip it
             if attr == thing.keyattr:
