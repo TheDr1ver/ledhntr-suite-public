@@ -103,6 +103,48 @@ class ThingSubmission(BaseModel):
         values['thing'] = thing
         return values
 
+class ThingUpdate(BaseModel):
+    db_name: str = 'scratchpad'
+    iid: str = None
+    attr_label: str = None
+    attr_values: List[str] = None
+    # FUTURE: Players
+    """Validate a ThingUpdate - usually for when updating
+        an existing thing in a database
+
+    db_name: (str) Database name you're adding the thing to
+    iid: (str) unique iid of the thing you're adding
+    attr_label: (str) label of the attribute you wish to update
+    attr_values: (list[str]) list of the attribute values you wish to update:
+        [value1,value2]
+
+    Make sure if you're adding a thing that has a keyattr (as MOST do), that
+    you include one and only one keyattr + keyval pair in your attributes.
+    """
+
+    # // class Config:
+    # //     arbitrary_types_allowed = True
+
+    #~ Check for required fields
+    @model_validator(mode="before")
+    @classmethod
+    def check_values(cls, values):
+        required = ['db_name', 'iid', 'attr_label', 'attr_values']
+        missing = [f for f in required if f not in values or values[f] is None]
+        if missing:
+            raise ValueError(f"Missing required fields: {missing}")
+        return values
+
+    #~ Check that DB actually exists
+    @model_validator(mode="before")
+    @classmethod
+    def check_db(cls, values):
+        db_name = values.get('db_name')
+        if (tdb := get_tdb(db_name=db_name)) is None:
+            _log.error(f"Invalid database: {db_name}")
+            raise ValueError(f"Invalid db_name: {db_name}")
+        return values
+
 class HuntSubmission(BaseModel):
     plugin: str = None
     endpoint: str = None
