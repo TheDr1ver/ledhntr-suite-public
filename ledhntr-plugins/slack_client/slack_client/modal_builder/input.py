@@ -55,15 +55,16 @@ async def plain_text_input_block(
             'type': 'plain_text',
             'text': placeholder,
         }
-    if initial_value:
+    if initial_value is not None:
         block['element']['initial_value'] = str(initial_value)
     if min_length is not None:
         block['element']['min_length'] = min_length
     if max_length is not None:
         block['element']['max_length'] = max_length
     if dispatch_action_config:
-        block['element']['dispatch_action_config'] = \
-        await get_dispatch_action_config(dispatch_action_config)
+        dac = await get_dispatch_action_config(dispatch_action_config)
+        block['element']['dispatch_action_config'] = dac.get('dispatch_action_config')
+        block['dispatch_action']=True
 
     block['element']['multiline'] = multiline
     block['element']['focus_on_load'] = focus_on_load

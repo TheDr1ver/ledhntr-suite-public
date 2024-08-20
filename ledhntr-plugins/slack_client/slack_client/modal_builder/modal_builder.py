@@ -1440,13 +1440,23 @@ class ModalBuilder():
             ))
             note_context = []
             for note in notes:
-                date_context.append(
-                    ('mrkdwn', f'```note```', True)
+                note_context.append(
+                    ('mrkdwn', f'```{note}```', True)
                 )
             if note_context:
                 blocks.append(await context_block(note_context))
             else:
                 blocks.pop()
+        blocks.append(await plain_text_input_block(
+            action_id="attach_note",
+            label="Add Note",
+            emoji=True,
+            initial_value="",
+            multiline=True,
+            dispatch_action_config='enter',
+            optional=True,
+            block_id="note",
+        ))
 
         '''
         for note in notes:
