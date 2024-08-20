@@ -4,6 +4,8 @@ from .hunter import (
     get_hunts,
     # run_hunt,
     hunt_handler,
+    replace_attributes_handler,
+    replace_attributes_task,
 )
 
 from .everyone import(
@@ -24,7 +26,6 @@ from .slack import(
     mojo_handler,
     mojo_post_news,
     options_handler,
-    slack_post_message,
 )
 
 from .automate import(

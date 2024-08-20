@@ -40,6 +40,7 @@ from ledapi.worker_manager import(
 from ledapi.models import(
     JobSubmission,
     ThingSubmission,
+    ThingUpdate,
 )
 
 #&##############################################################################
@@ -65,7 +66,72 @@ async def add_thing_task(
         tdb.close_client()
         raise Exception
     # return rez.to_dict()
+    tdb.close_client()
     return rez
+
+#~######################################
+#~ Replace Attributes Task
+#~ Used for updating actor-name or tags associated with a thing
+#~######################################
+async def replace_attributes_task(
+    thing: ThingUpdate,
+    user: User,
+)->Union[Relation, Entity]:
+    _log.debug(f"Updating {thing.attr_label} on {thing.iid} in {thing.db_name}")
+    if (tdb := get_tdb(db_name=thing.db_name)) is None:
+        _log.error(f"Invalid database: {thing.db_name}")
+        return False
+    try:
+        so = Entity(label='entity')
+        so.iid = thing.iid
+        #; Get the existing thing
+        old_thing = tdb.find_things(so)[0]
+        _log.debug(f"Retrieved {old_thing}")
+        #; Get all attributes of this attr_label
+        existing_attributes = old_thing.attrs(thing.attr_label)
+        _log.debug(f"Existing: {existing_attributes}")
+        if existing_attributes is None:
+            existing_attributes = []
+        if not isinstance(existing_attributes, list):
+            existing_attributes = [existing_attributes]
+        #; If there's an existing value that's not in our new list
+        #; remove it from the old thing
+        for ea in existing_attributes:
+            if ea not in thing.attr_values:
+                attr = Attribute(label=thing.attr_label, value=ea)
+                _log.debug(f"Detatching {attr} from {old_thing}")
+                old_thing = tdb.detach_attribute(
+                    old_thing=old_thing,
+                    attr=attr,
+                )
+        if existing_attributes:
+            old_thing = tdb.find_things(so)[0]
+            _log.debug(f"Retrieved {old_thing}")
+        #; If there's something new in our list, add it.
+        existing_attributes = old_thing.attrs(thing.attr_label)
+        if existing_attributes is None:
+            existing_attributes = []
+        if not isinstance(existing_attributes, list):
+            existing_attributes = [existing_attributes]
+        for new_attr in thing.attr_values:
+            if new_attr not in existing_attributes:
+                attr = Attribute(label=thing.attr_label, value=new_attr)
+                _log.debug(f"Attaching {attr} to {old_thing}")
+                old_thing = tdb.attach_attribute(
+                    old_thing=old_thing,
+                    attr=attr,
+                    return_things=True,
+                )
+        _log.debug(f"Final {thing.attr_label}(s) for {old_thing}:\n"
+                   f"{pformat(old_thing.attrs(thing.attr_label))}")
+    except Exception as e:
+        _log.error(f"Failed finding hunts: {e}")
+        _log.error(f"Traceback: {traceback.format_exc()}")
+        tdb.close_client()
+        raise Exception
+    tdb.close_client()
+    return old_thing
+
 
 #~######################################
 #~ run_hunt() tasks
@@ -445,6 +511,28 @@ async def add_thing_handler(
     return response
 
 #~##########################
+#~ Replace Attributes of a Thing
+#~##########################
+async def replace_attributes_handler(
+    thing: ThingUpdate,
+    user: User,
+):
+    worker_name = await get_available_worker('typedb_client')
+    queue = wqm.conf[worker_name]['queue']
+    _log.debug(f"Enqueuing add_thing_handler")
+
+    job = queue.enqueue_call(
+        replace_attributes_task,
+        args=[thing, user],
+        timeout=60,
+        result_ttl=60*24,
+    )
+
+    response = await two_sec_grace(worker_name, job.id)
+
+    return response
+
+#~##########################
 #~ List all Active Hunts
 #~##########################
 
@@ -517,9 +605,9 @@ async def hunt_handler(
     slack_format: Optional[bool] = False
 ):
     worker_name = await get_available_worker('maintenance')
-    _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
+    # // _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
     await wqm.check_config(worker_name)
-    _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
+    # // _log.debug(f"wqm.conf: {pformat(wqm.conf)}")
     queue = wqm.conf[worker_name]['queue']
     queue: Queue
 
