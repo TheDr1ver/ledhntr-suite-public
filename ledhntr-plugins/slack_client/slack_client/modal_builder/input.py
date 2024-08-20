@@ -160,7 +160,7 @@ async def external_select_block(
             'type': 'plain_text',
             'text': placeholder,
         }
-    if initial_options is not None and isinstance(initial_options,dict):
+    if initial_options is not None and isinstance(initial_options,list):
         block['accessory']['initial_options'] = initial_options
     elif initial_options is not None and isinstance(initial_options[0],tuple):
         for io in initial_options:

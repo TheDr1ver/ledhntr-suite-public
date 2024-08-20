@@ -1978,6 +1978,19 @@ class TypeDBClient(ConnectorPlugin):
         attr,
         return_things: Optional[bool] = False,
     ):
+        """detatch attribute from thing
+
+        *NOTE* - Pretty sure return_things doesn't work properly here.
+
+        :param old_thing: _description_
+        :type old_thing: _type_
+        :param attr: _description_
+        :type attr: _type_
+        :param return_things: _description_, defaults to False
+        :type return_things: Optional[bool], optional
+        :return: _description_
+        :rtype: _type_
+        """
         _log = self.logger
         tx = self.create_transaction(
             tx_type = TransactionType.WRITE,

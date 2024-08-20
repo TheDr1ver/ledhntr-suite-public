@@ -20,7 +20,7 @@ _log: logging.Logger = logging.getLogger('ledhntr')
 
 async def blockaction_update_view(
     payload: Dict = None
-)->Tuple[Dict, Union[str, bool], Dict]:
+)->Tuple[Dict, List[str], Dict]:
     """Get updated view and selection value
 
     :param payload: Payload sent by block action when selection is chosen,
@@ -47,7 +47,8 @@ async def blockaction_update_view(
     value = await get_state_vals_by_type(
         data=payload['actions'][0]
     )
-    value = value[0]
+    if value is None:
+        value = []
     #; Make the private_metadata friendly
     blob = view.get('private_metadata')
     if blob is None:

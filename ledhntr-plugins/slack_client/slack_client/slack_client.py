@@ -68,22 +68,13 @@ def check_client(func):
     @wraps(func)
     async def check_client_wrapper(self, *args, **kwargs):
         _log = self._log
-        '''
-        if 'channel' in kwargs and not kwargs['channel'].startswith('#'):
-            kwargs['channel'] = f"#{kwargs['channel']}"
-        if not self.admin_channel.startswith('#'):
-            self.admin_channel = f"#{self.admin_channel}"
-        if not self.user_channel.startswith('#'):
-            self.user_channel = f"#{self.user_channel}"
-        '''
         if 'channel' in kwargs and kwargs['channel'].startswith('#'):
             kwargs['channel'] = kwargs['channel'].lstrip('#')
         if not self.client:
             # // _log.debug(f"self.client not defined. Reloading client.")
             await self.reload_web_client()
         else:
-            _log.debug(f"{xterm('YELLOW')}self.client set.")# token: {self.client.token}")
-            _log.debug(f"self.client.auth_test: {await self.client.auth_test()}{xterm('X')}")
+            _log.debug(f"self.client.auth_test: {await self.client.auth_test()}")
         if not await self.client.auth_test():
             await self.reload_web_client()
         return await func(self, *args, **kwargs)
@@ -164,14 +155,14 @@ class SlackClient(ConnectorPlugin):
     @staticmethod
     async def blockaction_update_view(
         payload: Dict = None,
-    )->Tuple[Dict, Union[str, bool], Dict]:
+    )->Tuple[Dict, List[str], Dict]:
         """Get updated view and selection value
 
         :param payload: Payload sent by block action when selection is chosen,
             defaults to None
         :type payload: Dict, required
         :return: copied view, selection value or False if invalid
-        :rtype: Tuple[Dict, Union[str, bool]]
+        :rtype: Tuple[Dict, List[str], Dict]
         """
         return await blockaction_update_view(payload=payload)
 
