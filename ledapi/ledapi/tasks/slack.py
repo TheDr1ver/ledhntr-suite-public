@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import copy
+from collections import Counter
 import difflib
 import json
 import os
@@ -153,6 +154,95 @@ async def check_db(
 
     tdb.db_name = db_name
     return tdb
+
+async def get_confidence_context(
+    modal: dict = None,
+)->Dict:
+    """Gather context confidence after a modal has been built, before viewing
+
+    :param modal: existing modal dict, defaults to None
+    :type modal: dict, optional
+    :return: updated modal with confidence context for easier triage
+    :rtype: Dict
+    """
+    _log.debug(f"Processing modal \n{xterm('CYAN')}{pformat(modal)}")
+    blocks = modal.get('blocks')
+    pmd = json.loads(modal.get('private_metadata'))
+    db_name = pmd.get('db_name')
+    if db_name is None:
+        _log.error(f"Could not find db_name in private_metadata: {pmd}")
+        return modal
+    tdb: Union[TypeDBClient,None] = get_tdb(db_name=db_name)
+    if tdb is None:
+        _log.error(f"Could not connect to database {db_name}.")
+        return modal
+    context_labels = ['ledsrc', 'hunt-name']
+    all_avgs = []
+
+    for block in blocks:
+        block_id = block.get('block_id')
+        if block_id is None:
+            continue
+        if any(block_id.startswith(cl) for cl in context_labels):
+            _log.debug(f"{xterm('YELLOW')}Found block_id {block_id}")
+            label = block_id.split('_')[0]
+            value = block.get('accessory').get('value')
+            text = block.get('text').get('text')
+            new_text = f"{text}"
+            so = Entity(label='entity')
+            del so.ledid
+            so.has.append(Attribute(label=label, value=value))
+            rez = tdb.find_things(so, include_meta_attrs=True)
+            _log.debug(f"Found {len(rez)} things matching {label} {value}...")
+            maincon = None
+            total_count = 0
+            total_con = 0
+            mode_cons = []
+            for r in rez:
+                confidence = r.attrs('confidence')
+                if r.keyval == value:
+                    maincon = confidence
+                    _log.debug(f"Found main confidence for {value}: {maincon}")
+
+                #@ NOTE - ignoring confidence = 0.0 b/c that presumes it wasn't set
+                #@ if we want a more accurate "unknown" picture, maybe we change
+                #@ anything that explicitly had confidence sent to 'unknown' to 0.1
+                #; we'll make an exception for the keyval thing
+                if confidence!=0.0 or r.keyval == value:
+                    total_count += 1
+                    total_con += confidence
+                    mode_cons.append(confidence)
+            avg_con = round(total_con/total_count, 2)
+            all_avgs.append(avg_con)
+            mode_con = Counter(mode_cons).most_common(1)[0][0]
+            if maincon:
+                # new_text += f"\ncon: `{int(maincon)}`"
+                con_format = await ModalBuilder.get_con_format(int(maincon))
+                new_text += f"\ncon: `{con_format.split(' ')[-1].lower()}`"
+            new_text += f" n+1: `{total_count}` avg: `{avg_con}` mode: `{mode_con}`"
+            _log.debug(
+                f"{xterm('YELLOW')}Setting {label} {value} text to:\n{new_text}"
+            )
+            block['text']['text']=new_text
+    tdb.close_client()
+    #; Suggested level
+    suggested_avg = sum(all_avgs) / len(all_avgs) if all_avgs else 0
+    _log.debug(f"suggested_avg: {suggested_avg}")
+    con_format = await ModalBuilder.get_con_format(round(suggested_avg))
+    for block in blocks:
+        block_id = block.get('block_id')
+        if block_id == 'confidence':
+            old_text = block.get('text').get('text')
+            new_text = f"{old_text}\n"
+            new_text += (
+                f"avg_neighbors: `{suggested_avg}` "
+                f"suggested: `{con_format.split(' ')[-1].lower()}`"
+            )
+            _log.debug(f"{xterm('CYAN')}new_text: {new_text}")
+            block['text']['text'] = new_text
+
+    return modal
+
 
 #@##############################################################################
 #@ Populate Selection Options
@@ -745,12 +835,15 @@ async def mojo_edit_thing(
             ledschema = led.schema,
             plugin_list = led.list_plugins(),
         )
+        if mymodal:
+            mymodal = await get_confidence_context(mymodal)
     except Exception as e:
         _log.error(f"{xterm('RED')}Failed building modal: {e}{xterm('X')}")
         _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
     _log.debug(f"{xterm('CYAN')}view modal:\n{pformat(mymodal)}{xterm('X')}")
     _log.debug(f"{xterm('CYAN')}modal type: {type(mymodal)}{xterm('X')}")
-
+    if mymodal:
+        mymodal = await get_confidence_context(mymodal)
     try:
         await plugin.views_open(
             trigger_id=mojo.trigger_id,
@@ -1170,6 +1263,8 @@ async def action_attach_note(
         user_info=user_info,
         private_metadata=view.get('private_metadata'),
     )
+    if modal:
+        modal = await get_confidence_context(modal)
     _log.debug(f"Response modal:\n{pformat(modal)}")
     view['blocks'] = modal['blocks']
     view['private_metadata'] = modal['private_metadata']
@@ -1370,6 +1465,8 @@ async def action_opts_get_things(
         user_info=user_info,
         private_metadata=view.get('private_metadata'),
     )
+    if modal:
+        modal = await get_confidence_context(modal)
     _log.debug(f"Response modal:\n{pformat(modal)}")
     view['blocks'] = modal['blocks']
     view['private_metadata'] = modal['private_metadata']
@@ -1794,6 +1891,8 @@ async def action_set_confidence_modal(
             plugin_list=plugin_list,
             user_info=user_info,
         )
+        if mymodal:
+            mymodal = await get_confidence_context(mymodal)
     except Exception as e:
         _log.error(f"{xterm('RED')}Failed building modal: {e}{xterm('X')}")
         _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")

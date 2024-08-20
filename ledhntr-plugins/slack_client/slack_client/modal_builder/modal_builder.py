@@ -851,12 +851,14 @@ class ModalBuilder():
             ))
             pivot_button = await cls.button_element(
                 text="Pivot :mag_right:",
-                value=f"({db_name},{label},{value})",
+                # value=f"({db_name},{label},{value})",
+                value=f"{value}",
                 action_id=f"pivot_attr"
             )
             delete_button = await cls.button_element(
                 text="DELETE :wastebasket:",
-                value=f"({db_name},{label},{value},{parent_iid})",
+                # value=f"({db_name},{label},{value},{parent_iid})",
+                value=f"{value}",
                 action_id=f"delete_attribute",
             )
             blocks.append(await action_block(
@@ -1409,13 +1411,19 @@ class ModalBuilder():
             blocks.append(await mrkdwn_block(
                 text=f"*LEDSRC*"
             ))
+            i = 0
             for attr in ledsrc:
                 blocks.append(await button_block(
+                    block_id=f"ledsrc_{i}",
                     text=f"`{attr}`",
                     button_text="Pivot :mag_right:",
-                    value=f"({db_name},ledsrc,{attr})",
+                    # value=f"({db_name},ledsrc,{attr})",
+                    value=f"{attr}",
                     action_id="pivot_attr",
                 ))
+                i += 1
+                #@ Reference block_id_counter to populate dynamic context after
+                #@ modal has been built
 
         #; Handle Hunt Names
         hunts = thing.attrs('hunt-name')
@@ -1425,13 +1433,17 @@ class ModalBuilder():
             blocks.append(await mrkdwn_block(
                 text=f"*HUNT-NAMES*"
             ))
+            i = 0
             for attr in hunts:
                 blocks.append(await button_block(
+                    block_id=f"hunt-name_{i}",
                     text=f"`{attr}`",
                     button_text="Pivot :mag_right:",
-                    value=f"({db_name},hunt-name,{attr})",
+                    # value=f"({db_name},hunt-name,{attr})",
+                    value=f"{attr}",
                     action_id="pivot_attr"
                 ))
+                i+=1
 
         #; Add Confidence Selector
         if isinstance(thing.attrs('confidence'), list):
@@ -1449,8 +1461,6 @@ class ModalBuilder():
                 options= options,
                 action_id="set_confidence",
             ))
-
-        #TODO - I apparently forgot about actors and tags?
 
         #; Add Notes
         if thing.attrs('note'):
@@ -1543,16 +1553,6 @@ class ModalBuilder():
             blocks.append(await mrkdwn_block(
                 text=f"*{attr.upper()}*"
             ))
-            '''
-            for iv in initial_values:
-                #TODO - Change this to plaintext values + `PIVOT` and `DELETE` actions
-                #TODO - call it edit_attribute_display()
-                blocks.append(await cls.add_attribute_value(
-                        label=attr,
-                        value_type=value_type,
-                        initial_value=iv,
-                    ))
-            '''
             blocks += await cls.edit_attribute_display(
                 label=attr,
                 values=initial_values,
