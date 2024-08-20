@@ -234,6 +234,8 @@ async def opts_edit_thing_search(
     input = payload['value']
     #; Check if the DB is set and if set, that it's valid.
     tdb = await check_db(set_vals)
+    _log.debug(f"Pulling options from {tdb.db_name}")
+    _log.debug(f"set_vals: {pformat(set_vals)}")
     if not tdb:
         return block
     #; Get matching things from DB
@@ -687,7 +689,7 @@ async def mojo_edit_thing(
     all_dbs = tdb.get_all_dbs(readable=True)
     so = Entity(label=label)
     if value is None:
-        things = tdb.find_things(label)
+        things = None
     else:
         keyattr = Attribute(label=so.keyattr, value=value)
         so.has.append(keyattr)
@@ -1018,9 +1020,15 @@ async def mojo_check_schedules(
 #~######################################
 async def slackaction_no_action(plugin, payload, user): return True
 
+
+'''
+#~######################################
+#TODO blockaction_update_view
+#TODO MOVE THIS TO ModalBuilder.helpers
+#~######################################
 async def blockaction_update_view(
     payload: Dict = None
-)->Tuple[Dict, Union[str, bool]]:
+)->Tuple[Dict, Union[str, bool], Dict]:
     """Get updated view and selection value
 
     :param payload: Payload sent by block action when selection is chosen,
@@ -1029,6 +1037,7 @@ async def blockaction_update_view(
     :return: copied view, selection value or False if invalid
     :rtype: Tuple[Dict, Union[str, bool]]
     """
+    # TODO - MOVE THIS TO MODALBUILDER.helpers
 
     #; Clone the existing view properties
     copy_keys = [
@@ -1041,20 +1050,18 @@ async def blockaction_update_view(
     actions = payload['actions']
     if not actions:
         _log.error(f"{xterm('RED')}No valid action was seen: {actions}{xterm('X')}")
-        return view, False
+        return view, None
     #; Get the value
-    '''
-    if actions[0].get('type') in ['static_select', 'external_select']:
-        value = actions[0]['selected_option'].get('value')
-    elif actions[0].get('type') in ['button']:
-        value = actions[0].get('value')\
-    else:
-        value = False
-    '''
     value = await SlackClient.get_state_vals_by_type(
         data=payload['actions'][0]
     )
     value = value[0]
+    #; Make the private_metadata friendly
+    blob = view.get('private_metadata')
+    if blob is None:
+        pmd = None
+    else:
+        pmd = json.loads(blob)
     #! DEBUG
     _log.debug(
         f"{xterm('GREEN')}Updating view but keeping payload "
@@ -1062,11 +1069,10 @@ async def blockaction_update_view(
     )
 
     if value is None:
-        _log.error(f"{xterm('RED')}Invalid selected_option: "
-                   f"{pformat(actions[0])}{xterm('X')}")
-        return view, False
-    return view, value
-
+        _log.error(f"Invalid selected_option: {pformat(actions[0])}")
+        return view, None
+    return view, value, pmd
+'''
 
 '''
 async def edit_thing_blocks(
@@ -1151,7 +1157,7 @@ async def slackaction_edit_thing_search(
     view_id = payload['view']['id']
     hash = payload['view']['hash']
     #@ Get the update value
-    view, value = await blockaction_update_view(payload)
+    view, value, pmd = await plugin.blockaction_update_view(payload)
     _log.debug(f"{xterm('CYAN')}Selected {value}...")
     _log.debug(f"View: {pformat(view)}")
     _log.debug(f"Payload: \n{pformat(payload)}{xterm('X')}")
@@ -1239,7 +1245,7 @@ async def slackaction_get_hunt_endpoints(
     view_id = payload['view']['id']
     hash = payload['view']['hash']
 
-    view, plugin_name = await blockaction_update_view(payload)
+    view, plugin_name, pmd = await plugin.blockaction_update_view(payload)
     _log.debug(f"{xterm('CYAN')}Searching for {plugin_name} endpoints...{xterm('X')}")
 
     #; Get valid endpoints and URI paths for plugin_name
@@ -1306,7 +1312,7 @@ async def slackation_get_attr_labels(
     view_id = payload['view']['id']
     hash = payload['view']['hash']
 
-    view, label = await blockaction_update_view(payload)
+    view, label, pmd = await plugin.blockaction_update_view(payload)
     if not label:
         return False
     #; Get the value_type
@@ -1367,7 +1373,7 @@ async def slackaction_add_new_attribute(
     view_id = payload['view']['id']
     hash = payload['view']['hash']
 
-    view, value = await blockaction_update_view(payload)
+    view, value, pmd = await plugin.blockaction_update_view(payload)
 
     #; Remove focus-on-load from all other blocks
     for block in view['blocks']:
@@ -1432,7 +1438,7 @@ async def slackaction_attach_note(
     view_id = payload['view']['id']
     hash = payload['view']['hash']
     #; Get action value and view for updating
-    view, value = await blockaction_update_view(payload)
+    view, value, pmd = await plugin.blockaction_update_view(payload)
     #; Load TypeDBClient and check db_name
     if (tdb := get_tdb(db_name=db_name)) is None:
         _log.error(f"Invalid database: {db_name}")
@@ -1467,7 +1473,7 @@ async def slackaction_attach_note(
         channel_id=pmd.get('channel_id')
         params = dict(
             channel = channel_id,
-            text = (f"Successfully added note `{value}` to {things[0]}!"),
+            text = (f"Successfully added note `{value}` to `{things[0]}`!"),
             ephemeral = True,
             blocks_verbatim = True,
             user=payload['user']['id'],
@@ -1527,92 +1533,6 @@ async def slackaction_attach_note(
     if result:
         return True
     return False
-
-'''
-async def slackaction_edit_thing_search(
-    plugin: SlackClient = None,
-    payload: Dict = None,
-    user: User = None,
-)->bool:
-    view_id = payload['view']['id']
-    hash = payload['view']['hash']
-    #@ Get the update value
-    view, value = await blockaction_update_view(payload)
-    _log.debug(f"{xterm('CYAN')}Selected {value}...")
-    _log.debug(f"View: {pformat(view)}")
-    _log.debug(f"Payload: \n{pformat(payload)}{xterm('X')}")
-    #@ Get thing details from TDB
-    label = payload['view']['title'].get('text').split(' ')[-1].lower()
-    set_vals = payload['view']['state']['values']
-    tdb:TypeDBClient = await check_db(set_vals)
-    if not tdb:
-        return False
-    so = Entity(label=label, has=[])
-    so.has.append(Attribute(label=so.keyattr, value=value))
-    rez = tdb.find_things(so)
-    all_dbs = tdb.get_all_dbs(readable=True)
-    tdb.close_client()
-    #@ Modify blocks
-    #; Remove DB and Keyval input blocks
-    #; Just kidding... those are the only 2 blocks so we can just start from scratch
-    # blocks = await edit_thing_blocks(
-    #     db_name = tdb.db_name,
-    #     thing = rez,
-    # )
-    # TODO - Move this User_UUID crap into the User object maybe
-    thing = rez[0]
-    user_uuids = (
-        thing.attrs('user-uuid')
-        if isinstance(thing.attrs('user-uuid'), list)
-        else [thing.attrs('user-uuid')]
-    )
-    if user_uuids:
-        user_ids = []
-        for uuid in user_uuids:
-            if uuid == '00000000-0000-0000-0000-000000000000':
-                continue
-                slack_id = "MOJOBOT" #TODO - FIXME
-                user_ids.append(slack_id)
-            else:
-                slack_id = User.load_by_uuid(uuid).slack_id
-                user_ids.append(slack_id)
-        user_info = await plugin.users_info(user_ids=user_ids)
-    else:
-        user_info = None
-
-    _log.debug(f"{xterm('GREEN')}metadata_in: {view.get('private_metadata')}")
-    modal = await ModalBuilder.edit_thing_modal(
-        db_name=tdb.db_name,
-        label=label,
-        container=payload.get('container'),
-        things=rez,
-        all_dbs=all_dbs,
-        ledschema=led.schema,
-        plugin_list=led.list_plugins(),
-        user_info=user_info,
-        private_metadata=view.get('private_metadata'),
-    )
-    _log.debug(f"Response modal:\n{pformat(modal)}")
-    view['blocks'] = modal['blocks']
-    view['private_metadata'] = modal['private_metadata']
-    _log.debug(f"{xterm('GREEN')}metadata_out: {view.get('private_metadata')}")
-    #; Add DB and Keyval as hard-coded labels
-    #; Add context blocks (first/last seen, ledsrc, hunt-names)
-    #; Populate changeable attribute fields
-    #; Update modal view
-
-    try:
-        result = await plugin.views_update(
-            view=view,
-            view_id=view_id,
-            hash=hash,
-        )
-    except Exception as e:
-        _log.error(f"{xterm('RED')}Failed updating view: {e}{xterm('X')}")
-    if result:
-        return True
-    return False
-'''
 
 #~######################################
 #~ slackation_set_confidence_modal
@@ -1963,6 +1883,151 @@ async def slackaction_edit_thing(
     return {'response_action': 'clear'}
 
 #~######################################
+#~ slackaction_select_db
+#~######################################
+async def slackaction_select_db(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->Dict:
+    _log.debug(f"selecting database")
+    _log.debug(f"{xterm('YELLOW')}{pformat(payload)}")
+    #; Parse payload metadata
+    pmd = json.loads(payload['view'].get('private_metadata'))
+
+    view_id = payload['view']['id']
+    hash = payload['view']['hash']
+    view, selected_db, pmd = await plugin.blockaction_update_view(payload)
+    pmd['db_name'] = selected_db
+    # label = pmd.get('label')
+    # db_name = pmd.get('db_name')
+    # iid = pmd.get('iid')
+    #; Save updated private_metadata
+    view['private_metadata'] = dumps(pmd, compactly=True)
+    _log.debug(f"{xterm('CYAN')}Selected {selected_db}...")
+    _log.debug(f"{xterm('CYAN')}View: {pformat(view)}")
+    _log.debug(f"{xterm('YELLOW')}Payload: \n{pformat(payload)}")
+
+    for block in view.get('blocks'):
+        # // _log.debug(f"{xterm('CYAN')}block_id = {block.get('block_id')}")
+        if block.get('block_id')=='db_name':
+            db_opts = block.get('accessory').get('options')
+            # // _log.debug(f"{xterm('CYAN')}db_opts: {pformat(db_opts)}")
+
+    new_block = await ModalBuilder.static_select_block(
+        action_id='select_db',
+        label='Database',
+        options=db_opts,
+        initial_option=(selected_db,selected_db),
+        placeholder='Select DB',
+        block_id='db_name',
+    )
+    _log.debug(f"{xterm('CYAN')}new_block: {pformat(new_block)}")
+
+    view['blocks'] = await SlackClient.replace_block_by_id(
+        old_blocks = view['blocks'],
+        new_block = new_block,
+    )
+
+    try:
+        result = await plugin.views_update(
+            view=view,
+            view_id=view_id,
+            hash=hash,
+        )
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed updating view: {e}{xterm('X')}")
+    if result:
+        return True
+    return False
+
+'''
+async def slackaction_edit_thing_search(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->bool:
+    view_id = payload['view']['id']
+    hash = payload['view']['hash']
+    #@ Get the update value
+    view, value, pmd = await plugin.blockaction_update_view(payload)
+    _log.debug(f"{xterm('CYAN')}Selected {value}...")
+    _log.debug(f"View: {pformat(view)}")
+    _log.debug(f"Payload: \n{pformat(payload)}{xterm('X')}")
+    #@ Get thing details from TDB
+    label = payload['view']['title'].get('text').split(' ')[-1].lower()
+    set_vals = payload['view']['state']['values']
+    tdb:TypeDBClient = await check_db(set_vals)
+    if not tdb:
+        return False
+    so = Entity(label=label, has=[])
+    so.has.append(Attribute(label=so.keyattr, value=value))
+    rez = tdb.find_things(so)
+    all_dbs = tdb.get_all_dbs(readable=True)
+    tdb.close_client()
+    #@ Modify blocks
+    #; Remove DB and Keyval input blocks
+    #; Just kidding... those are the only 2 blocks so we can just start from scratch
+    # blocks = await edit_thing_blocks(
+    #     db_name = tdb.db_name,
+    #     thing = rez,
+    # )
+    # TODO - Move this User_UUID crap into the User object maybe
+    thing = rez[0]
+    user_uuids = (
+        thing.attrs('user-uuid')
+        if isinstance(thing.attrs('user-uuid'), list)
+        else [thing.attrs('user-uuid')]
+    )
+    if user_uuids:
+        user_ids = []
+        for uuid in user_uuids:
+            if uuid == '00000000-0000-0000-0000-000000000000':
+                continue
+                slack_id = "MOJOBOT" #TODO - FIXME
+                user_ids.append(slack_id)
+            else:
+                slack_id = User.load_by_uuid(uuid).slack_id
+                user_ids.append(slack_id)
+        user_info = await plugin.users_info(user_ids=user_ids)
+    else:
+        user_info = None
+
+    _log.debug(f"{xterm('GREEN')}metadata_in: {view.get('private_metadata')}")
+    modal = await ModalBuilder.edit_thing_modal(
+        db_name=tdb.db_name,
+        label=label,
+        container=payload.get('container'),
+        things=rez,
+        all_dbs=all_dbs,
+        ledschema=led.schema,
+        plugin_list=led.list_plugins(),
+        user_info=user_info,
+        private_metadata=view.get('private_metadata'),
+    )
+    _log.debug(f"Response modal:\n{pformat(modal)}")
+    view['blocks'] = modal['blocks']
+    view['private_metadata'] = modal['private_metadata']
+    _log.debug(f"{xterm('GREEN')}metadata_out: {view.get('private_metadata')}")
+    #; Add DB and Keyval as hard-coded labels
+    #; Add context blocks (first/last seen, ledsrc, hunt-names)
+    #; Populate changeable attribute fields
+    #; Update modal view
+
+    try:
+        result = await plugin.views_update(
+            view=view,
+            view_id=view_id,
+            hash=hash,
+        )
+    except Exception as e:
+        _log.error(f"{xterm('RED')}Failed updating view: {e}{xterm('X')}")
+    if result:
+        return True
+    return False
+'''
+
+#~######################################
 #~ slackaction_set_confidence
 #~######################################
 
@@ -2104,20 +2169,6 @@ async def slackaction_set_confidence(
     return {'response_action': 'clear'}
 
 #~######################################
-#~ update_thing_submit
-#~######################################
-
-async def update_thing_submit(
-    plugin: SlackClient = None,
-    payload: Dict = None,
-    user: User = None,
-):
-    _log.debug(f"Updating all thing properties...")
-    _log.debug(f"{xterm('YELLOW')}{pformat(payload)}{xterm('X')}")
-
-    return True
-
-#~######################################
 #~ slackaction_check_job_status
 #~######################################
 async def slackaction_check_job_status(
@@ -2211,8 +2262,6 @@ async def slackaction_check_job_status(
         await client.post(resp_url, json=resp_payload)
 
     return rez
-
-
 
 #~######################################
 #~ slackaction_open_add_user_modal
@@ -2417,8 +2466,11 @@ async def slackaction_conf(
             'no_action': (slackaction_no_action, role_everyone),
             'open_add_user_modal': (slackaction_open_add_user_modal, role_dbadmin),
             #. role_everyone can open the dialog, but only con_man can change the confidence
+            'select_db': (slackaction_select_db, role_everyone),
             'set_confidence': (slackaction_set_confidence, role_conman),
             'set_confidence_modal': (slackation_set_confidence_modal, role_everyone),
+            #@'update_tags': (slackaction_update_tags, role_conman),
+            #@'update_actors': (slackaction_update_actors, role_hunter),
         },
         'view_submission':{
             # // #. slackaction_update_thing() lets you set confidence, add notes and tags
@@ -2426,7 +2478,7 @@ async def slackaction_conf(
             'add_thing': (slackaction_add_thing, role_hunter),
             'add_user_modal': (slackaction_submit_add_user, role_dbadmin), #do the add-user stuff
             'edit_thing': (slackaction_edit_thing, role_hunter),
-            'update_thing_submit': (update_thing_submit, role_conman)
+            # // 'update_thing_submit': (update_thing_submit, role_conman)
         }
     }
 

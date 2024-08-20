@@ -1,6 +1,8 @@
 '''
 ModalBuilder Helper Functions
 '''
+import copy
+import json
 import logging
 import re
 from datetime import datetime, timezone, timedelta
@@ -10,10 +12,58 @@ from typing import(
     List,
     Optional,
     Union,
+    Tuple,
 )
 from ledhntr.helpers import format_date, dumps, xterm
 
 _log: logging.Logger = logging.getLogger('ledhntr')
+
+async def blockaction_update_view(
+    payload: Dict = None
+)->Tuple[Dict, Union[str, bool], Dict]:
+    """Get updated view and selection value
+
+    :param payload: Payload sent by block action when selection is chosen,
+         defaults to None
+    :type payload: Dict, required
+    :return: copied view, selection value or False if invalid
+    :rtype: Tuple[Dict, Union[str, bool]]
+    """
+    # TODO - MOVE THIS TO MODALBUILDER.helpers
+
+    #; Clone the existing view properties
+    copy_keys = [
+        'blocks', 'callback_id',  'submit', 'title', 'type', 'private_metadata'
+    ]
+    view = {}
+    for key in copy_keys:
+        view[key] = payload['view'].get(key)
+    #; Get the action
+    actions = payload['actions']
+    if not actions:
+        _log.error(f"{xterm('RED')}No valid action was seen: {actions}{xterm('X')}")
+        return view, None
+    #; Get the value
+    value = await get_state_vals_by_type(
+        data=payload['actions'][0]
+    )
+    value = value[0]
+    #; Make the private_metadata friendly
+    blob = view.get('private_metadata')
+    if blob is None:
+        pmd = None
+    else:
+        pmd = json.loads(blob)
+    #! DEBUG
+    _log.debug(
+        f"{xterm('GREEN')}Updating view but keeping payload "
+        f"{pformat(json.loads(view['private_metadata']))}"
+    )
+
+    if value is None:
+        _log.error(f"Invalid selected_option: {pformat(actions[0])}")
+        return view, None
+    return view, value, pmd
 
 async def get_action_ids(
     payload: Dict = None,
@@ -188,3 +238,15 @@ async def get_state_vals_by_type(
         if parsed_val:
             val = parsed_val
     return val
+
+async def replace_block_by_id(
+    old_blocks:List[dict] = None,
+    new_block: dict = None,
+)->List[Dict]:
+    if new_block.get('block_id') is None:
+        _log.error(f"new_block requires block_id. Leaving old blocks intact.")
+    _log.debug(f"Replacing {new_block.get('block_id')} with {pformat(new_block)}")
+    for i, block in enumerate(old_blocks):
+        if block.get('block_id') == new_block.get('block_id'):
+            old_blocks[i] = new_block
+            return old_blocks

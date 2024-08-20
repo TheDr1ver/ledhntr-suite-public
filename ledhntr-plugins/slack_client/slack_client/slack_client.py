@@ -17,6 +17,7 @@ from typing import(
     List,
     Optional,
     Union,
+    Tuple,
 )
 
 import httpx
@@ -40,8 +41,10 @@ from ledhntr.plugins.connector import ConnectorPlugin
 # _log.debug(f"Current DIR: {os.path.abspath(__file__)}")
 from slack_client.modal_builder import ModalBuilder
 from slack_client.modal_builder.helpers import(
+    blockaction_update_view,
     get_action_ids,
     get_state_vals_by_type,
+    replace_block_by_id
 )
 
 #&##########################################################################
@@ -159,6 +162,20 @@ class SlackClient(ConnectorPlugin):
     #& Helpers
     #&##########################################################################
     @staticmethod
+    async def blockaction_update_view(
+        payload: Dict = None,
+    )->Tuple[Dict, Union[str, bool], Dict]:
+        """Get updated view and selection value
+
+        :param payload: Payload sent by block action when selection is chosen,
+            defaults to None
+        :type payload: Dict, required
+        :return: copied view, selection value or False if invalid
+        :rtype: Tuple[Dict, Union[str, bool]]
+        """
+        return await blockaction_update_view(payload=payload)
+
+    @staticmethod
     async def get_action_ids(
         payload: Dict = None,
     )->Union[List[str], False]:
@@ -185,6 +202,25 @@ class SlackClient(ConnectorPlugin):
         :rtype: Union[None, List[str]]
         """
         return await get_state_vals_by_type(data=data)
+
+    @staticmethod
+    async def replace_block_by_id(
+        old_blocks:List[dict] = None,
+        new_block: dict = None,
+    )->List[Dict]:
+        """Replaces a specific block in a list of blocks by matching block_id
+
+        :param old_blocks: list of old blocks, defaults to None
+        :type old_blocks: List[dict], required
+        :param new_block: new block you want to insert into the list, defaults to None
+        :type new_block: dict, required
+        :return: updated list of blocks
+        :rtype: List[Dict]
+        """
+        return await replace_block_by_id(
+            old_blocks=old_blocks,
+            new_block=new_block
+        )
 
 
     #&##########################################################################

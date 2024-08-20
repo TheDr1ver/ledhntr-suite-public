@@ -331,7 +331,8 @@ class ModalBuilder():
         )
 
     @staticmethod
-    async def static_select_block(action_id: str = None,
+    async def static_select_block(
+        action_id: str = None,
         label: str = None,
         options: List[Union[tuple,dict]] = None,
         initial_option: Optional[tuple] = None,
@@ -372,6 +373,7 @@ class ModalBuilder():
         :rtype: Dict
         """
         return await static_select_block(
+            action_id=action_id,
             label=label,
             options=options,
             initial_option=initial_option,
@@ -1219,7 +1221,7 @@ class ModalBuilder():
 
         pmd=dumps(pmd, compactly=True)
         #; We found ONE THING! GREAT! Populate the modal
-        if len(things) == 1:
+        if things is not None and len(things) == 1:
             #; Let the thing iid and db_name come along for the ride
             #; this is necessary for the final "edit" operation
             #; since we're not including these values in the inputs.
@@ -1475,10 +1477,12 @@ class ModalBuilder():
         skip_me = [
             'confidence', 'date-discovered', 'first-seen', 'last-seen',
             'date-seen', 'ledsrc', 'hunt-name', 'user-uuid', 'note',
+            'hunt-endpoint', 'hunt-service', 'hunt-string', 'last-hunted',
+            'first-hunted', 'frequency', 'ledid'
         ]
 
         if thing.label not in special_ents:
-            universal_meta = list(thing.attrs().keys())
+            universal_meta = list(thing.attrs().keys()) + thing.meta_attrs + ['actor-name']
 
         counter=0
         for attr in universal_meta:
