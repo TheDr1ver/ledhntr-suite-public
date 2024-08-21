@@ -95,7 +95,7 @@ async def add_user_to_db_task(
 )->User:
     _log.debug(f"Checking if user exists")
     slack_id = f"({slack_id})"
-    user = User.load_by_property(
+    user = await User.load_by_property(
         prop_type="slack_id",
         prop_value=slack_id,
     )
@@ -219,6 +219,8 @@ async def get_confidence_context(
                 # new_text += f"\ncon: `{int(maincon)}`"
                 con_format = await ModalBuilder.get_con_format(int(maincon))
                 new_text += f"\ncon: `{con_format.split(' ')[-1].lower()}`"
+            else:
+                new_text = "\n"
             new_text += f" n+1: `{total_count}` avg: `{avg_con}` mode: `{mode_con}`"
             _log.debug(
                 f"{xterm('YELLOW')}Setting {label} {value} text to:\n{new_text}"
@@ -235,7 +237,7 @@ async def get_confidence_context(
             old_text = block.get('text').get('text')
             new_text = f"{old_text}\n"
             new_text += (
-                f"avg_neighbors: `{suggested_avg}` "
+                f"avg_neighbors: `{round(suggested_avg, 2)}` "
                 f"suggested: `{con_format.split(' ')[-1].lower()}`"
             )
             _log.debug(f"{xterm('CYAN')}new_text: {new_text}")
@@ -1247,7 +1249,8 @@ async def action_attach_note(
                 slack_id = "MOJOBOT" #TODO - FIXME
                 user_ids.append(slack_id)
             else:
-                slack_id = User.load_by_uuid(uuid).slack_id
+                this_user = await User.load_by_uuid(uuid).slack_id
+                slack_id = this_user.slack_id
                 user_ids.append(slack_id)
         user_info = await plugin.users_info(user_ids=user_ids)
     else:
@@ -1447,7 +1450,8 @@ async def action_opts_get_things(
                 slack_id = "MOJOBOT" #TODO - FIXME
                 user_ids.append(slack_id)
             else:
-                slack_id = User.load_by_uuid(uuid).slack_id
+                this_user = await User.load_by_uuid(uuid)
+                slack_id = this_user.slack_id
                 user_ids.append(slack_id)
         user_info = await plugin.users_info(user_ids=user_ids)
     else:
@@ -1873,7 +1877,8 @@ async def action_set_confidence_modal(
                 slack_id = "MOJOBOT" #TODO - FIXME
                 user_ids.append(slack_id)
             else:
-                slack_id = User.load_by_uuid(uuid).slack_id
+                this_user = await User.load_by_uuid(uuid)
+                slack_id = this_user.slack_id
                 user_ids.append(slack_id)
         user_info = await plugin.users_info(user_ids=user_ids)
     else:
@@ -1958,7 +1963,8 @@ async def action_opts_get_things(
                 slack_id = "MOJOBOT" #TODO - FIXME
                 user_ids.append(slack_id)
             else:
-                slack_id = User.load_by_uuid(uuid).slack_id
+                this_user = await User.load_by_uuid(uuid)
+                slack_id = this_user.slack_id
                 user_ids.append(slack_id)
         user_info = await plugin.users_info(user_ids=user_ids)
     else:
@@ -2093,9 +2099,12 @@ async def submit_add_thing(
     ledsrc = "Slack"
     ledsrc += f"|{payload['team'].get('id')}"
     ledsrc += f"|{payload['user'].get('id')}"
-    channel = payload['view'].get('private_metadata')
-    if channel is not None:
-        ledsrc += f"|{channel}"
+    # channel = payload['view'].get('private_metadata')
+    pmd = json.loads(payload['view'].get('private_metadata'))
+    if pmd:
+        channel = pmd.get('channel')
+        if channel is not None:
+            ledsrc += f"|{channel}"
     new_thing.has.append(Attribute(label='ledsrc', value=ledsrc))
 
     if not message_failed:
