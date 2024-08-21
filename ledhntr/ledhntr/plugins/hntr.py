@@ -1350,10 +1350,14 @@ class HNTRPlugin(BasePlugin, ABC):
                 if not found['things']:
                     continue
                 hunt_name_attr = Attribute(label='hunt-name', value=hunt_name)
+                '''
+                #@ WOOPS! Time for bed. This would have tagged every hit as
+                #@ the actor, regardless of confidence.
                 actor_names = hunt.attrs('actor-name')
                 actor_attrs = []
                 for an in actor_names:
                     actor_attrs.append(Attribute(label='actor-name', value=an))
+                '''
 
                 # // if 'found' not in hunt.players:
                 # //     hunt.players['found'] = []
@@ -1363,12 +1367,16 @@ class HNTRPlugin(BasePlugin, ABC):
                             hunt.has.append(thing)
                         continue
                     # Make sure all Entity and Relation things have this
-                    # hunt-name and its associated actor names
+                    # hunt-name #// and its associated actor names
                     if hunt_name_attr not in thing.has:
                         thing.has.append(hunt_name_attr)
+                    '''
+                    #@ WOOPS! Time for bed. This would have tagged every hit as
+                    #@ the actor, regardless of confidence.
                     for actor_attr in actor_attrs:
                         if actor_attr not in thing.attrs('actor-name'):
                             thing.has.append(actor_attr)
+                    '''
                     if isinstance(thing, Entity):
                         bulk_add['entities'].append(thing)
                     if isinstance(thing, Relation):
