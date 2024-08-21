@@ -204,7 +204,7 @@ async def run_hunts_task(
         time.sleep(1)
     active_hunts = last_job.result
     _log.debug(f"Running active hunts.")
-    hntr_plugin = wqm.conf.get(hntr_worker_name)['_plugin']
+    hntr_plugin:HNTRPlugin = wqm.conf.get(hntr_worker_name)['_plugin']
     try:
         hunt_results = hntr_plugin.run_hunts(
             active_hunts = active_hunts,
