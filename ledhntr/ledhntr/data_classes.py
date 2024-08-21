@@ -397,17 +397,18 @@ class Thing(MutableMapping, metaclass=ABCMeta):
         labels:Union[str, List[str]] = None,
         verbose:bool = False,
         *args, **kwargs
-    ) -> Dict:
+    ) -> Union[Dict, List[str]]:
         """Returns simple key/val dictionary based on Thing's 'has' field.
 
         :param verbose: if True, includes ledid and date-seen, defaults to False
         :type verbose: bool, optional
         :return: Dictionary of label/value based on all attributes inside Thing's
             'has' property.
-        :rtype: Dict
+        :rtype: Union[Dict, List[str]]
         """
         rez = {}
         junk = ['date-seen', 'ledid']
+        og_labels = labels
         if not isinstance(labels, list) and labels is not None:
             labels = [labels]
         if hasattr(self, 'has'):
@@ -424,7 +425,14 @@ class Thing(MutableMapping, metaclass=ABCMeta):
                     rez[attr.label].append(attr.value)
         #; If we only have one key, just return the value in list format
         if len(rez) == 1:
-            return [next(iter(rez.values()))]
+            if not isinstance(next(iter(rez.values())), list):
+                r=[next(iter(rez.values()))]
+            else:
+                r=next(iter(rez.values()))
+            if isinstance(og_labels, list):
+                return {next(iter(rez.keys())): r}
+            else:
+                return r
         #; Sort it before returning
         for key in rez:
             if isinstance(rez[key], list):
@@ -435,7 +443,10 @@ class Thing(MutableMapping, metaclass=ABCMeta):
 
         final = dict(sorted(rez.items()))
         if final == {}:
-            final = None
+            if isinstance(og_labels, list):
+                return {}
+            else:
+                final = []
         return final
 
     def to_dict(self) -> None:
