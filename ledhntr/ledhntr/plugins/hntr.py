@@ -1350,6 +1350,10 @@ class HNTRPlugin(BasePlugin, ABC):
                 if not found['things']:
                     continue
                 hunt_name_attr = Attribute(label='hunt-name', value=hunt_name)
+                actor_names = hunt.attrs('actor-name')
+                actor_attrs = []
+                for an in actor_names:
+                    actor_attrs.append(Attribute(label='actor-name', value=an))
 
                 # // if 'found' not in hunt.players:
                 # //     hunt.players['found'] = []
@@ -1359,9 +1363,12 @@ class HNTRPlugin(BasePlugin, ABC):
                             hunt.has.append(thing)
                         continue
                     # Make sure all Entity and Relation things have this
-                    # hunt-name attached
+                    # hunt-name and its associated actor names
                     if hunt_name_attr not in thing.has:
                         thing.has.append(hunt_name_attr)
+                    for actor_attr in actor_attrs:
+                        if actor_attr not in thing.attrs('actor-name'):
+                            thing.has.append(actor_attr)
                     if isinstance(thing, Entity):
                         bulk_add['entities'].append(thing)
                     if isinstance(thing, Relation):
@@ -2201,12 +2208,16 @@ class HNTRPlugin(BasePlugin, ABC):
 
             for hunt in hunts:
                 hunt_name = hunt.iid
+                '''
                 for attr in hunt.has:
                     if attr.label == 'hunt-string':
                         query = attr.value
                         api_conf.params[self.param_query_key] = query
                     if attr.label == 'hunt-name':
                         hunt_name = attr.value
+                '''
+                api_conf.params[self.param_query_key] = hunt.attr('hunt-string')
+                hunt_name = hunt.attr('hunt-name')
 
                 cached_data = False
                 if cached_hunts:
