@@ -77,6 +77,7 @@ def check_client(func):
             _log.debug(f"self.client.auth_test: {await self.client.auth_test()}")
         if not await self.client.auth_test():
             await self.reload_web_client()
+        # ! _log.debug(f"{xterm('YELLOW')}Calling {func} with args {args} and kwargs \n{pformat(kwargs)}")
         return await func(self, *args, **kwargs)
     return check_client_wrapper
 

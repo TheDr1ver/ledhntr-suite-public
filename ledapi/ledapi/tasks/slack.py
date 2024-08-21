@@ -105,11 +105,12 @@ async def add_user_to_db_task(
             user.slack_id = slack_id
             User.update_user(user)
         return user
-    new_user = UserModel()
-    new_user.user_id = username
-    new_user.role = role
-    new_user.slack_id = slack_id
-    saved_user = User.create_user(new_user)
+    new_user = UserModel(
+        user_id = username,
+        role=role,
+        slack_id=slack_id,
+    )
+    saved_user = await User.create_user(new_user)
     _log.info(f"Added user {pformat(saved_user.to_dict())} to LEDAPI Database!")
 
     return saved_user
@@ -212,9 +213,13 @@ async def get_confidence_context(
                     total_count += 1
                     total_con += confidence
                     mode_cons.append(confidence)
-            avg_con = round(total_con/total_count, 2)
+            avg_con = round(total_con/total_count, 2) if total_count else 0
             all_avgs.append(avg_con)
-            mode_con = Counter(mode_cons).most_common(1)[0][0]
+            most_common = Counter(mode_cons).most_common(1)
+            if most_common:
+                mode_con = Counter(mode_cons).most_common(1)[0][0]
+            else:
+                mode_con = "N/A"
             if maincon:
                 # new_text += f"\ncon: `{int(maincon)}`"
                 con_format = await ModalBuilder.get_con_format(int(maincon))
@@ -1611,13 +1616,15 @@ async def action_open_add_user_modal(
 
     action = payload['actions'][0]
 
+    view = await ModalBuilder.add_user_modal(
+        userval=action['value'],
+        roles=[role for role in RoleEnum.valid_roles()],
+    )
+
     # open the modal
     await plugin.views_open(
         trigger_id=payload['trigger_id'],
-        view=await ModalBuilder.add_user_modal(
-            userval=action['value'],
-            roles=[role for role in RoleEnum.valid_roles()],
-        )
+        view=view
     )
     return True
 
@@ -2266,12 +2273,17 @@ async def submit_add_user(
             },
         }
     ]
+    '''
+    #TODO Figure out WTF this is all about b/c I'm pretty sure there never was
+    #TODO a 'channel'.'id' in the payload. It definitely doesn't work when
+    #TODO adding an *actual new user.
     plugin.update_message(
         channel = payload['channel']['id'],
         ts = payload['message']['ts'],
         text = f"Successfully added user <@{slack_uid}>",
         # // blocks = blocks,
     )
+    '''
     return {'response_action': 'clear'}
 
 #&##############################################################################
@@ -2322,7 +2334,7 @@ async def mojocmd_conf(
     elif cmd in opts:
         func_perms = opts[cmd]
         try:
-            _log.debug(f"Checking user.role {user.role} against roles: {func_perms[1]}")
+            _log.debug(f"Checking user.role {user} against roles: {func_perms[1]}")
             await check_role(user, func_perms[1])
         except HTTPException as e:
             await plugin.unauthorized_resp(trigger_id=mojo.trigger_id)
