@@ -59,7 +59,7 @@ class User:
         #& RBAC
         self.role = role if role else ""
         #& Preferences
-        self.db_name = active_db if active_db else "all"
+        self.db_name = active_db if active_db else "scratchpad"
         #& Metadata
         self.created_at = time.time()
         #& Internal Variables
