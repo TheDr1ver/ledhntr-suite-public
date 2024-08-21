@@ -116,8 +116,9 @@ async def number_block(
     if max_value is not None:
         block['element']['max_value'] = str(max_value)
     if dispatch_action_config:
-        block['element']['dispatch_action_config'] = \
-        await get_dispatch_action_config(dispatch_action_config)
+        dac = await get_dispatch_action_config(dispatch_action_config)
+        block['element']['dispatch_action_config'] = dac.get('dispatch_action_config')
+        block['dispatch_action']=True
     block['optional'] = optional
     block['element']['focus_on_load'] = focus_on_load
     if block_id is not None:
@@ -333,7 +334,7 @@ async def checkbox_block(
     label: str = None,
     options: List[Union[tuple,dict]] = None,
     emoji: Optional[bool] = True,
-    initial_options: Optional[List[Union[tuple,dict]]] = None,
+    initial_options: Optional[List[Union[tuple,dict]]] = [],
     block_id: Optional[str] = None,
     optional: Optional[bool] = True,
     confirm: Optional[dict] = None,
@@ -415,12 +416,12 @@ async def checkbox_block(
                 f"initial_option needs to be a tuple with exactly 2 values!"
                 f"\n{pformat(initial_option)}"
             )
+    if confirm:
+        block['element']['confirm'] = confirm
     if optional:
         block['optional'] = optional
     if block_id is not None:
         block['block_id'] = block_id
-    if confirm:
-        block['confirm'] = confirm
     return block
 
 #~ Confirmation Block
@@ -465,10 +466,7 @@ async def confirmation_block(
         }
     }
     if style.lower() in ['primary', 'danger']:
-        diag['style'] = {
-            'type': 'plain_text',
-            'text': style.lower(),
-        }
+        diag['style'] = style.lower()
     return diag
 
 #~ Radio Buttons

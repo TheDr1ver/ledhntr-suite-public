@@ -585,6 +585,21 @@ class ModalBuilder():
         _log.debug(f"BLOCK:\n{pformat(block)}")
         return block
 
+    #~ Get frequency input
+    @staticmethod
+    async def get_frequency(frequency: int = 24)->Dict:
+        block = await number_block(
+            action_id='action_edit_frequency',
+            label='Frequency',
+            emoji=False,
+            is_decimal_allowed=True,
+            initial_value=frequency,
+            min_value=0,
+            max_value=None,
+            dispatch_action_config='enter',
+        )
+        return block
+
     #~ Get hunt-active checkbox
     @staticmethod
     async def get_hunt_active(is_active: bool = False)->Dict:
@@ -619,6 +634,22 @@ class ModalBuilder():
                 options=[('hunt-active', 'hunt-active')],
                 confirm=confirm
             )
+        return block
+
+    #~ Get hunt string multi-line input
+    @staticmethod
+    async def get_hunt_string(hunt_string: str = None)->Dict:
+        block = await plain_text_input_block(
+            action_id='action_edit_hunt_string',
+            label='Hunt String',
+            emoji=False,
+            placeholder='Enter a hunt string',
+            initial_value=hunt_string,
+            multiline=True,
+            optional=True,
+            block_id='hunt-string',
+            dispatch_action_config='enter',
+        )
         return block
 
     #~ Get hunt endpoints Selection box
@@ -1129,9 +1160,9 @@ class ModalBuilder():
             'actor-name': await cls.actors_ext_opts(),
             'hunt-service': await cls.get_hunt_services(plugin_list),
             'hunt-endpoint': await cls.get_hunt_endpoints(),
-            'hunt-active': await cls.get_hunt_active(), #TODO editable checkbox - only by attached uuids
-            # TODO 'hunt-string, # editable multi-line - only by attached uuids
-            # TODO 'frequency', # editable - only by attached uuids
+            'hunt-active': await cls.get_hunt_active(),
+            'hunt-string': await cls.get_hunt_string(),
+            'frequency': await cls.get_frequency(),
             'tag': await cls.get_tags(),
         }
 
@@ -1391,13 +1422,12 @@ class ModalBuilder():
             'hunt-service': await cls.get_hunt_services(plugin_list),
             'hunt-endpoint': await cls.get_hunt_endpoints(),
             'hunt-active': await cls.get_hunt_active(thing.attr('hunt-active')),
-            # TODO 'hunt-string, # editable multi-line - only by attached uuids
-            # TODO 'frequency', # editable - only by attached uuids
+            'hunt-string': await cls.get_hunt_string(thing.attr('hunt-string')),
+            'frequency': await cls.get_frequency(thing.attr('frequency')),
             'tag': await cls.get_tags(thing.attrs('tag')),
         }
 
-        '''
-        #. Thanks ChatGPT!
+
         schema = None
         #; If the label is a "special case", use fields defined above
         if label in special_ents:
@@ -1417,13 +1447,16 @@ class ModalBuilder():
                 f"No schema found for {label}. This shouldn't happen."
             )
             return False
+
         '''
+        #. Thanks for NOTHING, ChatGPT!
         schema = special_ents.get(label, ledschema['entity'].get(label) or ledschema['relation'].get(label))
         if not schema:
             cls._log.error(f"No schema found for {label}. This shouldn't happen.")
             return False
 
         universal_meta.extend(schema.get('owns', []))
+        '''
 
         #; Header
         blocks.append(await cls.header_block(
@@ -1612,9 +1645,9 @@ class ModalBuilder():
                 else [thing.attrs(attr)]
             )
             #; Add the heading
-            blocks.append(await mrkdwn_block(
-                text=f"*{attr.upper()}*"
-            ))
+            # // blocks.append(await mrkdwn_block(
+            # //     text=f"*{attr.upper()}*"
+            # // ))
             blocks += await cls.edit_attribute_display(
                 label=attr,
                 values=initial_values,

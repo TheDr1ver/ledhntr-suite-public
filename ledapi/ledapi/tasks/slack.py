@@ -1690,6 +1690,7 @@ async def action_set_confidence(
     payload: Dict = None,
     user: User = None,
 )->Dict:
+    #TODO REFRESH THIS FUNCTION, IT'S OUTTA DATE
     _log.debug(f"Setting confidence...")
     _log.debug(f"{xterm('YELLOW')}{pformat(payload)}{xterm('X')}")
     # // value_str = payload['actions'][0]['selected_option']['value']
@@ -1911,89 +1912,37 @@ async def action_set_confidence_modal(
 
     return True
 
-'''
-async def action_opts_get_things(
+async def action_toggle_hunt_active(
     plugin: SlackClient = None,
     payload: Dict = None,
     user: User = None,
 )->bool:
+    _log.debug(f"Updating hunt-active...")
+    _log.debug(f"payload: {payload}")
     view_id = payload['view']['id']
     hash = payload['view']['hash']
-    #@ Get the update value
+    #; Generate updated view, input value from this action, and
+    #; parsed private_metadata
     view, value, pmd = await plugin.blockaction_update_view(payload)
-    _log.debug(f"{xterm('CYAN')}Selected {value}...")
-    _log.debug(f"View: {pformat(view)}")
-    _log.debug(f"Payload: \n{pformat(payload)}{xterm('X')}")
-    #@ Get thing details from TDB
-    label = payload['view']['title'].get('text').split(' ')[-1].lower()
-    # // set_vals = payload['view']['state']['values']
-    #; Check if the DB is set and if set, that it's valid.
-    tdb:TypeDBClient = await check_db(payload)
-    if not tdb:
-        return block
-    so = Entity(label=label, has=[])
-    so.has.append(Attribute(label=so.keyattr, value=value))
-    rez = tdb.find_things(so)
-    all_dbs = tdb.get_all_dbs(readable=True)
-    tdb.close_client()
-    #@ Modify blocks
-    #; Remove DB and Keyval input blocks
-    #; Just kidding... those are the only 2 blocks so we can just start from scratch
-    # blocks = await edit_thing_blocks(
-    #     db_name = tdb.db_name,
-    #     thing = rez,
-    # )
-    # TODO - Move this User_UUID crap into the User object maybe
-    thing = rez[0]
-    user_uuids = thing.attrs('user-uuid')
-    if user_uuids:
-        user_ids = []
-        for uuid in user_uuids:
-            if uuid == '00000000-0000-0000-0000-000000000000':
-                continue
-                slack_id = "MOJOBOT" #TODO - FIXME
-                user_ids.append(slack_id)
-            else:
-                this_user = await User.load_by_uuid(uuid)
-                slack_id = this_user.slack_id
-                user_ids.append(slack_id)
-        user_info = await plugin.users_info(user_ids=user_ids)
-    else:
-        user_info = None
-
-    _log.debug(f"{xterm('GREEN')}metadata_in: {view.get('private_metadata')}")
-    modal = await ModalBuilder.edit_thing_modal(
-        db_name=tdb.db_name,
-        label=label,
-        container=payload.get('container'),
-        things=rez,
-        all_dbs=all_dbs,
-        ledschema=led.schema,
-        plugin_list=led.list_plugins(),
-        user_info=user_info,
-        private_metadata=view.get('private_metadata'),
-    )
-    _log.debug(f"Response modal:\n{pformat(modal)}")
-    view['blocks'] = modal['blocks']
-    view['private_metadata'] = modal['private_metadata']
-    _log.debug(f"{xterm('GREEN')}metadata_out: {view.get('private_metadata')}")
-    #; Add DB and Keyval as hard-coded labels
-    #; Add context blocks (first/last seen, ledsrc, hunt-names)
-    #; Populate changeable attribute fields
-    #; Update modal view
-
-    try:
-        result = await plugin.views_update(
-            view=view,
-            view_id=view_id,
-            hash=hash,
-        )
-    except Exception as e:
-        _log.error(f"{xterm('RED')}Failed updating view: {e}{xterm('X')}")
-    if result:
-        return True
-    return False
-'''
+    db_name = pmd.get('db_name')
+    iid = pmd.get('iid')
+    value = value[0]
+    #; Load TypeDBClient and check db_name
+    if (tdb := get_tdb(db_name=db_name)) is None:
+        _log.error(f"Invalid database: {db_name}")
+        return False
+    tdb:TypeDBClient
+    so = Entity(label='entity')
+    so.iid = iid
+    #; Find the thing we want to update
+    things = tdb.find_things(so)
+    if not things:
+        _log.error(f"Could not find object in {db_name} with iid {iid}")
+        return False
+    #@ PICK UP THIS BLACK MAGIC TOMORROW
+    # try:
+    #     #; toggle the attribute
+    #     things
 
 #@##############################################################################
 #@ Submissions (When a form/modal is submitted)
@@ -2379,7 +2328,6 @@ async def slackaction_conf(
             'attach_note': (action_attach_note, role_conman),
             'check_job_status': (action_check_job_status, role_everyone),
             'opts_get_things': (action_opts_get_things, role_hunter),
-            #TODO
             #. These two get called when you add a tag or remove a tag
             #. So as long as the input field is populating with the current
             #. values we should be good for just setting actors and tags
@@ -2396,8 +2344,7 @@ async def slackaction_conf(
             'select_db': (action_select_db, role_everyone),
             'set_confidence': (action_set_confidence, role_conman),
             'set_confidence_modal': (action_set_confidence_modal, role_everyone),
-            #@'update_tags': (action_update_tags, role_conman),
-            #@'update_actors': (action_update_actors, role_hunter),
+            'toggle_hunt_active': (action_toggle_hunt_active, role_hunter),
         },
         'view_submission':{
             # // #. slackaction_update_thing() lets you set confidence, add notes and tags
