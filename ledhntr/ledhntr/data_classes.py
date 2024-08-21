@@ -1245,12 +1245,17 @@ class Relation(Thing):
         """
 
         ignore_players = [
-            'actor-cluster',
-            'autonomous-system',
-            'cidr',
-            'enrichment',
-            'geoloc',
-            'hunt',
+            # // 'actor-cluster',
+            # // 'autonomous-system',
+            # // 'cidr',
+            # // 'enrichment',
+            # // 'geoloc',
+            # // 'hunt',
+            'dummy',
+            # all the above are now deprecated
+            # leaving 'dummy' in there in case we need to use this function
+            # again in the future.
+            #
             # network-service needs to take players into account.
             # a network-service that finds nginx software ent and an HTTP ent
             # is not the same as a network-service that finds a DNS service.
