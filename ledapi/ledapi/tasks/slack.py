@@ -220,7 +220,7 @@ async def get_confidence_context(
                 con_format = await ModalBuilder.get_con_format(int(maincon))
                 new_text += f"\ncon: `{con_format.split(' ')[-1].lower()}`"
             else:
-                new_text = "\n"
+                new_text += "\n"
             new_text += f" n+1: `{total_count}` avg: `{avg_con}` mode: `{mode_con}`"
             _log.debug(
                 f"{xterm('YELLOW')}Setting {label} {value} text to:\n{new_text}"
