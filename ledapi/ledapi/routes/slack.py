@@ -95,8 +95,9 @@ async def mojo_ep(
     '''
     # // _log.debug(f"Running mojo command...")
     # // _log.debug(f"{pformat(mojo)}")
-    _log.debug(f"User object returned:")
-    _log.debug(f"{pformat(user.to_dict())}")
+    if user is not None:
+        _log.debug(f"User object returned:")
+        _log.debug(f"{pformat(user.to_dict())}")
     msg_400 = f"Invalid input"
     msg_500 = f"Error running mojo command"
 
