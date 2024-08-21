@@ -46,6 +46,7 @@ from .context import (
 # from image import ()
 from .input import (
     checkbox_block,
+    confirmation_block,
     datetime_picker_block,
     external_select_block,
     number_block,
@@ -516,7 +517,7 @@ class ModalBuilder():
         value: str = None,
         emoji: Optional[bool] = True,
     )->Dict:
-        return get_opt(text=text, value=value, emoji=emoji)
+        return await get_opt(text=text, value=value, emoji=emoji)
 
     #&##########################################################################
     #& Modal Framework
@@ -582,6 +583,42 @@ class ModalBuilder():
                 multi=True,
             )
         _log.debug(f"BLOCK:\n{pformat(block)}")
+        return block
+
+    #~ Get hunt-active checkbox
+    @staticmethod
+    async def get_hunt_active(is_active: bool = False)->Dict:
+        if is_active:
+            confirm = await confirmation_block(
+                title="Enable Hunt?",
+                text="Are you sure you want to DISABLE this hunt?",
+                confirm="DISABLE HUNT",
+                deny="Nevermind",
+                style='danger'
+            )
+            block = await checkbox_block(
+                block_id='hunt-active',
+                label='Hunt Active',
+                action_id='action_toggle_hunt_active',
+                options=[('hunt-active', 'hunt-active')],
+                initial_options=[('hunt-active', 'hunt-active')],
+                confirm=confirm
+            )
+        else:
+            confirm = await confirmation_block(
+                title="Enable Hunt?",
+                text="Are you sure you want to ENABLE this hunt?",
+                confirm="ENABLE HUNT",
+                deny="Nevermind",
+                style='primary'
+            )
+            block = await checkbox_block(
+                block_id='hunt-active',
+                label='Hunt Active',
+                action_id='action_toggle_hunt_active',
+                options=[('hunt-active', 'hunt-active')],
+                confirm=confirm
+            )
         return block
 
     #~ Get hunt endpoints Selection box
@@ -1045,8 +1082,9 @@ class ModalBuilder():
         )
         options = [
             await cls.get_opt(text=role.capitalize(), value=role)
-            for role in roles
+           for role in roles
         ]
+
         modal['blocks'].append(
             await static_select_block(
                 block_id='role_block',
@@ -1091,6 +1129,9 @@ class ModalBuilder():
             'actor-name': await cls.actors_ext_opts(),
             'hunt-service': await cls.get_hunt_services(plugin_list),
             'hunt-endpoint': await cls.get_hunt_endpoints(),
+            'hunt-active': await cls.get_hunt_active(), #TODO editable checkbox - only by attached uuids
+            # TODO 'hunt-string, # editable multi-line - only by attached uuids
+            # TODO 'frequency', # editable - only by attached uuids
             'tag': await cls.get_tags(),
         }
 
@@ -1334,8 +1375,13 @@ class ModalBuilder():
         special_ents = {
             'hunt': {
                 'keyattr': 'hunt-name',
-                'owns': ['hunt-service', 'hunt-string',
-                    'hunt-active', 'frequency',]
+                'owns': ['hunt-active', 'hunt-string',
+                        'frequency',]
+            },
+            'enrichment': {
+                'keyattr': 'hunt-name',
+                'owns': ['hunt-active', 'hunt-string',
+                        'frequency',]
             }
         }
 
@@ -1344,9 +1390,14 @@ class ModalBuilder():
             'actor-name': await cls.actors_ext_opts(thing.attrs('actor-name')),
             'hunt-service': await cls.get_hunt_services(plugin_list),
             'hunt-endpoint': await cls.get_hunt_endpoints(),
+            'hunt-active': await cls.get_hunt_active(thing.attr('hunt-active')),
+            # TODO 'hunt-string, # editable multi-line - only by attached uuids
+            # TODO 'frequency', # editable - only by attached uuids
             'tag': await cls.get_tags(thing.attrs('tag')),
         }
 
+        '''
+        #. Thanks ChatGPT!
         schema = None
         #; If the label is a "special case", use fields defined above
         if label in special_ents:
@@ -1366,6 +1417,13 @@ class ModalBuilder():
                 f"No schema found for {label}. This shouldn't happen."
             )
             return False
+        '''
+        schema = special_ents.get(label, ledschema['entity'].get(label) or ledschema['relation'].get(label))
+        if not schema:
+            cls._log.error(f"No schema found for {label}. This shouldn't happen.")
+            return False
+
+        universal_meta.extend(schema.get('owns', []))
 
         #; Header
         blocks.append(await cls.header_block(
@@ -1504,29 +1562,35 @@ class ModalBuilder():
         '''
 
         #; Populate other existing attributes
-        skip_me = [
+        always_skip = [
             'confidence', 'date-discovered', 'date-seen', 'first-hunted',
-            'first-seen', 'frequency', 'hunt-endpoint', 'hunt-name',
-            'hunt-service', 'hunt-string', 'last-hunted', 'last-seen', 'ledid',
+            'first-seen', 'last-hunted', 'last-seen', 'ledid',
             'ledsrc', 'note', 'user-uuid',
+        ]
+        skip_me = always_skip + [
+            'frequency', 'hunt-endpoint',
+            'hunt-service', 'hunt-string', 'hunt-name',
         ]
 
         if thing.label not in special_ents:
             for x in list(thing.attrs().keys()):
                 if x not in universal_meta:
                     universal_meta.append(x)
-            for meta in thing.meta_attrs:
-                if meta not in universal_meta:
-                    universal_meta.append(meta)
+            # for meta in thing.meta_attrs:
+            #     if meta not in universal_meta:
+            #         universal_meta.append(meta)
 
         counter=0
         for attr in universal_meta:
-            #; Check if attr is skippable
-            if attr in skip_me:
-                continue
             #; Check for special attributes
             if attr in special_attrs and special_attrs[attr]:
                 blocks.append(special_attrs[attr])
+                continue
+            #; Check if attr is skippable
+            #TODO something is messed up here when editing hunts
+            if attr in skip_me and thing.label not in special_ents:
+                continue
+            if attr in always_skip:
                 continue
             #; If attr is keyval type, skip it
             if attr == thing.keyattr:
