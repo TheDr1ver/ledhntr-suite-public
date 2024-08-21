@@ -373,9 +373,29 @@ class Thing(MutableMapping, metaclass=ABCMeta):
     def label(self):
         return self._label
 
+    def attr(self,
+        label:str = None,
+        *args, **kwargs
+    ) -> Union[str,int,datetime,float,bool,None]:
+        """Feed it a single field name, it returns a single value
+
+        If there's more than one value this thing has, it simply returns
+        the first one.
+
+        :param label: attribute label you want a value for
+        :type verbose: bool, optional
+        :return: the first attribute value matching the defined label, or None
+        :rtype: Union[str,int,datetime,float,bool,None]
+        """
+        if not hasattr(self, 'has') or not self.has:
+            return None
+        for attr in self.has:
+            if attr.label == label:
+                return attr.value
+
     def attrs(self,
-        labels = None,
-        verbose=False,
+        labels:Union[str, List[str]] = None,
+        verbose:bool = False,
         *args, **kwargs
     ) -> Dict:
         """Returns simple key/val dictionary based on Thing's 'has' field.
@@ -397,14 +417,14 @@ class Thing(MutableMapping, metaclass=ABCMeta):
                 if labels and attr.label not in labels:
                     continue
                 if attr.label not in rez:
-                    rez[attr.label] = attr.value
+                    rez[attr.label] = [attr.value]
                 else:
                     if not isinstance(rez[attr.label], list):
                         rez[attr.label] = [rez[attr.label]]
                     rez[attr.label].append(attr.value)
-        #; If we only have one key, just return the value
+        #; If we only have one key, just return the value in list format
         if len(rez) == 1:
-            return next(iter(rez.values()))
+            return [next(iter(rez.values()))]
         #; Sort it before returning
         for key in rez:
             if isinstance(rez[key], list):
