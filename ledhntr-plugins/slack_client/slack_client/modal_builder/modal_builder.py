@@ -1386,17 +1386,17 @@ class ModalBuilder():
 
         #; Handle Date Context
         date_context = []
-        fs = thing.attrs('first-seen')
+        fs = thing.attr('first-seen')
         if fs:
             date_context.append(
                 ('mrkdwn', f'*first-seen*\n{await get_date(fs)}', True)
             )
-        ls = thing.attrs('last-seen')
+        ls = thing.attr('last-seen')
         if ls:
             date_context.append(
                 ('mrkdwn', f'*last-seen*\n{await get_date(ls)}', True)
             )
-        disco = thing.attrs('date-discovered')
+        disco = thing.attr('date-discovered')
         if disco:
             date_context.append(
                 ('mrkdwn', f'*discovered*\n{await get_date(disco)}', True)
@@ -1406,8 +1406,6 @@ class ModalBuilder():
         #; Handle LEDSRC
         ledsrc = thing.attrs('ledsrc')
         if ledsrc:
-            if not isinstance(ledsrc, list):
-                ledsrc = [ledsrc]
             blocks.append(await mrkdwn_block(
                 text=f"*LEDSRC*"
             ))

@@ -199,7 +199,7 @@ async def get_confidence_context(
             total_con = 0
             mode_cons = []
             for r in rez:
-                confidence = r.attrs('confidence')
+                confidence = r.attr('confidence')
                 if r.keyval == value:
                     maincon = confidence
                     _log.debug(f"Found main confidence for {value}: {maincon}")
@@ -1235,12 +1235,8 @@ async def action_attach_note(
         _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
     #; Rebuild the modal with the new note
     # TODO - Move this User_UUID crap into the User object maybe
-    thing = things[0]
-    user_uuids = (
-        thing.attrs('user-uuid')
-        if isinstance(thing.attrs('user-uuid'), list)
-        else [thing.attrs('user-uuid')]
-    )
+    thing:Entity = things[0]
+    user_uuids = thing.attrs('user-uuid')
     if user_uuids:
         user_ids = []
         for uuid in user_uuids:
@@ -1436,12 +1432,8 @@ async def action_opts_get_things(
     #     thing = rez,
     # )
     # TODO - Move this User_UUID crap into the User object maybe
-    thing = rez[0]
-    user_uuids = (
-        thing.attrs('user-uuid')
-        if isinstance(thing.attrs('user-uuid'), list)
-        else [thing.attrs('user-uuid')]
-    )
+    thing:Entity = rez[0]
+    user_uuids = thing.attrs('user-uuid')
     if user_uuids:
         user_ids = []
         for uuid in user_uuids:
@@ -1857,18 +1849,14 @@ async def action_set_confidence_modal(
         _log.error(f"Could not find object in {db_name} with iid {iid}")
         return False
     else:
-        thing = rez[0]
+        thing:Entity = rez[0]
 
     things = [thing]
     label = thing.label
     ledschema = led.schema
     plugin_list = led.list_plugins()
     # TODO - Move this User_UUID crap into the User object maybe
-    user_uuids = (
-        thing.attrs('user-uuid')
-        if isinstance(thing.attrs('user-uuid'), list)
-        else [thing.attrs('user-uuid')]
-    )
+    user_uuids = thing.attrs('user-uuid')
     if user_uuids:
         user_ids = []
         for uuid in user_uuids:
@@ -1950,11 +1938,7 @@ async def action_opts_get_things(
     # )
     # TODO - Move this User_UUID crap into the User object maybe
     thing = rez[0]
-    user_uuids = (
-        thing.attrs('user-uuid')
-        if isinstance(thing.attrs('user-uuid'), list)
-        else [thing.attrs('user-uuid')]
-    )
+    user_uuids = thing.attrs('user-uuid')
     if user_uuids:
         user_ids = []
         for uuid in user_uuids:
