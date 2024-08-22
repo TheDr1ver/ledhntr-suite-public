@@ -107,7 +107,7 @@ class ThingUpdate(BaseModel):
     db_name: str = 'scratchpad'
     iid: str = None
     attr_label: str = None
-    attr_values: List[str] = None
+    attr_values: Union[List[str],List[int],List[float],List[bool]] = None
     # FUTURE: Players
     """Validate a ThingUpdate - usually for when updating
         an existing thing in a database
