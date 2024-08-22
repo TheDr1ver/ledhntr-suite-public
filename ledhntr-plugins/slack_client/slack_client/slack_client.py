@@ -199,19 +199,29 @@ class SlackClient(ConnectorPlugin):
     async def replace_block_by_id(
         old_blocks:List[dict] = None,
         new_block: dict = None,
+        old_block_id: Optional[str] = None,
     )->List[Dict]:
-        """Replaces a specific block in a list of blocks by matching block_id
+        """Replaces a specific block in a list of blocks by matching block_id.
 
-        :param old_blocks: list of old blocks, defaults to None
+        This function searches through the provided list of old blocks for a block
+        with a matching `old_block_id` and replaces it with the `new_block`. If no
+        match is found, the original list of blocks is returned unmodified.
+
+        :param old_blocks: List of old blocks where a block needs to be replaced,
+            defaults to None
         :type old_blocks: List[dict], required
-        :param new_block: new block you want to insert into the list, defaults to None
+        :param new_block: New block to insert into the list, defaults to None
         :type new_block: dict, required
-        :return: updated list of blocks
+        :param old_block_id: The ID of the block to be replaced if different
+            from the value in new_block, defaults to None
+        :type old_block_id: Optional[str], optional
+        :return: Updated list of blocks with the specified block replaced
         :rtype: List[Dict]
         """
         return await replace_block_by_id(
             old_blocks=old_blocks,
-            new_block=new_block
+            new_block=new_block,
+            old_block_id=old_block_id,
         )
 
 
