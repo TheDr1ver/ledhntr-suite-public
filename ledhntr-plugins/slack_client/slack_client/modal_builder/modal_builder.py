@@ -589,6 +589,7 @@ class ModalBuilder():
     @staticmethod
     async def get_frequency(frequency: int = 24)->Dict:
         block = await number_block(
+            block_id='frequency',
             action_id='action_edit_frequency',
             label='Frequency',
             emoji=False,
@@ -604,22 +605,25 @@ class ModalBuilder():
     @staticmethod
     async def get_hunt_active(is_active: bool = False)->Dict:
         if is_active:
+            '''
             confirm = await confirmation_block(
-                title="Enable Hunt?",
+                title="Disable Hunt?",
                 text="Are you sure you want to DISABLE this hunt?",
                 confirm="DISABLE HUNT",
                 deny="Nevermind",
                 style='danger'
             )
+            '''
             block = await checkbox_block(
                 block_id='hunt-active',
                 label='Hunt Active',
-                action_id='action_toggle_hunt_active',
-                options=[('hunt-active', 'hunt-active')],
-                initial_options=[('hunt-active', 'hunt-active')],
-                confirm=confirm
+                action_id='action_update_boolean_attribute',
+                options=[('hunt-active', 'off')],
+                initial_options=[('hunt-active', 'off')],
+                # // confirm=confirm
             )
         else:
+            '''
             confirm = await confirmation_block(
                 title="Enable Hunt?",
                 text="Are you sure you want to ENABLE this hunt?",
@@ -627,12 +631,13 @@ class ModalBuilder():
                 deny="Nevermind",
                 style='primary'
             )
+            '''
             block = await checkbox_block(
                 block_id='hunt-active',
                 label='Hunt Active',
-                action_id='action_toggle_hunt_active',
-                options=[('hunt-active', 'hunt-active')],
-                confirm=confirm
+                action_id='action_update_boolean_attribute',
+                options=[('hunt-active', 'on')],
+                # // confirm=confirm
             )
         return block
 
@@ -1251,12 +1256,42 @@ class ModalBuilder():
         value: Optional[str] = None,
         container: Dict = None,
         things: Optional[List[Union[Entity,Relation]]] = None,
-        all_dbs: List[str] = None,
+        all_dbs: Optional[List[str]] = None,
         ledschema: Dict = None,
         plugin_list: Dict = None,
         user_info: Optional[Dict] = None,
         private_metadata: Optional[str] = None,
     )->Dict:
+        """Builds a modal for editing an existing entity or relation.
+
+        This method generates a modal that allows users to edit attributes of an entity or relation
+        by providing a refined input interface. It will dynamically populate based on the provided
+        schema and available database options.
+
+        :param db_name: The name of the database where the entity or relation resides.
+        :type db_name: str, required
+        :param label: The label of the entity or relation to be edited.
+        :type label: str, required
+        :param value: The initial value for the key attribute of the entity or relation.
+        :type value: Optional[str], optional
+        :param container: A dictionary containing additional information related to the state.
+        :type container: Dict, optional
+        :param things: A list of existing entities or relations matching the criteria for editing.
+        :type things: Optional[List[Union[Entity, Relation]]], optional
+        :param all_dbs: A list of all available databases. Optional if things is provided
+            and len(things) == 1.
+        :type all_dbs: List[str], optional
+        :param ledschema: A schema dictionary for attributes and metadata.
+        :type ledschema: Dict, required
+        :param plugin_list: A dictionary of active plugins that may affect modal behavior.
+        :type plugin_list: Dict, required
+        :param user_info: A dictionary containing user information to customize the modal.
+        :type user_info: Optional[Dict], optional
+        :param private_metadata: A string containing metadata for internal usage within the modal.
+        :type private_metadata: Optional[str], optional
+        :return: A dictionary representing the constructed modal framework for editing the entity or relation.
+        :rtype: Dict
+        """
         cls._log.debug(f"Building edit_thing modal...")
         blocks = []
         modal = {}
