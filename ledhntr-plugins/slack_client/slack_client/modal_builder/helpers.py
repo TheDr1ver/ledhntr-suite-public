@@ -243,11 +243,26 @@ async def get_state_vals_by_type(
 async def replace_block_by_id(
     old_blocks:List[dict] = None,
     new_block: dict = None,
+    old_block_id: Optional[str] = None,
 )->List[Dict]:
-    if new_block.get('block_id') is None:
-        _log.error(f"new_block requires block_id. Leaving old blocks intact.")
-    _log.debug(f"Replacing {new_block.get('block_id')} with {pformat(new_block)}")
+    if old_block_id is None:
+        replacement_block_id = new_block.get('block_id')
+        if replacement_block_id is None:
+            _log.error(f"new_block requires block_id. Leaving old blocks intact.")
+            return old_blocks
+    else:
+        replacement_block_id = old_block_id
+    _log.debug(f"Replacing {replacement_block_id} with {pformat(new_block)}")
     for i, block in enumerate(old_blocks):
-        if block.get('block_id') == new_block.get('block_id'):
+        if not block.get('block_id'):
+            continue
+        if block.get('block_id').split('_')[0] == replacement_block_id.split('_')[0]:
             old_blocks[i] = new_block
             return old_blocks
+    _log.error(f"Something went wrong. You should never be here.")
+    _log.error(f"Check to make sure something didn't change your "
+               f"block_ids before calling this function.")
+    _log.error(f"replacement_block_id: {replacement_block_id}")
+    _log.error(f"new_block: {pformat(new_block)}")
+    _log.error(f"old_blocks: {pformat(old_blocks)}")
+    return False
