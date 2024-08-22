@@ -43,6 +43,8 @@ from ledapi.models import(
     ThingUpdate,
 )
 
+from typedb_client import TypeDBClient
+
 #&##############################################################################
 #& Internal Functions
 #&##############################################################################
@@ -74,21 +76,22 @@ async def add_thing_task(
 #~ Used for updating actor-name or tags associated with a thing
 #~######################################
 async def replace_attributes_task(
-    thing: ThingUpdate,
+    thingup: ThingUpdate,
     user: User,
 )->Union[Relation, Entity]:
-    _log.debug(f"Updating {thing.attr_label} on {thing.iid} in {thing.db_name}")
-    if (tdb := get_tdb(db_name=thing.db_name)) is None:
-        _log.error(f"Invalid database: {thing.db_name}")
+    _log.debug(f"Updating {thingup.attr_label} on {thingup.iid} in {thingup.db_name}")
+    if (tdb := get_tdb(db_name=thingup.db_name)) is None:
+        _log.error(f"Invalid database: {thingup.db_name}")
         return False
+    tdb:TypeDBClient
     try:
         so = Entity(label='entity')
-        so.iid = thing.iid
+        so.iid = thingup.iid
         #; Get the existing thing
         old_thing = tdb.find_things(so)[0]
         _log.debug(f"Retrieved {old_thing}")
         #; Get all attributes of this attr_label
-        existing_attributes = old_thing.attrs(thing.attr_label)
+        existing_attributes = old_thing.attrs(thingup.attr_label)
         _log.debug(f"Existing: {existing_attributes}")
         if existing_attributes is None:
             existing_attributes = []
@@ -96,34 +99,37 @@ async def replace_attributes_task(
             existing_attributes = [existing_attributes]
         #; If there's an existing value that's not in our new list
         #; remove it from the old thing
+        _log.debug(f"existing_attributes: {existing_attributes}")
+        _log.debug(f"thingup.attr_values: {thingup.attr_values}")
         for ea in existing_attributes:
-            if ea not in thing.attr_values:
-                attr = Attribute(label=thing.attr_label, value=ea)
+            if ea not in thingup.attr_values:
+                _log.debug(f"ea: {ea}")
+                attr = Attribute(label=thingup.attr_label, value=ea)
                 _log.debug(f"Detatching {attr} from {old_thing}")
-                old_thing = tdb.detach_attribute(
+                tdb.detach_attribute(
                     old_thing=old_thing,
                     attr=attr,
                 )
         if existing_attributes:
             old_thing = tdb.find_things(so)[0]
-            _log.debug(f"Retrieved {old_thing}")
+            _log.debug(f"Retrieved updated {old_thing}")
         #; If there's something new in our list, add it.
-        existing_attributes = old_thing.attrs(thing.attr_label)
+        existing_attributes = old_thing.attrs(thingup.attr_label)
         if existing_attributes is None:
             existing_attributes = []
         if not isinstance(existing_attributes, list):
             existing_attributes = [existing_attributes]
-        for new_attr in thing.attr_values:
+        for new_attr in thingup.attr_values:
             if new_attr not in existing_attributes:
-                attr = Attribute(label=thing.attr_label, value=new_attr)
+                attr = Attribute(label=thingup.attr_label, value=new_attr)
                 _log.debug(f"Attaching {attr} to {old_thing}")
                 old_thing = tdb.attach_attribute(
                     old_thing=old_thing,
                     attr=attr,
                     return_things=True,
                 )
-        _log.debug(f"Final {thing.attr_label}(s) for {old_thing}:\n"
-                   f"{pformat(old_thing.attrs(thing.attr_label))}")
+        _log.debug(f"Final {thingup.attr_label}(s) for {old_thing}:\n"
+                   f"{pformat(old_thing.attrs(thingup.attr_label))}")
     except Exception as e:
         _log.error(f"Failed finding hunts: {e}")
         _log.error(f"Traceback: {traceback.format_exc()}")
