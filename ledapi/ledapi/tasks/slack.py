@@ -13,7 +13,7 @@ from fastapi import HTTPException, Depends, Query, Request, status
 from pprint import pformat
 import time
 import traceback
-from typing import Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional, Union, Tuple, Callable
 
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
@@ -1055,6 +1055,7 @@ async def mojo_post_news(
 #@##############################################################################
 async def action_no_action(plugin, payload, user): return True
 
+'''
 async def action_multiselect_handler(
     plugin: SlackClient = None,
     payload: Dict = None,
@@ -1103,6 +1104,7 @@ async def action_multiselect_handler(
     _log.debug(f"Updated thing: {xterm('CYAN')}{pformat(result.to_dict())}")
     await plugin.post_message(**params)
     return True
+'''
 
 
 async def action_add_new_attribute(
@@ -1378,16 +1380,16 @@ async def action_check_job_status(
 
     return rez
 
+'''
 async def action_opts_get_actors(
     plugin: SlackClient = None,
     payload: Dict = None,
     user: User = None,
 )->bool:
-    await action_multiselect_handler(
+    await action_update_string_attribute(
         plugin=plugin,
         payload=payload,
         user=user,
-        attr_label='actor-name',
     )
 
 async def action_opts_get_tags(
@@ -1396,14 +1398,13 @@ async def action_opts_get_tags(
     user: User = None,
 )->bool:
     _log.debug(f"Updating tags...")
-    await action_multiselect_handler(
+    await action_update_string_attribute(
         plugin=plugin,
         payload=payload,
         user=user,
-        attr_label='tag'
     )
     return True
-
+'''
 
 async def action_opts_get_things(
     plugin: SlackClient = None,
@@ -1468,7 +1469,7 @@ async def action_opts_get_things(
     )
     if modal:
         modal = await get_confidence_context(modal)
-    _log.debug(f"Response modal:\n{pformat(modal)}")
+    _log.debug(f"Context modal: {pformat(modal)}")
     view['blocks'] = modal['blocks']
     view['private_metadata'] = modal['private_metadata']
     _log.debug(f"{xterm('GREEN')}metadata_out: {view.get('private_metadata')}")
@@ -1599,34 +1600,6 @@ async def action_get_hunt_endpoints(
     if result:
         return True
     return False
-
-async def action_open_add_user_modal(
-    plugin: SlackClient = None,
-    payload: Dict = None,
-    user: User = None,
-)->None:
-    _log.debug(f"Processing open_add_user_modal")
-    _log.debug(f"payload: {payload}")
-    _log.debug(f"user: {user.to_dict()}")
-
-    #; // admin_channel = "#mojo-dev"
-    #; this isn't called here but I'm leaving it as a
-    #; reminder that I can pull it from the payload if I want it dynamic.
-
-
-    action = payload['actions'][0]
-
-    view = await ModalBuilder.add_user_modal(
-        userval=action['value'],
-        roles=[role for role in RoleEnum.valid_roles()],
-    )
-
-    # open the modal
-    await plugin.views_open(
-        trigger_id=payload['trigger_id'],
-        view=view
-    )
-    return True
 
 async def action_select_db(
     plugin: SlackClient = None,
@@ -1823,6 +1796,210 @@ async def action_set_confidence(
 
     return {'response_action': 'clear'}
 
+#~ Update attributes of various types
+async def _update_thing_attribute(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+    format_new_value: Optional[Callable] = None,
+)->bool:
+
+    _log.debug(f"payload: \n{pformat(payload)}")
+    view_id = payload['view']['id']
+    hash = payload['view']['hash']
+
+    view, new_value, pmd = await plugin.blockaction_update_view(payload)
+    db_name = pmd.get('db_name')
+    iid = pmd.get('iid')
+    block_id = payload['actions'][0]['block_id']
+    attribute_label = block_id.split('_')[0]
+    _log.debug(f"Updating {attribute_label}...")
+
+    if not isinstance(new_value, list):
+        new_value = [new_value]
+
+    formatted_values = []
+    if not new_value:
+        formatted_values.append(new_value if format_new_value is None else format_new_value(new_value))
+    else:
+        for nv in new_value:
+            formatted_values.append(nv if format_new_value is None else format_new_value(nv))
+
+    _log.debug(f"new_value: {new_value}")
+    _log.debug(f"formatted_values: {formatted_values}")
+    thingup = ThingUpdate(
+        db_name = db_name,
+        iid = iid,
+        attr_label = attribute_label,
+        attr_values = formatted_values,
+    )
+
+    #@ Actually update the values
+    msg = None
+    try:
+        result = await replace_attributes_task(thingup, user)
+        params = dict(
+            channel=plugin.admin_channel,
+            text=(f"<@{payload['user']['id']}> successfully modified `{db_name} "
+                  f"{result.label} {result.keyval} {attribute_label}` to \n"
+                  f"`{formatted_values}`"),
+            blocks_verbatim=True,
+        )
+    except Exception as e:
+        msg = f"Error from LEDAPI: {e}"
+        msg += f"\nTraceback: \n{pformat(traceback.format_exc())}"
+        _log.error(msg)
+    if msg:
+        params = dict(
+            channel = payload['user']['id'],
+            text = msg,
+            ephemeral = True,
+            blocks_verbatim = True,
+            user=user.slack_id,
+        )
+    _log.debug(f"Updated thing: {xterm('CYAN')}{pformat(result.to_dict())}")
+    await plugin.post_message(**params)
+    #; Rebuild the modal with the new value
+    plugin_list = led.list_plugins()
+    modal = await ModalBuilder.edit_thing_modal(
+        db_name=db_name,
+        label=result.label,
+        container=payload.get('container'),
+        things=result,
+        ledschema=led.schema,
+        plugin_list=plugin_list,
+        private_metadata=dumps(pmd, compactly=True),
+    )
+    _log.debug(f"Modal: {pformat(modal)}")
+
+    for block in modal['blocks']:
+        if block.get('block_id') in [block_id.split('_')[0], f"{block_id.split('_')[0]}_0"]:
+            new_block = block
+            break
+
+    if len(block_id.split('_')) > 1:
+        # i = int(block_id.split('_')[1])
+        new_block['block_id'] = f"{block_id.split('_')[0]}"
+    else:
+        new_block['block_id'] = f"{block_id.split('_')[0]}_0"
+
+    _log.debug(f"Sending modal blocks {modal['blocks']}")
+    _log.debug(f"Sending new_block: {new_block}")
+    _log.debug(f"Sending old_block_id: {block_id}")
+    #@ NOTE - this always needs to happen before get_confidence_context
+    #@ because get_confidence_context renames the block_id to include _0
+    #@ and that renaming will otherwise break replace_block_by_id
+
+    modal['blocks'] = await SlackClient.replace_block_by_id(
+        old_blocks = modal['blocks'],
+        new_block = new_block,
+        old_block_id = block_id,
+    )
+    _log.debug(f"Modal after replacement:\n{pformat(modal)}")
+    if modal:
+        modal = await get_confidence_context(modal)
+    _log.debug(f"Context Modal: {pformat(modal)}")
+
+    view['blocks'] = modal['blocks']
+    view['private_metadata'] = modal['private_metadata']
+    _log.debug(f"{xterm('GREEN')}metadata_out: {view.get('private_metadata')}")
+    try:
+        result = await plugin.views_update(
+            view=view,
+            view_id=view_id,
+            hash=hash,
+        )
+    except Exception as e:
+        _log.error(f"Failed updating view: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+    if result:
+        return True
+    return False
+
+async def action_update_boolean_attribute(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->bool:
+    def format_new_value(new_value: str):
+        if new_value == True:
+            return True
+        else:
+            return False
+    block_id = payload['actions'][0]['block_id']
+    label = block_id.split('_')[0]
+    return await _update_thing_attribute(
+        plugin=plugin,
+        payload=payload,
+        user=user,
+        format_new_value=format_new_value,
+    )
+
+async def action_update_int_attribute(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->bool:
+    _log.debug(f"Updating frequency...")
+    _log.debug(f"payload: \n{pformat(payload)}")
+    def format_new_value(new_value: str):
+        return int(new_value)
+    block_id = payload['actions'][0]['block_id']
+    label = block_id.split('_')[0]
+    return await _update_thing_attribute(
+        plugin=plugin,
+        payload=payload,
+        user=user,
+        format_new_value=format_new_value,
+    )
+
+async def action_update_string_attribute(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->bool:
+    _log.debug(f"Updating hunt-string...")
+    _log.debug(f"payload: \n{pformat(payload)}")
+    def format_new_value(new_value: str):
+        return new_value
+    block_id = payload['actions'][0]['block_id']
+    label = block_id.split('_')[0]
+    return await _update_thing_attribute(
+        plugin=plugin,
+        payload=payload,
+        user=user,
+        format_new_value=format_new_value,
+    )
+
+#~ Load modals
+async def action_open_add_user_modal(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->None:
+    _log.debug(f"Processing open_add_user_modal")
+    _log.debug(f"payload: {payload}")
+    _log.debug(f"user: {user.to_dict()}")
+
+    #; // admin_channel = "#mojo-dev"
+    #; this isn't called here but I'm leaving it as a
+    #; reminder that I can pull it from the payload if I want it dynamic.
+
+
+    action = payload['actions'][0]
+
+    view = await ModalBuilder.add_user_modal(
+        userval=action['value'],
+        roles=[role for role in RoleEnum.valid_roles()],
+    )
+
+    # open the modal
+    await plugin.views_open(
+        trigger_id=payload['trigger_id'],
+        view=view
+    )
+    return True
+
 async def action_set_confidence_modal(
     plugin: SlackClient = None,
     payload: Dict = None,
@@ -1912,6 +2089,7 @@ async def action_set_confidence_modal(
 
     return True
 
+'''
 async def action_toggle_hunt_active(
     plugin: SlackClient = None,
     payload: Dict = None,
@@ -1939,10 +2117,122 @@ async def action_toggle_hunt_active(
     if not things:
         _log.error(f"Could not find object in {db_name} with iid {iid}")
         return False
-    #@ PICK UP THIS BLACK MAGIC TOMORROW
-    # try:
-    #     #; toggle the attribute
-    #     things
+    #; Toggle the attribute
+    try:
+        thing = things[0]
+        if value == 'on':
+            new_val = True
+            human_readable = 'enabled'
+        else:
+            new_val = False
+            human_readable = 'disabled'
+        tdb.replace_attribute(thing, Attribute(label='hunt-active', value=new_val))
+        _log.debug(f"Updated {thing} to {new_val}")
+    except Exception as e:
+        _log.error(f"Failed updating {thing} with {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+        return False
+    params = dict(
+        channel = pmd.get('channel_id'),
+        text = (f"<@{payload['user']['id']}> toggled `{thing}` to `{human_readable}`"),
+        blocks_verbatim = True,
+    )
+    await plugin.post_message(**params)
+    return True
+
+async def action_update_frequency(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->bool:
+    _log.debug(f"Updating frequency...")
+    _log.debug(f"payload: {payload}")
+    view_id = payload['view']['id']
+    hash = payload['view']['hash']
+
+    view, frequency, pmd = await plugin.blockaction_update_view(payload)
+    db_name = pmd.get('db_name')
+    iid = pmd.get('iid')
+    frequency = frequency[0]
+    if (tdb := get_tdb(db_name=db_name)) is None:
+        _log.error(f"Invalid database: {db_name}")
+        return False
+    tdb:TypeDBClient
+    so = Entity(label='entity')
+    so.iid = iid
+    #; Find the thing we want to update
+    things = tdb.find_things(so)
+    if not things:
+        _log.error(f"Could not find object in {db_name} with iid {iid}")
+        return False
+    #; Update the frequency
+    try:
+        thing = things[0]
+        old_freq = thing.attr('frequency')
+        new_freq = int(frequency)
+        if int(old_freq) != int(new_freq):
+            tdb.replace_attribute(thing, Attribute(label='frequency', value=new_freq))
+            _log.debug(f"Updated {thing} frequency to {new_freq}")
+    except Exception as e:
+        _log.error(f"Failed updating {thing} with {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+        return False
+    params = dict(
+        channel = pmd.get('channel_id'),
+        text = (f"<@{payload['user']['id']}> updated `{thing}` frequency to `{new_freq}`"),
+        blocks_verbatim = True,
+    )
+    await plugin.post_message(**params)
+    return True
+
+async def action_update_hunt_string(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->bool:
+    _log.debug(f"Updating hunt-string...")
+    _log.debug(f"payload: {payload}")
+    view_id = payload['view']['id']
+    hash = payload['view']['hash']
+
+    view, value, pmd = await plugin.blockaction_update_view(payload)
+    value = value[0]
+    db_name = pmd.get('db_name')
+    iid = pmd.get('iid')
+    if (tdb := get_tdb(db_name=db_name)) is None:
+        _log.error(f"Invalid database: {db_name}")
+        return False
+    if (tdb := get_tdb(db_name=db_name)) is None:
+        _log.error(f"Invalid database: {db_name}")
+        return False
+    tdb:TypeDBClient
+    so = Entity(label='entity')
+    so.iid = iid
+    #; Find the thing we want to update
+    things = tdb.find_things(so)
+    if not things:
+        _log.error(f"Could not find object in {db_name} with iid {iid}")
+        return False
+    #; Update the frequency
+    try:
+        thing = things[0]
+        old_string = thing.attr('hunt-string')
+        new_string = value
+        if old_string.value != new_string:
+            tdb.replace_attribute(thing, Attribute(label='hunt-string', value=new_string))
+            _log.debug(f"Updated {thing} hunt-string to {new_string}")
+    except Exception as e:
+        _log.error(f"Failed updating {thing} with {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+        return False
+    params = dict(
+        channel = pmd.get('channel_id'),
+        text = (f"<@{payload['user']['id']}> updated `{thing}` hunt-string to `{new_string}`"),
+        blocks_verbatim = True,
+    )
+    await plugin.post_message(**params)
+    return True
+'''
 
 #@##############################################################################
 #@ Submissions (When a form/modal is submitted)
@@ -2190,6 +2480,7 @@ async def submit_edit_thing(
     #; Print the result of this operation
     await plugin.post_message(**params)
     #; Close modal
+    _log.debug(f"Sending clear response")
     return {'response_action': 'clear'}
 
 async def submit_add_user(
@@ -2333,9 +2624,8 @@ async def slackaction_conf(
             #. values we should be good for just setting actors and tags
             #. for the selected thing to whatever gets passed as selected_options
             #. with each addition or removal.
-            'opts_get_tags': (action_opts_get_tags, role_hunter),
-            'opts_get_actors': (action_opts_get_actors, role_hunter),
-            #TODO
+            'opts_get_tags': (action_update_string_attribute, role_hunter),
+            'opts_get_actors': (action_update_string_attribute, role_hunter),
             'get_attr_labels': (action_get_attr_labels, role_hunter),
             'get_hunt_endpoints': (action_get_hunt_endpoints, role_hunter),
             'no_action': (action_no_action, role_everyone),
@@ -2344,7 +2634,7 @@ async def slackaction_conf(
             'select_db': (action_select_db, role_everyone),
             'set_confidence': (action_set_confidence, role_conman),
             'set_confidence_modal': (action_set_confidence_modal, role_everyone),
-            'toggle_hunt_active': (action_toggle_hunt_active, role_hunter),
+            'action_update_boolean_attribute': (action_update_boolean_attribute, role_hunter),
         },
         'view_submission':{
             # // #. slackaction_update_thing() lets you set confidence, add notes and tags
