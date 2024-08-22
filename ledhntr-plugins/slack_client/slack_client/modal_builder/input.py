@@ -382,6 +382,8 @@ async def checkbox_block(
             'emoji': emoji,
         }
     }
+    if action_id:
+        block['dispatch_action'] = True
     if options and isinstance(options[0],tuple):
         for option in options:
             opt = {
