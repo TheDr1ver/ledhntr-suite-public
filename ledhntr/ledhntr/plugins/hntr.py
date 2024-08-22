@@ -2270,7 +2270,7 @@ class HNTRPlugin(BasePlugin, ABC):
                                     hunt.has.append(attr)
                         else:
                             if thing.label not in hunt.meta_attrs and thing not in hunt.has:
-                                hunt.has.append(attr)
+                                hunt.has.append(thing)
 
                 hunt_results[endpoint][hunt_name] = {
                     'hunt': hunt,
