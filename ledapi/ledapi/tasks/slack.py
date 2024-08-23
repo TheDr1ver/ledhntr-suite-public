@@ -1007,7 +1007,7 @@ async def mojo_edit_thing(
         _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
         return False
 
-    if len(things) == 1:
+    if things is not None and len(things) == 1:
         #; Populate new modal with confidence context
         payload = result.data
         view_id = result['view']['id']
@@ -1360,13 +1360,18 @@ async def action_attach_note(
         user_ids = []
         for uuid in user_uuids:
             if uuid == '00000000-0000-0000-0000-000000000000':
-                continue
-                slack_id = "MOJOBOT" #TODO - FIXME
+                slack_id = "U07APA5PF35" #TODO - FIXME
                 user_ids.append(slack_id)
             else:
-                this_user = await User.load_by_uuid(uuid).slack_id
-                slack_id = this_user.slack_id
-                user_ids.append(slack_id)
+                this_user:User = await User.load_by_uuid(uuid)
+                # // _log.debug(f"{xterm('BOLD_BLACK')}this_user: {this_user.to_dict()}")
+                # // _log.debug(f"{xterm('BOLD_BLACK')}slack_id: {this_user.slack_id}")
+                try:
+                    slack_id = re.search(r'\(([^,]+),', this_user.slack_id).group(1)
+                    if slack_id:
+                        user_ids.append(slack_id)
+                except ValueError as e:
+                    _log.warning(f"Error parsing slack_id: {e}")
         user_info = await plugin.users_info(user_ids=user_ids)
     else:
         user_info = None
@@ -1540,13 +1545,19 @@ async def action_opts_get_things(
         user_ids = []
         for uuid in user_uuids:
             if uuid == '00000000-0000-0000-0000-000000000000':
-                continue
-                slack_id = "MOJOBOT" #TODO - FIXME
+                slack_id = "U07APA5PF35" #TODO - FIXME
                 user_ids.append(slack_id)
             else:
-                this_user = await User.load_by_uuid(uuid)
-                slack_id = this_user.slack_id
-                user_ids.append(slack_id)
+                this_user:User = await User.load_by_uuid(uuid)
+                # // _log.debug(f"{xterm('BOLD_BLACK')}this_user: {this_user.to_dict()}")
+                # // _log.debug(f"{xterm('BOLD_BLACK')}slack_id: {this_user.slack_id}")
+                try:
+                    slack_id = re.search(r'\(([^,]+),', this_user.slack_id).group(1)
+                    if slack_id:
+                        user_ids.append(slack_id)
+                except ValueError as e:
+                    _log.warning(f"Error parsing slack_id: {e}")
+
         user_info = await plugin.users_info(user_ids=user_ids)
     else:
         user_info = None
@@ -2066,13 +2077,16 @@ async def action_set_confidence_modal(
         user_ids = []
         for uuid in user_uuids:
             if uuid == '00000000-0000-0000-0000-000000000000':
-                continue
-                slack_id = "MOJOBOT" #TODO - FIXME
+                slack_id = "U07APA5PF35" #TODO - FIXME
                 user_ids.append(slack_id)
             else:
                 this_user = await User.load_by_uuid(uuid)
-                slack_id = this_user.slack_id
-                user_ids.append(slack_id)
+                try:
+                    slack_id = re.search(r'\(([^,]+),', this_user.slack_id).group(1)
+                    if slack_id:
+                        user_ids.append(slack_id)
+                except ValueError as e:
+                    _log.warning(f"Error parsing slack_id: {e}")
         user_info = await plugin.users_info(user_ids=user_ids)
     else:
         user_info = None

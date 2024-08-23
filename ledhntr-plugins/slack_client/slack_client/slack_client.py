@@ -307,10 +307,13 @@ class SlackClient(ConnectorPlugin):
         """
         rez = {}
         _log = self.log
+        # // _log.debug(f"{xterm('BOLD_BLACK')}user_ids: {user_ids}")
         for user_id in user_ids:
+            # // _log.debug(f"{xterm('BOLD_BLACK')}user_id: {user_id}")
+            # // _log.debug(f"{xterm('BOLD_BLACK')}kwargs: {kwargs}")
             try:
                 response = await self.client.users_info(
-                    user_id,
+                    user=user_id,
                     **kwargs,
                 )
             except SlackApiError as e:
@@ -321,6 +324,7 @@ class SlackClient(ConnectorPlugin):
                 continue
 
             rez[user_id]=response.data
+        _log.debug(f"rez: {pformat(rez)}")
         return rez
 
     #&##########################################################################
