@@ -907,8 +907,6 @@ async def mojo_edit_thing(
             return True
         return False
 
-
-
 async def mojo_get_help(
     mojo: MOJOCMD = None,
     user: User = None,
@@ -1100,58 +1098,6 @@ async def mojo_post_news(
 #@ Actions (when something is selected or a button is clicked)
 #@##############################################################################
 async def action_no_action(plugin, payload, user): return True
-
-'''
-async def action_multiselect_handler(
-    plugin: SlackClient = None,
-    payload: Dict = None,
-    user: User = None,
-    attr_label: str = None,
-)->bool:
-    _log.debug(f"Updating {attr_label}(s)...")
-    #; Get view, value, pmd
-    view, value, pmd = await plugin.blockaction_update_view(payload)
-    if not isinstance(value, list):
-        value = [value]
-    #; Parse stuff we care about
-    db_name = pmd.get('db_name')
-    iid = pmd.get('iid')
-
-    thingup = ThingUpdate(
-        db_name = db_name,
-        iid = iid,
-        attr_label = attr_label,
-        attr_values = value
-    )
-
-    #@ Actually update the values
-    msg = None
-    try:
-        result = await replace_attributes_task(thingup, user)
-        params = dict(
-            channel = plugin.admin_channel,
-            text=(f"<@{payload['user']['id']}> successfully modified `{db_name} "
-                  f"{result.label} {result.keyval}` to \n"
-                  f"```{pformat(result)}```"),
-            blocks_verbatim = True,
-        )
-    except Exception as e:
-        msg = f"Error from LEDAPI: {e}"
-        msg += f"\nTraceback: \n{pformat(traceback.format_exc())}"
-        _log.error(msg)
-    if msg:
-        params = dict(
-            channel = payload['user']['id'],
-            text = msg,
-            ephemeral = True,
-            blocks_verbatim = True,
-            user=user.slack_id,
-        )
-    _log.debug(f"Updated thing: {xterm('CYAN')}{pformat(result.to_dict())}")
-    await plugin.post_message(**params)
-    return True
-'''
-
 
 async def action_add_new_attribute(
     plugin: SlackClient = None,
@@ -1440,32 +1386,6 @@ async def action_check_job_status(
 
     return rez
 
-'''
-async def action_opts_get_actors(
-    plugin: SlackClient = None,
-    payload: Dict = None,
-    user: User = None,
-)->bool:
-    await action_update_string_attribute(
-        plugin=plugin,
-        payload=payload,
-        user=user,
-    )
-
-async def action_opts_get_tags(
-    plugin: SlackClient = None,
-    payload: Dict = None,
-    user: User = None,
-)->bool:
-    _log.debug(f"Updating tags...")
-    await action_update_string_attribute(
-        plugin=plugin,
-        payload=payload,
-        user=user,
-    )
-    return True
-'''
-
 async def action_opts_get_things(
     plugin: SlackClient = None,
     payload: Dict = None,
@@ -1492,12 +1412,7 @@ async def action_opts_get_things(
     all_dbs = tdb.get_all_dbs(readable=True)
     tdb.close_client()
     #@ Modify blocks
-    #; Remove DB and Keyval input blocks
-    #; Just kidding... those are the only 2 blocks so we can just start from scratch
-    # blocks = await edit_thing_blocks(
-    #     db_name = tdb.db_name,
-    #     thing = rez,
-    # )
+
     # TODO - Move this User_UUID crap into the User object maybe
     thing:Entity = rez[0]
     user_uuids = thing.attrs('user-uuid')
@@ -1733,139 +1648,6 @@ async def action_select_db(
     if result:
         return True
     return False
-
-'''
-async def action_set_confidence(
-    plugin: SlackClient = None,
-    payload: Dict = None,
-    user: User = None,
-)->Dict:
-    #TODO REFRESH THIS FUNCTION, IT'S OUTTA DATE
-    _log.debug(f"Setting confidence...")
-    _log.debug(f"{xterm('YELLOW')}{pformat(payload)}")
-    # // value_str = payload['actions'][0]['selected_option']['value']
-
-    try:
-        value_str = (
-            payload['view']['state']['values'].get('confidence')
-            ['set_confidence']['selected_option']['value']
-        )
-    except Exception as e:
-        _log.error(f"Failed getting value str: {e}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
-    db_name = value_str.split('|')[0]
-    iid = value_str.split('|')[1]
-    value = value_str.split('|')[2]
-
-    setcon = ConmanObject(
-        db_name = db_name,
-        iid = iid,
-        confidence = value,
-    )
-
-    #@ Actually set the confidence inside the database
-    result = await set_confidence_task(setcon, user)
-
-    if result:
-        params = dict(
-            channel=plugin.admin_channel,
-            text=(f"<@{payload['user']['id']}> successfully set `{db_name} "
-                  f"{result.label} {result.keyval}` to "
-                  f"{await ModalBuilder.get_con_format(int(value))}"),
-            blocks_verbatim = True,
-        )
-
-        #@ update original message with new confidence and alert group that a user changed it.
-        try:
-            container = json.loads(payload['view']['private_metadata'])
-            # _log.debug(f"{xterm('GREEN')}container message_ts: {container['message_ts']}")
-            # _log.debug(f"{xterm('GREEN')}container thread_ts: {container.get('thread_ts')}")
-        except Exception as e:
-            _log.error(f"{pformat(payload['view']['private_metadata'])}")
-            _log.error(f"{pformat(container)}")
-            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
-        #; When calling an edit block manually there will be no old message
-        #; to update
-        if container.get('message_ts') is None:
-            await plugin.post_message(**params)
-            return {'response_action': 'clear'}
-
-        #; Get the old message
-        oldest = container.get('thread_ts')
-        old_message = await plugin.conversations_history(
-            channel=container['channel_id'],
-            oldest=oldest,
-            latest=container['message_ts'],
-            # // limit=1,
-            inclusive=True,
-        )
-        _log.debug(f"{xterm('GREEN')}latest: {old_message['latest']}")
-        # // _log.debug(f"{xterm('CYAN')}old_message: {pformat(old_message)}")
-        #; Modify the blocks
-        block_id = None
-        for message in old_message['messages']:
-            old_blocks = message['blocks']
-            updated_blocks = copy.deepcopy(old_blocks)
-            for block in old_blocks:
-                if 'accessory' in block:
-                    if block['accessory']['value'] == f"{db_name}|{iid}":
-                        block_id = block['block_id']
-                        _log.debug(f"block_id={block_id}")
-            if block_id:
-                break
-
-        if block_id is None:
-            _log.warning(
-                f"Couldn't find block_id in conversation history. Checking thread."
-            )
-            thread_messages = await plugin.conversations_replies(
-                channel=container['channel_id'],
-                ts=container.get('thread_ts'),
-                inclusive=True,
-            )
-            for message in thread_messages['messages']:
-                if message['ts'] == container['message_ts']:
-                    old_blocks = message['blocks']
-                    updated_blocks = copy.deepcopy(old_blocks)
-                for block in old_blocks:
-                    if 'accessory' in block:
-                        if block['accessory']['value'] == f"{db_name}|{iid}":
-                            block_id = block['block_id']
-                            _log.debug(f"block_id={block_id}")
-                if block_id:
-                    break
-
-        if block_id is None:
-            _log.error(f"Missing block_id! old_blocks should have "
-                    f"accessory|value of {db_name}|{iid}. "
-                    f"old_blocks: {xterm('CYAN')}{pformat(old_blocks)}")
-            return False
-
-        for block in updated_blocks:
-            if block['block_id'] == block_id:
-                block['accessory']['text']['text'] = await ModalBuilder.get_con_format(int(value))
-
-        #; Update the old message
-        resp = await plugin.update_message(
-            channel = container['channel_id'],
-            ts = container['message_ts'],
-            text = message['text'],
-            blocks = updated_blocks,
-        )
-    else:
-        params = dict(
-            channel = payload['user']['id'],
-            text = (f"Failed setting confidence for {db_name} {iid}. "
-                    f"Check error log."),
-            ephemeral = True,
-            blocks_verbatim = True,
-            user=user.slack_id,
-        )
-    #; Print the result of setting the confidence
-    await plugin.post_message(**params)
-
-    return {'response_action': 'clear'}
-'''
 
 #~ Update attributes of various types
 async def _update_thing_attribute(
@@ -2187,151 +1969,6 @@ async def action_set_confidence_modal(
         return True
     return False
 
-'''
-async def action_toggle_hunt_active(
-    plugin: SlackClient = None,
-    payload: Dict = None,
-    user: User = None,
-)->bool:
-    _log.debug(f"Updating hunt-active...")
-    _log.debug(f"payload: {payload}")
-    view_id = payload['view']['id']
-    hash = payload['view']['hash']
-    #; Generate updated view, input value from this action, and
-    #; parsed private_metadata
-    view, value, pmd = await plugin.blockaction_update_view(payload)
-    db_name = pmd.get('db_name')
-    iid = pmd.get('iid')
-    value = value[0]
-    #; Load TypeDBClient and check db_name
-    if (tdb := get_tdb(db_name=db_name)) is None:
-        _log.error(f"Invalid database: {db_name}")
-        return False
-    tdb:TypeDBClient
-    so = Entity(label='entity')
-    so.iid = iid
-    #; Find the thing we want to update
-    things = tdb.find_things(so)
-    if not things:
-        _log.error(f"Could not find object in {db_name} with iid {iid}")
-        return False
-    #; Toggle the attribute
-    try:
-        thing = things[0]
-        if value == 'on':
-            new_val = True
-            human_readable = 'enabled'
-        else:
-            new_val = False
-            human_readable = 'disabled'
-        tdb.replace_attribute(thing, Attribute(label='hunt-active', value=new_val))
-        _log.debug(f"Updated {thing} to {new_val}")
-    except Exception as e:
-        _log.error(f"Failed updating {thing} with {e}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
-        return False
-    params = dict(
-        channel = pmd.get('channel_id'),
-        text = (f"<@{payload['user']['id']}> toggled `{thing}` to `{human_readable}`"),
-        blocks_verbatim = True,
-    )
-    await plugin.post_message(**params)
-    return True
-
-async def action_update_frequency(
-    plugin: SlackClient = None,
-    payload: Dict = None,
-    user: User = None,
-)->bool:
-    _log.debug(f"Updating frequency...")
-    _log.debug(f"payload: {payload}")
-    view_id = payload['view']['id']
-    hash = payload['view']['hash']
-
-    view, frequency, pmd = await plugin.blockaction_update_view(payload)
-    db_name = pmd.get('db_name')
-    iid = pmd.get('iid')
-    frequency = frequency[0]
-    if (tdb := get_tdb(db_name=db_name)) is None:
-        _log.error(f"Invalid database: {db_name}")
-        return False
-    tdb:TypeDBClient
-    so = Entity(label='entity')
-    so.iid = iid
-    #; Find the thing we want to update
-    things = tdb.find_things(so)
-    if not things:
-        _log.error(f"Could not find object in {db_name} with iid {iid}")
-        return False
-    #; Update the frequency
-    try:
-        thing = things[0]
-        old_freq = thing.attr('frequency')
-        new_freq = int(frequency)
-        if int(old_freq) != int(new_freq):
-            tdb.replace_attribute(thing, Attribute(label='frequency', value=new_freq))
-            _log.debug(f"Updated {thing} frequency to {new_freq}")
-    except Exception as e:
-        _log.error(f"Failed updating {thing} with {e}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
-        return False
-    params = dict(
-        channel = pmd.get('channel_id'),
-        text = (f"<@{payload['user']['id']}> updated `{thing}` frequency to `{new_freq}`"),
-        blocks_verbatim = True,
-    )
-    await plugin.post_message(**params)
-    return True
-
-async def action_update_hunt_string(
-    plugin: SlackClient = None,
-    payload: Dict = None,
-    user: User = None,
-)->bool:
-    _log.debug(f"Updating hunt-string...")
-    _log.debug(f"payload: {payload}")
-    view_id = payload['view']['id']
-    hash = payload['view']['hash']
-
-    view, value, pmd = await plugin.blockaction_update_view(payload)
-    value = value[0]
-    db_name = pmd.get('db_name')
-    iid = pmd.get('iid')
-    if (tdb := get_tdb(db_name=db_name)) is None:
-        _log.error(f"Invalid database: {db_name}")
-        return False
-    if (tdb := get_tdb(db_name=db_name)) is None:
-        _log.error(f"Invalid database: {db_name}")
-        return False
-    tdb:TypeDBClient
-    so = Entity(label='entity')
-    so.iid = iid
-    #; Find the thing we want to update
-    things = tdb.find_things(so)
-    if not things:
-        _log.error(f"Could not find object in {db_name} with iid {iid}")
-        return False
-    #; Update the frequency
-    try:
-        thing = things[0]
-        old_string = thing.attr('hunt-string')
-        new_string = value
-        if old_string.value != new_string:
-            tdb.replace_attribute(thing, Attribute(label='hunt-string', value=new_string))
-            _log.debug(f"Updated {thing} hunt-string to {new_string}")
-    except Exception as e:
-        _log.error(f"Failed updating {thing} with {e}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
-        return False
-    params = dict(
-        channel = pmd.get('channel_id'),
-        text = (f"<@{payload['user']['id']}> updated `{thing}` hunt-string to `{new_string}`"),
-        blocks_verbatim = True,
-    )
-    await plugin.post_message(**params)
-    return True
-'''
-
 #@##############################################################################
 #@ Submissions (When a form/modal is submitted)
 #@##############################################################################
@@ -2376,43 +2013,7 @@ async def submit_add_thing(
                 continue
             if attr_label == 'keyattr':
                 attr_label = new_thing.keyattr
-            '''
-            data_type = data.get('type')
-            if data_type in ['plain_text_input', 'number_input']:
-                val = data.get('value')
-                if val is None:
-                    continue
-                attr = Attribute(label=attr_label, value=val)
-                new_thing.has.append(attr)
-            elif data_type == 'static_select':
-                val = data.get('selected_option').get('value')
-                if val is None:
-                    continue
-                attr = Attribute(label=attr_label, value=val)
-                new_thing.has.append(attr)
-            elif data_type in ['checkboxes', 'multi_external_select']:
-                opts = data.get('selected_options')
-                for opt in opts:
-                    val = opt.get('value')
-                    if val is None:
-                        continue
-                    if data_type == 'checkboxes':
-                        if val == 'on':
-                            val = True
-                    attr = Attribute(label=attr_label, value=val)
-                    new_thing.has.append(attr)
-            elif data_type == 'datetimepicker':
-                if data.get('selected_date_time') is None:
-                    continue
-                val = format_date(data.get('selected_date_time'))
-                attr = Attribute(label=attr_label, value=val)
-                new_thing.has.append(attr)
-            else:
-                _log.error(
-                    f"{xterm('RED')}Unknown data type: {data_type}. "
-                    f"Skipping {attr_label}.{xterm('X')}"
-                )
-            '''
+
             values = await plugin.get_state_vals_by_type(data)
             if values is None:
                 continue
@@ -2761,13 +2362,7 @@ async def slackaction_conf(
     #. FOR NOW, I'M ONLY USING ONE ACTION_ID AT A TIME SO IT DOESN'T MATTER.
     resp = []
     for action_id in action_ids:
-        '''
-        aid_trunc = action_id.rpartition('_')[0]
-        if aid_trunc not in opts[payload['type']]:
-        _log.error(f"No action index called {aid_trunc}")
-            continue
-        func_perms = opts[payload['type']][aid_trunc]
-        '''
+
         if action_id not in opts[payload['type']]:
             _log.error(f"No action index called {action_id}")
             continue
