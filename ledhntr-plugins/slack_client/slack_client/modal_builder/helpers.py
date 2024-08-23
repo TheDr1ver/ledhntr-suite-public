@@ -21,7 +21,7 @@ _log: logging.Logger = logging.getLogger('ledhntr')
 async def blockaction_update_view(
     payload: Dict = None
 )->Tuple[Dict, List[str], Dict]:
-    """Get updated view and selection value
+    """Get updated view, action value if applicable, and private_metadata
 
     :param payload: Payload sent by block action when selection is chosen,
          defaults to None
@@ -29,7 +29,6 @@ async def blockaction_update_view(
     :return: copied view, selection value or False if invalid
     :rtype: Tuple[Dict, Union[str, bool]]
     """
-    # TODO - MOVE THIS TO MODALBUILDER.helpers
 
     #; Clone the existing view properties
     copy_keys = [
@@ -39,16 +38,17 @@ async def blockaction_update_view(
     for key in copy_keys:
         view[key] = payload['view'].get(key)
     #; Get the action
-    actions = payload['actions']
+    actions = payload.get('actions')
     if not actions:
-        _log.error(f"{xterm('RED')}No valid action was seen: {actions}{xterm('X')}")
-        return view, None
-    #; Get the value
-    value = await get_state_vals_by_type(
-        data=payload['actions'][0]
-    )
-    if value is None:
-        value = []
+        _log.warning(f"No actions found in payload.")
+        value = None
+    else:
+        #; Get the value
+        value = await get_state_vals_by_type(
+            data=payload['actions'][0]
+        )
+        if value is None:
+            value = []
     #; Make the private_metadata friendly
     blob = view.get('private_metadata')
     if blob is None:
@@ -56,14 +56,14 @@ async def blockaction_update_view(
     else:
         pmd = json.loads(blob)
     #! DEBUG
-    _log.debug(
-        f"{xterm('GREEN')}Updating view but keeping payload "
-        f"{pformat(json.loads(view['private_metadata']))}"
-    )
+    # // _log.debug(
+    # //     f"{xterm('GREEN')}Updating view but keeping private_metadata "
+    # //     f"{pformat(json.loads(view['private_metadata']))}"
+    # // )
 
-    if value is None:
-        _log.error(f"Invalid selected_option: {pformat(actions[0])}")
-        return view, None
+    # // if value is None:
+    # //     _log.error(f"Invalid selected_option: {pformat(actions[0])}")
+    # //     return view, None
     return view, value, pmd
 
 async def get_action_ids(
@@ -252,7 +252,7 @@ async def replace_block_by_id(
             return old_blocks
     else:
         replacement_block_id = old_block_id
-    _log.debug(f"Replacing {replacement_block_id} with {pformat(new_block)}")
+    # // _log.debug(f"Replacing {replacement_block_id} with {pformat(new_block)}")
     for i, block in enumerate(old_blocks):
         if not block.get('block_id'):
             continue
