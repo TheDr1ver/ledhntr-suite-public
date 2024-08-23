@@ -1360,7 +1360,7 @@ async def action_attach_note(
         user_ids = []
         for uuid in user_uuids:
             if uuid == '00000000-0000-0000-0000-000000000000':
-                slack_id = "U07APA5PF35" #TODO - FIXME
+                slack_id = plugin.user_id #TODO - FIXME
                 user_ids.append(slack_id)
             else:
                 this_user:User = await User.load_by_uuid(uuid)
@@ -1545,7 +1545,7 @@ async def action_opts_get_things(
         user_ids = []
         for uuid in user_uuids:
             if uuid == '00000000-0000-0000-0000-000000000000':
-                slack_id = "U07APA5PF35" #TODO - FIXME
+                slack_id = plugin.user_id #TODO - FIXME
                 user_ids.append(slack_id)
             else:
                 this_user:User = await User.load_by_uuid(uuid)
@@ -2077,7 +2077,7 @@ async def action_set_confidence_modal(
         user_ids = []
         for uuid in user_uuids:
             if uuid == '00000000-0000-0000-0000-000000000000':
-                slack_id = "U07APA5PF35" #TODO - FIXME
+                slack_id = plugin.user_id #TODO - FIXME
                 user_ids.append(slack_id)
             else:
                 this_user = await User.load_by_uuid(uuid)

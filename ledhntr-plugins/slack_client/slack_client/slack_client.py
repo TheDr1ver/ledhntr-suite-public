@@ -120,7 +120,11 @@ class SlackClient(ConnectorPlugin):
         )
         # // if not self.admin_channel.startswith('#'):
         # //     self.admin_channel = f"#{self.admin_channel}"
-
+        self.user_id = config.get(
+            'options',
+            'user_id',
+            fallback='U0000000000',
+        )
 
         self.user_channel = config.get(
             'options',
