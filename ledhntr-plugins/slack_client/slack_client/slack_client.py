@@ -711,7 +711,7 @@ class SlackClient(ConnectorPlugin):
         **kwargs
     )->None:
         try:
-            await self.client.views_open(
+            result = await self.client.views_open(
                 trigger_id=trigger_id,
                 view=view,
                 **kwargs
@@ -720,7 +720,7 @@ class SlackClient(ConnectorPlugin):
             raise
         except Exception as e:
             raise
-        return None
+        return result
 
     #~########################
     #~ INVALID COMMAND POPUP
