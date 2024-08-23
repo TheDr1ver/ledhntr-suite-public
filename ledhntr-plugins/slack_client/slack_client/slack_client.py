@@ -278,11 +278,11 @@ class SlackClient(ConnectorPlugin):
                         f"{xterm('RED')}Error getting conversations info {e.response['error']}"
                         f"{xterm('X')}"
                     )
-                    _log.error(f"{xterm('RED')}Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+                    _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
                     return False
                 except Exception as e:
-                    _log.error(f"{xterm('RED')}Error getting conversations info: {e}{xterm('X')}")
-                    _log.error(f"{xterm('RED')}Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+                    _log.error(f"Error getting conversations info: {e}")
+                    _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
                     return False
         _log.debug(f"No channel found called {channel}.")
         return convo_list
@@ -393,7 +393,7 @@ class SlackClient(ConnectorPlugin):
                 **kwargs,
             )
         except SlackApiError as e:
-            _log.error(f"{xterm('RED')}Error getting convo history {e.response['error']}")
+            _log.error(f"Error getting convo history {e.response['error']}")
             return False
         except Exception as e:
             _log.error(f"Error getting convo history: {e}")
@@ -424,7 +424,7 @@ class SlackClient(ConnectorPlugin):
                 **kwargs,
             )
         except SlackApiError as e:
-            _log.error(f"{xterm('RED')}Error getting convo history {e.response['error']}")
+            _log.error(f"Error getting convo history {e.response['error']}")
             return False
         except Exception as e:
             _log.error(f"Error getting convo history: {e}")
@@ -451,11 +451,11 @@ class SlackClient(ConnectorPlugin):
                 f"{xterm('RED')}Error deleting message {e.response['error']}"
                 f"{xterm('X')}"
             )
-            _log.error(f"{xterm('RED')}Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
             return False
         except Exception as e:
-            _log.error(f"{xterm('RED')}Error deleting message: {e}{xterm('X')}")
-            _log.error(f"{xterm('RED')}Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+            _log.error(f"Error deleting message: {e}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
             return False
         _log.debug(f"Successfully deleted message: {resp.data}")
         return True
@@ -469,6 +469,8 @@ class SlackClient(ConnectorPlugin):
         blocks_verbatim: Optional[bool] = False,
         ephemeral: Optional[bool] = False,
         thread_ts: Optional[str] = None,
+        unfurl_links: Optional[bool] = False,
+        unfurl_media: Optional[bool] = False,
         **kwargs
     )->AsyncSlackResponse:
         """Posts brand new message to a channel
@@ -485,8 +487,12 @@ class SlackClient(ConnectorPlugin):
         :type blocks_verbatim: boolean
         :param thread_ts: Timestamp of original message, used for starting threads
         :type thread_ts: str
+        :param unfurl_links: If set to True, unfurls links in the message
+        :type unfurl_links: bool, optional
+        :param unfurl_media: If set to True, unfurls media attachments in the message
+        :type unfurl_media: bool, optional
         :return: True if successful, False if failure
-        :rtype: Boolean
+        :rtype: bool
         """
         _log = self._log
         if channel.startswith('#'):
@@ -537,6 +543,8 @@ class SlackClient(ConnectorPlugin):
                         blocks=blocks_chunk,
                         thread_ts=thread_ts,
                         parse=parse,
+                        unfurl_links=unfurl_links,
+                        unfurl_media=unfurl_media,
                         **kwargs,
                     )
                 else:
@@ -546,16 +554,18 @@ class SlackClient(ConnectorPlugin):
                         blocks=blocks_chunk,
                         thread_ts=thread_ts,
                         parse=parse,
+                        unfurl_links=unfurl_links,
+                        unfurl_media=unfurl_media,
                         **kwargs,
                     )
                 # // _log.debug(f"{xterm('CYAN')}SUCCESS")
                 # // _log.debug(f"num_blocks: {len(blocks_chunk)}")
                 # // _log.debug(f"blocks bytes: {len(dumps(blocks_chunk, compactly=True))}")
                 # // _log.debug(f"thread_ts: {thread_ts}")
-                # // _log.debug(f"blocks: {blocks_chunk}{xterm('X')}")
+                # // _log.debug(f"blocks: {blocks_chunk}")
                 return response
             except SlackApiError as e:
-                _log.error(f"{xterm('RED')}SlackError sending message: {e}")
+                _log.error(f"SlackError sending message: {e}")
                 _log.error(f"ERROR: {e.response['error']}")
                 _log.error(f"channel: {channel}")
                 # // _log.error(f"text: {text}")
@@ -632,11 +642,11 @@ class SlackClient(ConnectorPlugin):
                 f"{xterm('RED')}Error sending message {e.response['error']}"
                 f"{xterm('X')}"
             )
-            _log.error(f"{xterm('RED')}Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
             return False
         except Exception as e:
-            _log.error(f"{xterm('RED')}Error sending message: {e}{xterm('X')}")
-            _log.error(f"{xterm('RED')}Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+            _log.error(f"Error sending message: {e}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
             return False
 
         _log.debug(f"Successful update!: {pformat(response)}")
@@ -667,18 +677,42 @@ class SlackClient(ConnectorPlugin):
             _log.debug(f"File {filename} successfully uploaded: {response['file']['permalink']}")
             return True
         except SlackApiError as e:
-            _log.error(f"{xterm('RED')}Error uploading snippet: {e}")
+            _log.error(f"Error uploading snippet: {e}")
             _log.error(f"filename: {filename}")
             _log.error(f"content: {content[0:100]}...")
             _log.error(f"title: {title}")
             _log.error(f"snippet_type: {snippet_type}")
             _log.error(f"channel: {channel}")
-            _log.error(f"initial_comment: {initial_comment}{xterm('X')}")
+            _log.error(f"initial_comment: {initial_comment}")
             raise
 
     #&##########################################################################
     #& HANDLE MODALS
     #&##########################################################################
+    @check_client
+    async def views_push(
+        self,
+        trigger_id: str = None,
+        view: dict = None,
+    )->AsyncSlackResponse:
+        """Push a view on top of an existing modal
+        """
+        _log = self._log
+        _log.debug(f"Pushing view...")
+        try:
+            result = await self.client.views_push(
+                trigger_id=trigger_id,
+                view=view,
+            )
+        except SlackApiError as e:
+            _log.error(f"Error pushing view: {e}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+            return False
+        except Exception as e:
+            _log.error(f"Error pushing view: {e}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+            return False
+        return result
 
     @check_client
     async def views_update(
@@ -734,11 +768,18 @@ class SlackClient(ConnectorPlugin):
         **kwargs
     )->None:
         _log = self._log
-        await self.views_open(
-            trigger_id=trigger_id,
-            view=await ModalBuilder.invalid_command_modal(cmd=cmd),
-        )
-        return None
+        view = await ModalBuilder.invalid_command_modal(cmd=cmd)
+        try:
+            result = await self.client.views_open(
+                trigger_id=trigger_id,
+                view=view,
+            )
+        except Exception as e:
+            _log.error(f"Error opening invalid command modal: {e}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+            return False
+        _log.debug(f"result: {result}")
+        return result
 
     #~########################
     #~ UNAUTHORIZED POPUP
@@ -752,11 +793,12 @@ class SlackClient(ConnectorPlugin):
     )->None:
         _log = self._log
         _log.debug(f"Unauthorized operation.")
-        await self.views_open(
+        result = await self.client.views_open(
             trigger_id=trigger_id,
             view=await ModalBuilder.unauthorized_modal(),
         )
-        return None
+        _log.debug(f"result: {result}")
+        return result
 
     #&##########################################################################
     #& INTERACTIVITY
