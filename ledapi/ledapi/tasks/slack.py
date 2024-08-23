@@ -279,6 +279,126 @@ async def get_confidence_context(
         return True
     return False
 
+async def get_pivots(
+    db_name: str = None,
+    attribute_label: str = None,
+    value: str = None,
+    view_id: str = None,
+    hash: str = None,
+)->bool:
+    _log.debug(f"Getting pivots for {attribute_label} {value}...")
+    tdb:TypeDBClient = get_tdb(db_name=db_name)
+    tdb.db_name = db_name
+    things = []
+    def con_format(con):
+        if con is None:
+            return "N/A"
+        conmap = {
+            -1.0: ":x: False-Positive",
+            0.1: ":question: Unknown",
+            1.0: ":thinking_face: Low",
+            2.0: ":slightly_smiling_face: Medium",
+            3.0: ":dart: High",
+        }
+        return conmap.get(con)
+    so = Entity(label='entity', has=[Attribute(label=attribute_label, value=value)])
+    if attribute_label == 'hunt-name':
+        things += tdb.find_things(
+            things=so,
+            comp_mod=[('confidence', '>', 0.1)],
+            include_meta_attrs=True,
+            sort_mod={'label': 'date-discovered', 'sort_method': 'desc'},
+        )
+    else:
+        things += tdb.find_things(
+            things=so,
+            not_mod=[('confidence', 0.0)],
+            include_meta_attrs=True,
+            sort_mod={'label': 'date-discovered', 'sort_method': 'desc'},
+        )
+    so = Relation(label='relation', has=[Attribute(label=attribute_label, value=value)])
+    if attribute_label == 'hunt-name':
+        things += tdb.find_things(
+            things=so,
+            comp_mod=[('confidence', '>', 0.1)],
+            include_meta_attrs=True,
+            sort_mod={'label': 'date-discovered', 'sort_method': 'desc'},
+        )
+    else:
+        things += tdb.find_things(
+            things=so,
+            not_mod=[('confidence', 0.0)],
+            include_meta_attrs=True,
+            sort_mod={'label': 'date-discovered', 'sort_method': 'desc'},
+        )
+    if not things:
+        _log.error(f"Could not find anything with {attribute_label}={value}")
+        return False
+    blocks = [
+        await ModalBuilder.header_block(
+            header=f"Pivots for {attribute_label} {value}",
+            block_id=f"pivot_header",
+        ),
+    ]
+    labels_things = {}
+    for thing in things:
+        if thing.label not in labels_things:
+            labels_things[thing.label] = []
+        labels_things[thing.label].append(thing)
+    for label, things in labels_things.items():
+        blocks.append(await ModalBuilder.header_block(
+            header=f"{label}",
+            block_id=f"header_{label}",
+        ))
+        elements = []
+        for thing in things:
+            if len(elements) < 10:
+                elements.append((
+                    'mrkdwn',
+                    f"`{thing.keyval}`\n"
+                    f"{con_format(thing.attr('confidence'))}\n"
+                    f"{thing.attr('date-discovered')}\n",
+                    True
+                ))
+            else:
+                elements.pop()
+                elements.append((
+                    'mrkdwn',
+                    f":warning: *{len(things)-9} {label}s not shown...*",
+                    True
+                ))
+                break
+        blocks.append(await ModalBuilder.context_block(
+            elements=elements,
+            block_id=f"pivot_{label}",
+        ))
+    view = {
+        'type': 'modal',
+        'callback_id': f"pivot_{attribute_label}_{value}",
+        'title': {'type': 'plain_text', 'text': f"Pivots"},
+        'submit': {'type': 'plain_text', 'text': 'Submit'},
+        'close': {'type': 'plain_text', 'text': 'Cancel'},
+        'blocks': blocks,
+    }
+    _log.debug(f"View: {pformat(view)}")
+    plugin = await get_plugin()
+    try:
+        result:AsyncSlackResponse = await plugin.views_update(
+            view=view,
+            view_id=view_id,
+            hash=hash,
+        )
+    except SlackApiError as e:
+        _log.error(f"Error updating view: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+        return False
+    except Exception as e:
+        _log.error(f"Failed updating view: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+        return False
+    if result:
+        return True
+    return False
 
 #@##############################################################################
 #@ Populate Selection Options
@@ -1862,6 +1982,44 @@ async def action_open_add_user_modal(
     )
     return True
 
+async def action_pivot_attr(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->bool:
+    _log.debug(f"Pivoting attribute...")
+    view, value, pmd = await plugin.blockaction_update_view(payload)
+    value = value[0]
+    db_name = pmd.get('db_name')
+    block_id = payload['actions'][0]['block_id']
+    trigger_id = payload['trigger_id']
+    attribute_label = block_id.split('_')[0]
+    _log.debug(f"Getting detail for {attribute_label}...")
+    view['blocks'] = [await ModalBuilder.header_block(
+        header=f"Loading pivots for {attribute_label} {value}...",
+        block_id='pivot_header',
+    )]
+    result:AsyncSlackResponse = await plugin.views_push(
+        trigger_id=trigger_id,
+        view=view,
+    )
+    if not result:
+        _log.error(f"Failed getting detail for {attribute_label}")
+        return False
+    view_id = result['view']['id']
+    hash = result['view']['hash']
+    current_job:Job = get_current_job()
+    queue_name = current_job.origin
+    queue = Queue(queue_name, connection=redis_manager.syncredis)
+    job:Job = queue.enqueue_call(
+        get_pivots,
+        args=[db_name, attribute_label, value, view_id, hash],
+        timeout=60*5,
+        result_ttl=60*60,
+    )
+
+    return True
+
 async def action_set_confidence_modal(
     plugin: SlackClient = None,
     payload: Dict = None,
@@ -2329,6 +2487,7 @@ async def slackaction_conf(
             'get_hunt_endpoints': (action_get_hunt_endpoints, role_hunter),
             'no_action': (action_no_action, role_everyone),
             'open_add_user_modal': (action_open_add_user_modal, role_dbadmin),
+            'pivot_attr': (action_pivot_attr, role_everyone),
             'select_db': (action_select_db, role_everyone),
             # 'set_confidence': (action_set_confidence, role_conman),
             'set_confidence': (action_update_int_attribute, role_conman),
