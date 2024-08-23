@@ -49,7 +49,8 @@ from typedb_client import TypeDBClient
 #~######################################
 #~ set_confidence
 #~######################################
-
+#! This is probably redundant in favor of replace_attributes_task,
+#! but I'm leaving it for now because I don't want to refactor it yet.
 async def set_confidence_task(
     setcon: ConmanObject = None,
     user: User = None,
@@ -105,11 +106,19 @@ async def set_confidence_task(
         return False
     existing_thing = rez[0]
     _log.debug(f"Existing thing: {existing_thing}")
+    #; If the confidence is explicitly set to 0, we're going to set it to 0.1
+    #; to mark that it's at least been touched.
+    if int(setcon.confidence) == 0:
+        _log.debug(f"Setting confidence to 0.1")
+        new_con = 0.1
+    else:
+        new_con = setcon.confidence
     if existing_thing.get_attributes('confidence'):
         _log.debug(f"Old confidence: {existing_thing.get_attributes('confidence')[0].value}")
-    _log.debug(f"Replacing confidence with {setcon.confidence}...")
+    _log.debug(f"Replacing confidence with {new_con}...")
     try:
-        tdb.replace_attribute(existing_thing, Attribute(label='confidence', value=int(setcon.confidence)))
+        # tdb.replace_attribute(existing_thing, Attribute(label='confidence', value=int(setcon.confidence)))
+        tdb.replace_attribute(existing_thing, Attribute(label='confidence', value=float(new_con)))
     except Exception as e:
         _log.error(f"{xterm('RED')}Failed replacing attribute on {existing_thing}: {e}{xterm('X')}")
         _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
