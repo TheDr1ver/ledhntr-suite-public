@@ -2075,7 +2075,7 @@ class TypeDBClient(ConnectorPlugin):
 
     def find_things(
         self,
-        things: Union[List[Thing], Thing] = [],
+        things: Union[List[Thing], Thing, Tuple[str, str], str] = [],
         db_name: Optional[str] = '',
         limit_get: Optional[bool] = True,
         comp_mod: Optional[List[Tuple[Attribute, str, Union[float, int, str, datetime]]]] = [],
@@ -2094,7 +2094,11 @@ class TypeDBClient(ConnectorPlugin):
         Returns False if failed.
 
         :param things: List of Thing objects or Dictionaries to search DB for
-            Required
+            Required. If a tuple is passed, it should be in the format of
+            (label, keyval). This is useful for things like searching for
+            entities with a specific attribute value.
+            Alternatively, if a string is passed, it will be treated as a label
+            and all entities, relations, or attributes with that label will be returned.
         :param limit_get: If True, limit the objects returned specifically to the
             object labels requested instead of all variables in the search.
         :param comp_mod: If set, uses a comparison method when searching for things.
@@ -2181,7 +2185,30 @@ class TypeDBClient(ConnectorPlugin):
         proper_things = []
         for thing in things:
             thing_type = None
-            if isinstance(thing, str):
+            if isinstance(thing, tuple):
+                thing_label = thing[0]
+                keyval = thing[1]
+                thing_type = concepts.get_attribute_type(thing_label).resolve()
+                if not thing_type:
+                    thing_type = concepts.get_relation_type(thing_label).resolve()
+                    if not thing_type:
+                        thing_type = concepts.get_entity_type(thing_label).resolve()
+                        if not thing_type:
+                            _log.warning(
+                                f"Unable to determine proper type of {thing}. Skipping!"
+                            )
+                            return []
+                        else:
+                            so = Entity(label=thing_label)
+                            so.has.append(Attribute(label=so.keyattr, value=keyval))
+                            proper_things.append(so)
+                    else:
+                        so = Relation(label=thing_label)
+                        so.has.append(Attribute(label=so.keyattr, value=keyval))
+                        proper_things.append(so)
+                else:
+                    proper_things.append(Attribute(label=thing_label, value=keyval))
+            elif isinstance(thing, str):
                 thing_type = concepts.get_attribute_type(thing).resolve()
                 if not thing_type:
                     thing_type = concepts.get_relation_type(thing).resolve()

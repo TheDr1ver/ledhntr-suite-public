@@ -134,6 +134,12 @@ async def replace_attributes_task(
                     attr=attr,
                     return_things=True,
                 )
+        if user.uuid:
+            _log.debug(f"Attaching user-uuid {user.uuid} for {user.user_id} to {old_thing}")
+            things = tdb.attach_attribute(
+                old_thing,
+                Attribute(label='user-uuid', value=user.uuid),
+            )
         _log.debug(f"Final {thingup.attr_label}(s) for {old_thing}:\n"
                    f"{pformat(old_thing.attrs(thingup.attr_label))}")
     except Exception as e:

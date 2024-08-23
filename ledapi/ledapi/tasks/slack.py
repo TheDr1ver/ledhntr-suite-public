@@ -1325,6 +1325,12 @@ async def action_attach_note(
             Attribute(label='note', value=value),
             return_things=True
         )
+        if user.uuid:
+            things = tdb.attach_attribute(
+                things,
+                Attribute(label='user-uuid', value=user.uuid),
+                return_things=True
+            )
         if not isinstance(things, list):
             things = [things]
         #; Send success message to admin channel
@@ -1366,6 +1372,8 @@ async def action_attach_note(
                 this_user:User = await User.load_by_uuid(uuid)
                 # // _log.debug(f"{xterm('BOLD_BLACK')}this_user: {this_user.to_dict()}")
                 # // _log.debug(f"{xterm('BOLD_BLACK')}slack_id: {this_user.slack_id}")
+                if not this_user:
+                    continue
                 try:
                     slack_id = re.search(r'\(([^,]+),', this_user.slack_id).group(1)
                     if slack_id:

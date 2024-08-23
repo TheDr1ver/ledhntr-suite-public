@@ -321,14 +321,14 @@ class SlackClient(ConnectorPlugin):
                     **kwargs,
                 )
             except SlackApiError as e:
-                _log.error(f"Error getting convo history {e.response['error']}")
+                _log.error(f"Error getting convo history {e.response['error']} {user_id}")
                 continue
             except Exception as e:
                 _log.error(f"Error getting convo history: {e}")
                 continue
 
             rez[user_id]=response.data
-        _log.debug(f"rez: {pformat(rez)}")
+        # // _log.debug(f"rez: {pformat(rez)}")
         return rez
 
     #&##########################################################################

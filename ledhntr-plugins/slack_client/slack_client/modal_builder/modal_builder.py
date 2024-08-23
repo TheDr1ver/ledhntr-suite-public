@@ -1511,6 +1511,8 @@ class ModalBuilder():
             user_context = []
             for user, data in user_info.items():
                 username = data['user']['profile']['display_name']
+                if not username:
+                    username = data['user']['real_name']
                 avatar = data['user']['profile']['image_192']
                 user_context.append(
                     ('image', avatar, username)
