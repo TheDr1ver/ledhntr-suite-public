@@ -438,8 +438,8 @@ async def get_user_by_slack_id(
     try:
         # body = await request.body()
         form = await request.form()
-        _log.debug(f"FORM:")
-        _log.debug(f"{pformat(form)}")
+        # // _log.debug(f"FORM:")
+        # // _log.debug(f"{pformat(form)}")
         # data = json.loads(body)
         # user_id = data['user']['id']
         # team_id = data['user']['team_id']
@@ -448,9 +448,9 @@ async def get_user_by_slack_id(
         _log.debug(f"user_id: {user_id}")
         _log.debug(f"team_id: {team_id}")
         if not (user_id or team_id):
-            _log.debug(f"Getting user info from form payload")
+            # // _log.debug(f"Getting user info from form payload")
             payload = form.get('payload')
-            _log.debug(f"PAYLOAD: {payload}")
+            # // _log.debug(f"PAYLOAD: {payload}")
             if payload is not None:
                 payload = json.loads(payload) # serialize
                 user_info = payload.get('user')
@@ -467,10 +467,10 @@ async def get_user_by_slack_id(
         _log.error(f"Unable to load user by slack_id: {e}")
         raise
     if user:
-        _log.debug(f"Successfully loaded user {user}")
+        # // _log.debug(f"Successfully loaded user {user}")
         return user
     else:
-        _log.debug(f"Unable to find user with slack_id {slack_id}")
+        _log.error(f"Unable to find user with slack_id {slack_id}")
         return None
     _log.debug(f"Unable to find user with slack_id {slack_id}")
     raise HTTPException(

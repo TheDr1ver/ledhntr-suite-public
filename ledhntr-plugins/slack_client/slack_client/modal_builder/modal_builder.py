@@ -553,7 +553,7 @@ class ModalBuilder():
     async def actors_ext_opts(
         existing: Union[List[str],str] = None,
     )->Dict:
-        _log.debug(f"EXISTING: {existing}")
+        # // _log.debug(f"EXISTING: {existing}")
         options = None
         if existing is not None and not isinstance(existing, list):
             existing = [existing]
@@ -563,7 +563,7 @@ class ModalBuilder():
                 for attr in existing
                 if attr is not None
             ]
-        _log.debug(f"OPTIONS: {options}")
+        # // _log.debug(f"OPTIONS: {options}")
         if options:
             block = await external_select_block(
                 block_id='actor-name',
@@ -582,7 +582,7 @@ class ModalBuilder():
                 min_query_length=3,
                 multi=True,
             )
-        _log.debug(f"BLOCK:\n{pformat(block)}")
+        # // _log.debug(f"BLOCK:\n{pformat(block)}")
         return block
 
     #~ Get frequency input
@@ -727,7 +727,7 @@ class ModalBuilder():
     async def get_tags(
         existing: Union[List[str],str] = None,
     )->Dict:
-        _log.debug(f"{xterm('MAGENTA')}existing: {existing}")
+        # // _log.debug(f"{xterm('MAGENTA')}existing: {existing}")
         options = None
         if existing is not None and not isinstance(existing, list):
             existing = [existing]
@@ -737,7 +737,7 @@ class ModalBuilder():
                 for attr in existing
                 if attr is not None
             ]
-        _log.debug(f"{xterm('MAGENTA')}options: {options}")
+        # // _log.debug(f"{xterm('MAGENTA')}options: {options}")
         if options:
             block = await external_select_block(
                 block_id='tag',
@@ -756,7 +756,7 @@ class ModalBuilder():
                 min_query_length=3,
                 multi=True,
             )
-        _log.debug(f"{xterm('MAGENTA')}block: {block}")
+        # //_log.debug(f"{xterm('MAGENTA')}block: {block}")
         return block
 
     #~ Add Attribute Label Selector
@@ -1293,6 +1293,7 @@ class ModalBuilder():
         :rtype: Dict
         """
         cls._log.debug(f"Building edit_thing modal...")
+        debugging_modal = False
         blocks = []
         modal = {}
         channel_id = container.get('channel_id') if container else None
@@ -1306,7 +1307,8 @@ class ModalBuilder():
                 callback_id="edit_thing_error",
                 text=":warning: A label is required to edit something."
             )
-            cls._log.debug(f"{xterm('CYAN')}Finished Modal: \n{pformat(modal)}")
+            if debugging_modal:
+                cls._log.debug(f"{xterm('CYAN')}Finished Modal: \n{pformat(modal)}")
             return modal
 
         if things is not None:
@@ -1329,7 +1331,8 @@ class ModalBuilder():
                 callback_id='edit_thing_error',
                 text=msg
             )
-            cls._log.debug(f"{xterm('CYAN')}Finished Modal: \n{pformat(modal)}")
+            if debugging_modal:
+                cls._log.debug(f"{xterm('CYAN')}Finished Modal: \n{pformat(modal)}")
             return modal
         elif ent.keyattr == 'comboid':
             msg = f":warning: At this time, keyattrs of 'comboid' are uneditable."
@@ -1339,7 +1342,8 @@ class ModalBuilder():
                 callback_id='edit_thing_error',
                 text=msg
             )
-            cls._log.debug(f"{xterm('CYAN')}Finished Modal: \n{pformat(modal)}")
+            if debugging_modal:
+                cls._log.debug(f"{xterm('CYAN')}Finished Modal: \n{pformat(modal)}")
             return modal
         #; Process private_metadata
         pmd = {}
@@ -1371,7 +1375,8 @@ class ModalBuilder():
             modal['blocks'].append(
                 await cls.get_add_attribute()
             )
-            cls._log.debug(f"{xterm('CYAN')}Finished Modal: \n{pformat(modal)}")
+            if debugging_modal:
+                cls._log.debug(f"{xterm('CYAN')}Finished Modal: \n{pformat(modal)}")
             return modal
         else:
             #; If no things have been found yet, we need to present a simple form that lets us search
@@ -1408,7 +1413,8 @@ class ModalBuilder():
                 blocks=blocks,
                 private_metadata=dumps(pmd, compactly=True),
             )
-            cls._log.debug(f"{xterm('CYAN')}Finished Modal: \n{pformat(modal)}")
+            if debugging_modal:
+                cls._log.debug(f"{xterm('CYAN')}Finished Modal: \n{pformat(modal)}")
             return modal
 
         #; Otherwise, if there's more than one thing, we need to narrow it down

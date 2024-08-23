@@ -133,7 +133,7 @@ async def slackaction_ep(
 
     resp = {'headers': None, 'body': None}
     resp['headers'] = {key: val for  key, val in request.headers.items()}
-    _log.debug(f"{xterm('CYAN')}Headers: \n{pformat(resp['headers'])}{xterm('X')}")
+    # // _log.debug(f"{xterm('CYAN')}Headers: \n{pformat(resp['headers'])}{xterm('X')}")
     '''
     resp['body'] = await request.body()
     resp['body'] = resp['body'].decode('utf-8')
@@ -152,9 +152,9 @@ async def slackaction_ep(
         user = None #; possibly this is a new user...
     form = await request.form()
 
-    _log.debug(f"Running slack action...")
-    _log.debug(f"{pformat(request)}")
-    _log.debug(f"Form: {pformat(form)}")
+    # // _log.debug(f"Running slack action...")
+    # // _log.debug(f"{pformat(request)}")
+    # // _log.debug(f"Form: {pformat(form)}")
     msg_400 = f"Invalid input"
     msg_500 = f"Error running slack action"
 
