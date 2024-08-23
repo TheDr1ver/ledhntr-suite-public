@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 import traceback
 
@@ -10,6 +11,7 @@ from ledhntr.helpers import xterm
 from ledapi.config import _log, wqm
 
 from typing import Dict, List, Union, Optional
+_log = logging.getLogger('ledhntr')
 
 def result_error_catching(
     result_func: Callable = None,
