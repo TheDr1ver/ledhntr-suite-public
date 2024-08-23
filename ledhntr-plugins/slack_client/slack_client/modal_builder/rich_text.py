@@ -15,6 +15,7 @@ _log: logging.Logger = logging.getLogger('ledhntr')
 async def basic_rich_text(
     text:str = None,
     bold:bool = False,
+    block_id: Optional[str] = None,
 )->Dict:
     block = {
         'type': 'rich_text',
@@ -36,6 +37,8 @@ async def basic_rich_text(
                 if 'style' not in element:
                     element['style'] = {}
                 element['style']['bold']=True
+    if block_id:
+        block['block_id'] = block_id
     return block
 
 #~ Bold
