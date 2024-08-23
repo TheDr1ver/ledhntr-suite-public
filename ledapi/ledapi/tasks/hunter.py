@@ -84,6 +84,13 @@ async def replace_attributes_task(
         _log.error(f"Invalid database: {thingup.db_name}")
         return False
     tdb:TypeDBClient
+    #; Pre-process for confidence == 0.0
+    #; If it's explicitly set to 0, set it to 0.1 so we can mark it as
+    #; having been touched.
+    if thingup.attr_label=='confidence':
+        if int(thingup.attr_values[0])==0:
+            _log.debug(f"{xterm('BOLD_GREEN')}Setting confidence to 0.1{xterm('RESET')}")
+            thingup.attr_values[0]=0.1
     try:
         so = Entity(label='entity')
         so.iid = thingup.iid
@@ -103,9 +110,8 @@ async def replace_attributes_task(
         _log.debug(f"thingup.attr_values: {thingup.attr_values}")
         for ea in existing_attributes:
             if ea not in thingup.attr_values:
-                _log.debug(f"ea: {ea}")
                 attr = Attribute(label=thingup.attr_label, value=ea)
-                _log.debug(f"Detatching {attr} from {old_thing}")
+                _log.debug(f"{xterm('BOLD_RED')}Detatching {attr} from {old_thing}")
                 tdb.detach_attribute(
                     old_thing=old_thing,
                     attr=attr,
@@ -120,9 +126,9 @@ async def replace_attributes_task(
         if not isinstance(existing_attributes, list):
             existing_attributes = [existing_attributes]
         for new_attr in thingup.attr_values:
-            if new_attr not in existing_attributes:
-                attr = Attribute(label=thingup.attr_label, value=new_attr)
-                _log.debug(f"Attaching {attr} to {old_thing}")
+            attr = Attribute(label=thingup.attr_label, value=new_attr)
+            if attr.value not in existing_attributes:
+                _log.debug(f"{xterm('BOLD_GREEN')}Attaching {attr} to {old_thing}")
                 old_thing = tdb.attach_attribute(
                     old_thing=old_thing,
                     attr=attr,
