@@ -195,7 +195,7 @@ class ModalBuilder():
     async def header_block(
         header: str = None,
         block_id: Optional[str] = None,
-    ):
+    )->Dict:
         """Generates a Header Block
 
         :param header: plain_text header content, defaults to None
@@ -387,8 +387,9 @@ class ModalBuilder():
     async def basic_rich_text(
         text: str = None,
         bold: bool = False,
+        block_id: Optional[str] = None,
     )->Dict:
-        return await basic_rich_text(text=text, bold=bold)
+        return await basic_rich_text(text=text, bold=bold, block_id=block_id)
 
     #~ Section
     @staticmethod
@@ -1068,7 +1069,7 @@ class ModalBuilder():
     #~ Invalid Command
     @classmethod
     async def invalid_command_modal(cls, cmd: str = None):
-        modal = cls.simple_popup(
+        modal = await cls.simple_popup(
             title="Invalid Command",
             callback_id="invalid_command",
             text=f":no_entry: You have entered an invalid command: {cmd}"
@@ -1078,7 +1079,7 @@ class ModalBuilder():
     #~ Unauthorized Modal
     @classmethod
     async def unauthorized_modal(cls):
-        modal = cls.simple_popup(
+        modal = await cls.simple_popup(
             title="Unauthorized",
             callback_id="unauthorized_modal",
             text=":no_entry: You are not authorized"
