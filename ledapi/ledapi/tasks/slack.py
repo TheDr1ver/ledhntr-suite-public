@@ -15,6 +15,12 @@ import time
 import traceback
 from typing import Dict, List, Optional, Union, Tuple, Callable
 
+from rq import (
+    get_current_job,
+    Queue,
+)
+from rq.job import Job
+
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
@@ -157,27 +163,33 @@ async def check_db(
     return tdb
 
 async def get_confidence_context(
-    modal: dict = None,
-)->Dict:
-    """Gather context confidence after a modal has been built, before viewing
+    payload: dict = None,
+)->bool:
+    """Gather context confidence after a modal has been built and update modal
 
-    :param modal: existing modal dict, defaults to None
+    :param payload: payload dict derrived from view_open, defaults to None
     :type modal: dict, optional
-    :return: updated modal with confidence context for easier triage
-    :rtype: Dict
+    :return: True if successful, False if failed
+    :rtype: bool
     """
-    _log.debug(f"Processing modal \n{xterm('CYAN')}{pformat(modal)}")
-    blocks = modal.get('blocks')
-    pmd = json.loads(modal.get('private_metadata'))
+    # // _log.debug(f"Processing modal \n{xterm('CYAN')}{pformat(modal)}")
+    _log.debug(f"Gathering context for modal...")
+    view = payload['view']
+    view_id = view.get('id')
+    hash = view.get('hash')
+    blocks = view.get('blocks')
+    plugin:SlackClient = await get_plugin()
+    view, value, pmd = await plugin.blockaction_update_view(payload)
     db_name = pmd.get('db_name')
     if db_name is None:
         _log.error(f"Could not find db_name in private_metadata: {pmd}")
-        return modal
+        return False
     tdb: Union[TypeDBClient,None] = get_tdb(db_name=db_name)
     if tdb is None:
         _log.error(f"Could not connect to database {db_name}.")
-        return modal
-    context_labels = ['ledsrc', 'hunt-name']
+        return False
+
+    context_labels = ['ledsrc', 'hunt-name'] #. hunt-name might be overkill eventually.
     all_avgs = []
 
     for block in blocks:
@@ -185,7 +197,7 @@ async def get_confidence_context(
         if block_id is None:
             continue
         if any(block_id.startswith(cl) for cl in context_labels):
-            _log.debug(f"{xterm('YELLOW')}Found block_id {block_id}")
+            # // _log.debug(f"{xterm('YELLOW')}Found block_id {block_id}")
             label = block_id.split('_')[0]
             value = block.get('accessory').get('value')
             text = block.get('text').get('text')
@@ -193,7 +205,10 @@ async def get_confidence_context(
             so = Entity(label='entity')
             del so.ledid
             so.has.append(Attribute(label=label, value=value))
-            rez = tdb.find_things(so, include_meta_attrs=True)
+            rez = tdb.find_things(
+                things=so,
+                not_mod=[('confidence', 0.0)],
+                include_meta_attrs=True)
             _log.debug(f"Found {len(rez)} things matching {label} {value}...")
             maincon = None
             total_count = 0
@@ -203,7 +218,7 @@ async def get_confidence_context(
                 confidence = r.attr('confidence')
                 if r.keyval == value:
                     maincon = confidence
-                    _log.debug(f"Found main confidence for {value}: {maincon}")
+                    # // _log.debug(f"Found main confidence for {value}: {maincon}")
 
                 #@ NOTE - ignoring confidence = 0.0 b/c that presumes it wasn't set
                 #@ if we want a more accurate "unknown" picture, maybe we change
@@ -248,7 +263,21 @@ async def get_confidence_context(
             _log.debug(f"{xterm('CYAN')}new_text: {new_text}")
             block['text']['text'] = new_text
 
-    return modal
+    view['blocks'] = blocks
+
+    #; Update the existing block with context
+    try:
+        result:AsyncSlackResponse = await plugin.views_update(
+            view=view,
+            view_id=view_id,
+            hash=hash,
+        )
+    except Exception as e:
+        _log.error(f"Failed updating view: {e}")
+        return False
+    if result:
+        return True
+    return False
 
 
 #@##############################################################################
@@ -283,7 +312,7 @@ async def opts_get_actors(
             if alias.value not in all_names:
                 all_names[alias.value] = actor_name
     #; Return as valid options
-    _log.debug(f"{xterm('CYAN')}Found matching names: \n{pformat(all_names)}{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}Found matching names: \n{pformat(all_names)}")
     for name in all_names:
         if input.lower() in name.lower():
             if name.lower() == all_names[name].lower():
@@ -327,7 +356,7 @@ async def opts_get_tags(
         for ta in tagattrs:
             if ta.value not in all_tags:
                 all_tags.append(ta.value)
-    _log.debug(f"{xterm('CYAN')}Found tags: \n{pformat(all_tags)}{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}Found tags: \n{pformat(all_tags)}")
     for tag in all_tags:
         if input.lower() in tag.lower():
             opt = {
@@ -461,7 +490,7 @@ async def mojo_help_to_mrkdwn(
         else:
             mrkdwn_lines.append(line)
         '''
-    _log.debug(f"{xterm('CYAN')}lines: {mrkdwn_lines}{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}lines: {mrkdwn_lines}")
     return '\n'.join(mrkdwn_lines)
 
 async def mojo_parse_cmd(
@@ -563,7 +592,7 @@ async def mojo_parse_cmd(
         help_message = parser.format_help()
         return help_message
 
-    _log.debug(f"{xterm('GREEN')}Parsed args: {pformat(vars(args))}{xterm('X')}")
+    _log.debug(f"{xterm('GREEN')}Parsed args: {pformat(vars(args))}")
     return args
 
 #. MOJO command tasks
@@ -621,8 +650,8 @@ async def mojo_add_thing(
     try:
         args = await mojo_parse_cmd(mojo.text)
     except SystemExit as e:
-        _log.error(f"{xterm('RED')}Error parsing cmd: {e}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        _log.error(f"Error parsing cmd: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
 
     plugin:SlackClient = await get_plugin()
     #; Check valid thing type
@@ -651,7 +680,7 @@ async def mojo_add_thing(
 
     #; Set user or default database
     mojo.db_name = user.db_name or plugin.default_db
-    _log.debug(f"{xterm('CYAN')}Set user_db to {mojo.db_name}. user: {user.db_name} plugin: {plugin.default_db}{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}Set user_db to {mojo.db_name}. user: {user.db_name} plugin: {plugin.default_db}")
     #; Open modal
     tdb:TypeDBClient = get_tdb()
     all_dbs = tdb.get_all_dbs(readable=True)
@@ -667,10 +696,10 @@ async def mojo_add_thing(
             plugin_list=led.list_plugins(),
         )
     except Exception as e:
-        _log.error(f"{xterm('RED')}Failed building modal: {e}{xterm('X')}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
-    _log.debug(f"{xterm('CYAN')}view modal:\n{pformat(mymodal)}{xterm('X')}")
-    _log.debug(f"{xterm('CYAN')}modal type: {type(mymodal)}{xterm('X')}")
+        _log.error(f"Failed building modal: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+    _log.debug(f"{xterm('CYAN')}view modal:\n{pformat(mymodal)}")
+    _log.debug(f"{xterm('CYAN')}modal type: {type(mymodal)}")
 
     try:
         await plugin.views_open(
@@ -678,8 +707,8 @@ async def mojo_add_thing(
             view = mymodal,
         )
     except Exception as e:
-        _log.error(f"{xterm('RED')}Failed opening modal: {e}{xterm('X')}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        _log.error(f"Failed opening modal: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
         return False
 
     return True
@@ -780,8 +809,8 @@ async def mojo_edit_thing(
     try:
         args = await mojo_parse_cmd(mojo.text)
     except SystemExit as e:
-        _log.error(f"{xterm('RED')}Error parsing cmd: {e}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        _log.error(f"Error parsing cmd: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
 
     plugin:SlackClient = await get_plugin()
     #; Check valid thing type
@@ -810,7 +839,7 @@ async def mojo_edit_thing(
 
     #; Set user or default database
     mojo.db_name = user.db_name or plugin.default_db
-    _log.debug(f"{xterm('CYAN')}Set user_db to {mojo.db_name}. user: {user.db_name} plugin: {plugin.default_db}{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}Set user_db to {mojo.db_name}. user: {user.db_name} plugin: {plugin.default_db}")
     #; Normalize params
     db_name = args.database or mojo.db_name
     label = args.label
@@ -842,26 +871,43 @@ async def mojo_edit_thing(
             ledschema = led.schema,
             plugin_list = led.list_plugins(),
         )
-        if mymodal:
-            mymodal = await get_confidence_context(mymodal)
     except Exception as e:
-        _log.error(f"{xterm('RED')}Failed building modal: {e}{xterm('X')}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
-    _log.debug(f"{xterm('CYAN')}view modal:\n{pformat(mymodal)}{xterm('X')}")
-    _log.debug(f"{xterm('CYAN')}modal type: {type(mymodal)}{xterm('X')}")
-    if mymodal:
-        mymodal = await get_confidence_context(mymodal)
+        _log.error(f"Failed building modal: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+    # // _log.debug(f"{xterm('CYAN')}view modal:\n{pformat(mymodal)}")
+    # // _log.debug(f"{xterm('CYAN')}modal type: {type(mymodal)}")
     try:
-        await plugin.views_open(
+        result:AsyncSlackResponse = await plugin.views_open(
             trigger_id=mojo.trigger_id,
             view = mymodal,
         )
+        # // _log.debug(f"response: {xterm('GREEN_BOLD')}{pformat(response.data)}")
     except Exception as e:
-        _log.error(f"{xterm('RED')}Failed opening modal: {e}{xterm('X')}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        _log.error(f"Failed opening modal: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
         return False
 
-    return True
+    if len(things) == 1:
+        #; Populate new modal with confidence context
+        payload = result.data
+        view_id = result['view']['id']
+        hash = result['view']['hash']
+        current_job:Job = get_current_job()
+        current_job_worker = current_job.worker_name
+        queue_name = current_job.origin
+        queue = Queue(queue_name, connection=redis_manager.syncredis)
+        job:Job = queue.enqueue_call(
+            get_confidence_context,
+            args=[payload],
+            timeout=60*5,
+            result_ttl=60*60,
+        )
+
+        if result:
+            return True
+        return False
+
+
 
 async def mojo_get_help(
     mojo: MOJOCMD = None,
@@ -874,8 +920,8 @@ async def mojo_get_help(
     try:
         help_message = await mojo_parse_cmd(mojo.text)
     except SystemExit as e:
-        _log.error(f"{xterm('RED')}Error parsing cmd: {e}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        _log.error(f"Error parsing cmd: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
         return False
 
     plugin:SlackClient = await get_plugin()
@@ -896,8 +942,8 @@ async def mojo_get_help(
             mrkdwn=True,
         )
     except Exception as e:
-        _log.error(f"{xterm('RED')}Failed posting message..: {e}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        _log.error(f"Failed posting message..: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
 
 async def mojo_post_news(
     mojo: MOJOCMD = None,
@@ -907,8 +953,8 @@ async def mojo_post_news(
     try:
         args = await mojo_parse_cmd(mojo.text)
     except SystemExit as e:
-        _log.error(f"{xterm('RED')}Error parsing cmd: {e}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        _log.error(f"Error parsing cmd: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
 
     #; Check 'con' flag
     con_list = None
@@ -930,13 +976,13 @@ async def mojo_post_news(
     ]
 
     news_results = await get_news_conf(args.hours_back)
-    #; _log.debug(f"{xterm('CYAN')}{pformat(news_results)}{xterm('X')}")
+    #; _log.debug(f"{xterm('CYAN')}{pformat(news_results)}")
     new_things = news_results.get('new_things')
     if not new_things:
-        _log.debug(f"{xterm('YELLOW')}no new things found..{xterm('X')}")
+        _log.debug(f"{xterm('YELLOW')}no new things found..")
         return None
     #; else:
-    #;     _log.debug(f"{xterm('GREEN')}new_things: {new_things}{xterm('X')}")
+    #;     _log.debug(f"{xterm('GREEN')}new_things: {new_things}")
 
     plugin:SlackClient = await get_plugin()
 
@@ -944,7 +990,7 @@ async def mojo_post_news(
         #; This is something else that should be specific to the chat
         #; plugin, but again... MVP... just trying to get it out the door.
         text = f"```{new_things}```"
-        # // _log.debug(f"{xterm('CYAN')}Posting {text} to {plugin.admin_channel}...{xterm('X')}")
+        # // _log.debug(f"{xterm('CYAN')}Posting {text} to {plugin.admin_channel}...")
         try:
             await plugin.upload_snippet(
                 filename=f"{datetime.now(timezone.utc)}_news.json",
@@ -958,8 +1004,8 @@ async def mojo_post_news(
                 initial_comment="MOJO News Dump",
             )
         except Exception as e:
-            _log.error(f"{xterm('RED')}Failed posting message: {e}")
-            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+            _log.error(f"Failed posting message: {e}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
         # // _log.debug(f"MOJOCMD: {pformat(mojo)}")
 
         return True
@@ -974,19 +1020,19 @@ async def mojo_post_news(
                 interesting = True
                 break
             else:
-                _log.debug(f"{xterm('CYAN')}{tt} not in {interesting_things}{xterm('X')}")
+                _log.debug(f"{xterm('CYAN')}{tt} not in {interesting_things}")
         if not interesting:
-            _log.debug(f"{xterm('YELLOW')}nothing interesting found in {db}.{xterm('X')}")
+            _log.debug(f"{xterm('YELLOW')}nothing interesting found in {db}.")
             continue
         text_lines = []
         data = {db: thing_types}
         #; Generate pretty blocks with buttons.
         try:
             blocks = await ModalBuilder.new_hits(data, interesting_things, con_list)
-            # // _log.debug(f"{xterm('CYAN')}Generated blocks: \n{pformat(blocks)}{xterm('X')}")
+            # // _log.debug(f"{xterm('CYAN')}Generated blocks: \n{pformat(blocks)}")
         except Exception as e:
-            _log.error(f"{xterm('RED')}Failed generating blocks: {e}{xterm('X')}")
-            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+            _log.error(f"Failed generating blocks: {e}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
         if not blocks:
             continue
         text_lines.append(f"*{db}*")
@@ -1038,8 +1084,8 @@ async def mojo_post_news(
                 blocks_verbatim=True,
             )
         except Exception as e:
-            _log.error(f"{xterm('RED')}Failed posting message..: {e}")
-            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+            _log.error(f"Failed posting message..: {e}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
 
     if not something_posted and mojo.user_id!="MOJOBOT":
         await plugin.post_message(
@@ -1165,7 +1211,7 @@ async def action_add_new_attribute(
     else:
         view['blocks'].append(new_attr_label) #; Add the new label
     result = None
-    _log.debug(f"{xterm('CYAN')}Sending view: {pformat(view)}{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}Sending view: {pformat(view)}")
     try:
         result = await plugin.views_update(
             view=view,
@@ -1173,7 +1219,7 @@ async def action_add_new_attribute(
             hash=hash,
         )
     except Exception as e:
-        _log.error(f"{xterm('RED')}Failed updating view: {e}{xterm('X')}")
+        _log.error(f"Failed updating view: {e}")
     if result:
         return True
     return False
@@ -1269,8 +1315,6 @@ async def action_attach_note(
         user_info=user_info,
         private_metadata=view.get('private_metadata'),
     )
-    if modal:
-        modal = await get_confidence_context(modal)
     _log.debug(f"Response modal:\n{pformat(modal)}")
     view['blocks'] = modal['blocks']
     view['private_metadata'] = modal['private_metadata']
@@ -1284,6 +1328,22 @@ async def action_attach_note(
     except Exception as e:
         _log.error(f"Failed updating view: {e}")
         _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+        return False
+    #; Populate new modal with confidence context
+    payload = result.data
+    view_id = result['view']['id']
+    hash = result['view']['hash']
+    current_job:Job = get_current_job()
+    current_job_worker = current_job.worker_name
+    queue_name = current_job.origin
+    queue = Queue(queue_name, connection=redis_manager.syncredis)
+    job:Job = queue.enqueue_call(
+        get_confidence_context,
+        args=[payload],
+        timeout=60*5,
+        result_ttl=60*60,
+    )
+
     if result:
         return True
     return False
@@ -1418,9 +1478,10 @@ async def action_opts_get_things(
     value = value[0]
     _log.debug(f"{xterm('CYAN')}Selected {value}...")
     _log.debug(f"View: {pformat(view)}")
-    _log.debug(f"Payload: \n{pformat(payload)}{xterm('X')}")
+    _log.debug(f"Payload: \n{pformat(payload)}")
     #@ Get thing details from TDB
-    label = payload['view']['title'].get('text').split(' ')[-1].lower()
+    # label = payload['view']['title'].get('text').split(' ')[-1].lower()
+    label = pmd.get('label')
     #; Check if the DB is set and if set, that it's valid.
     tdb:TypeDBClient = await check_db(payload)
     if not tdb:
@@ -1467,9 +1528,7 @@ async def action_opts_get_things(
         user_info=user_info,
         private_metadata=view.get('private_metadata'),
     )
-    if modal:
-        modal = await get_confidence_context(modal)
-    _log.debug(f"Context modal: {pformat(modal)}")
+
     view['blocks'] = modal['blocks']
     view['private_metadata'] = modal['private_metadata']
     _log.debug(f"{xterm('GREEN')}metadata_out: {view.get('private_metadata')}")
@@ -1479,13 +1538,30 @@ async def action_opts_get_things(
     #; Update modal view
 
     try:
-        result = await plugin.views_update(
+        result:AsyncSlackResponse = await plugin.views_update(
             view=view,
             view_id=view_id,
             hash=hash,
         )
+        # // _log.debug(f"result: {xterm('GREEN_BOLD')}{pformat(result.data)}")
     except Exception as e:
-        _log.error(f"{xterm('RED')}Failed updating view: {e}{xterm('X')}")
+        _log.error(f"Failed updating view: {e}")
+        return False
+
+    payload = result.data
+    view_id = result['view']['id']
+    hash = result['view']['hash']
+    current_job:Job = get_current_job()
+    current_job_worker = current_job.worker_name
+    queue_name = current_job.origin
+    queue = Queue(queue_name, connection=redis_manager.syncredis)
+    job:Job = queue.enqueue_call(
+        get_confidence_context,
+        args=[payload],
+        timeout=60*5,
+        result_ttl=60*60,
+    )
+
     if result:
         return True
     return False
@@ -1517,11 +1593,11 @@ async def action_get_attr_labels(
     #; Get the value_type
     label_schema = led.schema['attribute'].get(label)
     if label_schema is None:
-        _log.error(f"{xterm('RED')}No schema available for {label}{xterm('X')}")
+        _log.error(f"No schema available for {label}")
         return False
     value_type = label_schema.get('value_type')
     if value_type is None:
-        _log.error(f"{xterm('RED')}No value_type found for {label}.{xterm('X')}")
+        _log.error(f"No value_type found for {label}.")
         return False
     new_input = await ModalBuilder.add_attribute_value(label=label, value_type=value_type)
 
@@ -1535,7 +1611,7 @@ async def action_get_attr_labels(
     #! Check if block count is above a certain threshold, then potentially
     #! remove the 'add new attribute' button as well.
     result = None
-    _log.debug(f"{xterm('CYAN')}Sending view: {pformat(view)}{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}Sending view: {pformat(view)}")
     try:
         result = await plugin.views_update(
             view=view,
@@ -1543,7 +1619,7 @@ async def action_get_attr_labels(
             hash=hash,
         )
     except Exception as e:
-        _log.error(f"{xterm('RED')}Failed updating view: {e}{xterm('X')}")
+        _log.error(f"Failed updating view: {e}")
     if result:
         return True
     return False
@@ -1559,14 +1635,14 @@ async def action_get_hunt_endpoints(
 
     view, plugin_name, pmd = await plugin.blockaction_update_view(payload)
     plugin_name = plugin_name[0]
-    _log.debug(f"{xterm('CYAN')}Searching for {plugin_name} endpoints...{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}Searching for {plugin_name} endpoints...")
 
     #; Get valid endpoints and URI paths for plugin_name
     try:
         myplugin = led.load_plugin(plugin_name)
     except Exception as e:
-        _log.error(f"{xterm('RED')}Failed loading plugin {plugin_name}:"
-                   f" {e}{xterm('X')}")
+        _log.error(f"Failed loading plugin {plugin_name}:"
+                   f" {e}")
         return False
     api_confs = list(myplugin.api_confs.keys())
     endpoints = {}
@@ -1575,7 +1651,7 @@ async def action_get_hunt_endpoints(
 
     #; Build new block
     new_block = await ModalBuilder.get_hunt_endpoints(endpoints)
-    _log.debug(f"{xterm('CYAN')}Built new_block {pformat(new_block)}{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}Built new_block {pformat(new_block)}")
 
     #; Remove block_id for hunt-endpoints if one already exists
     removed_endpoint = [d for d in view['blocks'] if d.get('block_id') != 'hunt-endpoint']
@@ -1588,7 +1664,7 @@ async def action_get_hunt_endpoints(
             break
 
     result = None
-    # // _log.debug(f"{xterm('CYAN')}Sending view: {pformat(view)}{xterm('X')}")
+    # // _log.debug(f"{xterm('CYAN')}Sending view: {pformat(view)}")
     try:
         result = await plugin.views_update(
             view=view,
@@ -1596,7 +1672,7 @@ async def action_get_hunt_endpoints(
             hash=hash,
         )
     except Exception as e:
-        _log.error(f"{xterm('RED')}Failed updating view: {e}{xterm('X')}")
+        _log.error(f"Failed updating view: {e}")
     if result:
         return True
     return False
@@ -1653,11 +1729,12 @@ async def action_select_db(
             hash=hash,
         )
     except Exception as e:
-        _log.error(f"{xterm('RED')}Failed updating view: {e}{xterm('X')}")
+        _log.error(f"Failed updating view: {e}")
     if result:
         return True
     return False
 
+'''
 async def action_set_confidence(
     plugin: SlackClient = None,
     payload: Dict = None,
@@ -1665,24 +1742,17 @@ async def action_set_confidence(
 )->Dict:
     #TODO REFRESH THIS FUNCTION, IT'S OUTTA DATE
     _log.debug(f"Setting confidence...")
-    _log.debug(f"{xterm('YELLOW')}{pformat(payload)}{xterm('X')}")
+    _log.debug(f"{xterm('YELLOW')}{pformat(payload)}")
     # // value_str = payload['actions'][0]['selected_option']['value']
 
     try:
-        '''
-        value_str = (
-            payload['view']['state']['values']
-            [next(iter(payload['view']['state']['values']))]
-            ['new_confidence']['selected_option']['value']
-        )
-        '''
         value_str = (
             payload['view']['state']['values'].get('confidence')
             ['set_confidence']['selected_option']['value']
         )
     except Exception as e:
-        _log.error(f"{xterm('RED')}Failed getting value str: {e}{xterm('X')}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        _log.error(f"Failed getting value str: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
     db_name = value_str.split('|')[0]
     iid = value_str.split('|')[1]
     value = value_str.split('|')[2]
@@ -1711,9 +1781,9 @@ async def action_set_confidence(
             # _log.debug(f"{xterm('GREEN')}container message_ts: {container['message_ts']}")
             # _log.debug(f"{xterm('GREEN')}container thread_ts: {container.get('thread_ts')}")
         except Exception as e:
-            _log.error(f"{xterm('RED')}{pformat(payload['view']['private_metadata'])}{xterm('X')}")
-            _log.error(f"{xterm('RED')}{pformat(container)}{xterm('X')}")
-            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+            _log.error(f"{pformat(payload['view']['private_metadata'])}")
+            _log.error(f"{pformat(container)}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
         #; When calling an edit block manually there will be no old message
         #; to update
         if container.get('message_ts') is None:
@@ -1795,6 +1865,7 @@ async def action_set_confidence(
     await plugin.post_message(**params)
 
     return {'response_action': 'clear'}
+'''
 
 #~ Update attributes of various types
 async def _update_thing_attribute(
@@ -1804,7 +1875,7 @@ async def _update_thing_attribute(
     format_new_value: Optional[Callable] = None,
 )->bool:
 
-    _log.debug(f"payload: \n{pformat(payload)}")
+    # // _log.debug(f"payload: \n{pformat(payload)}")
     view_id = payload['view']['id']
     hash = payload['view']['hash']
 
@@ -1857,7 +1928,7 @@ async def _update_thing_attribute(
             blocks_verbatim = True,
             user=user.slack_id,
         )
-    _log.debug(f"Updated thing: {xterm('CYAN')}{pformat(result.to_dict())}")
+    # // _log.debug(f"Updated thing: {xterm('CYAN')}{pformat(result.to_dict())}")
     await plugin.post_message(**params)
     #; Rebuild the modal with the new value
     plugin_list = led.list_plugins()
@@ -1870,7 +1941,7 @@ async def _update_thing_attribute(
         plugin_list=plugin_list,
         private_metadata=dumps(pmd, compactly=True),
     )
-    _log.debug(f"Modal: {pformat(modal)}")
+    # // _log.debug(f"Modal: {pformat(modal)}")
 
     for block in modal['blocks']:
         if block.get('block_id') in [block_id.split('_')[0], f"{block_id.split('_')[0]}_0"]:
@@ -1883,26 +1954,19 @@ async def _update_thing_attribute(
     else:
         new_block['block_id'] = f"{block_id.split('_')[0]}_0"
 
-    _log.debug(f"Sending modal blocks {modal['blocks']}")
-    _log.debug(f"Sending new_block: {new_block}")
-    _log.debug(f"Sending old_block_id: {block_id}")
-    #@ NOTE - this always needs to happen before get_confidence_context
-    #@ because get_confidence_context renames the block_id to include _0
-    #@ and that renaming will otherwise break replace_block_by_id
+    # // _log.debug(f"Sending modal blocks {modal['blocks']}")
+    # // _log.debug(f"Sending new_block: {new_block}")
+    # // _log.debug(f"Sending old_block_id: {block_id}")
 
     modal['blocks'] = await SlackClient.replace_block_by_id(
         old_blocks = modal['blocks'],
         new_block = new_block,
         old_block_id = block_id,
     )
-    _log.debug(f"Modal after replacement:\n{pformat(modal)}")
-    if modal:
-        modal = await get_confidence_context(modal)
-    _log.debug(f"Context Modal: {pformat(modal)}")
 
     view['blocks'] = modal['blocks']
     view['private_metadata'] = modal['private_metadata']
-    _log.debug(f"{xterm('GREEN')}metadata_out: {view.get('private_metadata')}")
+    # // _log.debug(f"{xterm('GREEN')}metadata_out: {view.get('private_metadata')}")
     try:
         result = await plugin.views_update(
             view=view,
@@ -1912,6 +1976,22 @@ async def _update_thing_attribute(
     except Exception as e:
         _log.error(f"Failed updating view: {e}")
         _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+        return False
+    #; Populate new modal with confidence context
+    payload = result.data
+    view_id = result['view']['id']
+    hash = result['view']['hash']
+    current_job:Job = get_current_job()
+    current_job_worker = current_job.worker_name
+    queue_name = current_job.origin
+    queue = Queue(queue_name, connection=redis_manager.syncredis)
+    job:Job = queue.enqueue_call(
+        get_confidence_context,
+        args=[payload],
+        timeout=60*5,
+        result_ttl=60*60,
+    )
+
     if result:
         return True
     return False
@@ -1940,8 +2020,8 @@ async def action_update_int_attribute(
     payload: Dict = None,
     user: User = None,
 )->bool:
-    _log.debug(f"Updating frequency...")
-    _log.debug(f"payload: \n{pformat(payload)}")
+    # // _log.debug(f"Updating frequency...")
+    # // _log.debug(f"payload: \n{pformat(payload)}")
     def format_new_value(new_value: str):
         return int(new_value)
     block_id = payload['actions'][0]['block_id']
@@ -1958,8 +2038,8 @@ async def action_update_string_attribute(
     payload: Dict = None,
     user: User = None,
 )->bool:
-    _log.debug(f"Updating hunt-string...")
-    _log.debug(f"payload: \n{pformat(payload)}")
+    # // _log.debug(f"Updating hunt-string...")
+    # // _log.debug(f"payload: \n{pformat(payload)}")
     def format_new_value(new_value: str):
         return new_value
     block_id = payload['actions'][0]['block_id']
@@ -2006,7 +2086,7 @@ async def action_set_confidence_modal(
     user: User = None,
 ):
     _log.debug(f"Opening set_confidence modal...")
-    # // _log.debug(f"{xterm('YELLOW')}{pformat(payload)}{xterm('X')}")#
+    # // _log.debug(f"{xterm('YELLOW')}{pformat(payload)}")#
     _log.debug(f"Sending trigger_id {payload['trigger_id']}")
     '''
     mymodal = {
@@ -2069,25 +2149,43 @@ async def action_set_confidence_modal(
             plugin_list=plugin_list,
             user_info=user_info,
         )
-        if mymodal:
-            mymodal = await get_confidence_context(mymodal)
+
     except Exception as e:
-        _log.error(f"{xterm('RED')}Failed building modal: {e}{xterm('X')}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
-    _log.debug(f"{xterm('CYAN')}view modal:\n{pformat(mymodal)}{xterm('X')}")
-    _log.debug(f"{xterm('CYAN')}modal type: {type(mymodal)}{xterm('X')}")
+        _log.error(f"Failed building modal: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+    # // _log.debug(f"{xterm('CYAN')}view modal:\n{pformat(mymodal)}")
+    # // _log.debug(f"{xterm('CYAN')}modal type: {type(mymodal)}")
     try:
-        await plugin.views_open(
+        result:AsyncSlackResponse = await plugin.views_open(
             trigger_id=payload['trigger_id'],
             # // view=update_thing_modal(payload),
             view = mymodal,
         )
+        # // _log.debug(f"result: {result}")
+        # // _log.debug(f"result.data: {result.data}")
     except Exception as e:
-        _log.error(f"{xterm('RED')}Failed opening modal: {e}{xterm('X')}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        _log.error(f"Failed opening modal: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
         return False
 
-    return True
+    #; Populate new modal with confidence context
+    payload = result.data
+    view_id = result['view']['id']
+    hash = result['view']['hash']
+    current_job:Job = get_current_job()
+    current_job_worker = current_job.worker_name
+    queue_name = current_job.origin
+    queue = Queue(queue_name, connection=redis_manager.syncredis)
+    job:Job = queue.enqueue_call(
+        get_confidence_context,
+        args=[payload],
+        timeout=60*5,
+        result_ttl=60*60,
+    )
+
+    if result:
+        return True
+    return False
 
 '''
 async def action_toggle_hunt_active(
@@ -2244,7 +2342,7 @@ async def submit_add_thing(
     user: User = None,
 )->Union[Dict, False]:
     _log.debug(f"Adding thing...")
-    _log.debug(f"{xterm('YELLOW')}{pformat(payload)}{xterm('X')}")
+    _log.debug(f"{xterm('YELLOW')}{pformat(payload)}")
     message_failed = False
     #; Parse out important values
     label = payload['view']['title'].get('text').split(' ')[-1].lower()
@@ -2352,9 +2450,9 @@ async def submit_add_thing(
         #; Run the add_thing(thing, user) task
         try:
             _log.debug(f"{xterm('CYAN')}Attempting to add thing "
-                    f"{pformat(new_thing.to_dict())}{xterm('X')}")
+                    f"{pformat(new_thing.to_dict())}")
             rez = tdb.add_thing(new_thing, return_things=True)
-            _log.debug(f"{xterm('CYAN')}Result: {rez}{xterm('X')}")
+            _log.debug(f"{xterm('CYAN')}Result: {rez}")
         except Exception as e:
             msg = f"Failed adding things: {e}"
             _log.error(xterm('RED')+msg+xterm('X'))
@@ -2474,7 +2572,7 @@ async def submit_edit_thing(
         )
 
     #@ Actually add the thing (this also handles updates and deconflicts meta attributes)
-    _log.debug(f"Updated thing: {xterm('CYAN')}{pformat(result.to_dict())}")
+    # // _log.debug(f"Updated thing: {xterm('CYAN')}{pformat(result.to_dict())}")
     #; Post @user updated <blah> + diff changes in channel
     # TODO - calc diff changes instead of dumping the whole Thing
     #; Print the result of this operation
@@ -2611,7 +2709,7 @@ async def slackaction_conf(
 
     resp = None
 
-    _log.debug(f"Payload: \n{xterm('YELLOW')}{pformat(payload)}{xterm('X')}")
+    _log.debug(f"Payload: \n{xterm('YELLOW')}{pformat(payload)}")
 
     opts = {
         'block_actions':{
@@ -2630,9 +2728,10 @@ async def slackaction_conf(
             'get_hunt_endpoints': (action_get_hunt_endpoints, role_hunter),
             'no_action': (action_no_action, role_everyone),
             'open_add_user_modal': (action_open_add_user_modal, role_dbadmin),
-            #. role_everyone can open the dialog, but only con_man can change the confidence
             'select_db': (action_select_db, role_everyone),
-            'set_confidence': (action_set_confidence, role_conman),
+            # 'set_confidence': (action_set_confidence, role_conman),
+            'set_confidence': (action_update_int_attribute, role_conman),
+            #. role_everyone can open the dialog, but only con_man can change the confidence
             'set_confidence_modal': (action_set_confidence_modal, role_everyone),
             'action_update_boolean_attribute': (action_update_boolean_attribute, role_hunter),
         },
@@ -2665,12 +2764,12 @@ async def slackaction_conf(
         '''
         aid_trunc = action_id.rpartition('_')[0]
         if aid_trunc not in opts[payload['type']]:
-        _log.error(f"{xterm('RED')}No action index called {aid_trunc}{xterm('X')}")
+        _log.error(f"No action index called {aid_trunc}")
             continue
         func_perms = opts[payload['type']][aid_trunc]
         '''
         if action_id not in opts[payload['type']]:
-            _log.error(f"{xterm('RED')}No action index called {action_id}{xterm('X')}")
+            _log.error(f"No action index called {action_id}")
             continue
         func_perms = opts[payload['type']][action_id]
         try:
@@ -2684,8 +2783,8 @@ async def slackaction_conf(
             result = await func_perms[0](plugin, payload, user)
             resp.append(result)
         except Exception as e:
-            _log.error(f"{xterm('RED')}Failed running {func_perms[0]}: {e}")
-            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+            _log.error(f"Failed running {func_perms[0]}: {e}")
+            _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
 
     #. Will also have to figure out how to properly return a list of responses.
     #. resp will probably have to be converted to a dict w/ action_id's as the keys.
@@ -2751,7 +2850,7 @@ async def slackevent_conf(
         return False
     '''
     """
-    _log.debug(f"{xterm('YELLOW')}{pformat(payload)}{xterm('X')}")
+    _log.debug(f"{xterm('YELLOW')}{pformat(payload)}")
     await plugin.post_message(
         channel = plugin.admin_channel,
         text=f"```{pformat(payload)}```",
@@ -2777,10 +2876,10 @@ async def slackevent_conf(
     body_text = f"<@{event['user']}> added reaction :{event['reaction']}:"
     channel = event['item']['channel']
     thread_ts = event['item']['ts']
-    _log.debug(f"{xterm('YELLOW')}{pformat(data)}{xterm('X')}")
-    _log.debug(f"{xterm('YELLOW')}{pformat(event)}{xterm('X')}")
+    _log.debug(f"{xterm('YELLOW')}{pformat(data)}")
+    _log.debug(f"{xterm('YELLOW')}{pformat(event)}")
     _log.debug(f"Using thread_ts: {thread_ts}")
-    _log.debug(f"{xterm('CYAN')}{pformat(payload)}{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}{pformat(payload)}")
 
     await plugin.post_message(
         channel=channel,
@@ -2799,11 +2898,11 @@ async def slackoptions_conf(
     # data = json.loads(payload)
     # // data = req['payload']
     data = json.loads(req['payload'])
-    _log.debug(f"{xterm('CYAN')}{pformat(data)}{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}{pformat(data)}")
     action_id = data['action_id']
     # // view = data['view']
     # // state = view['state']
-    _log.debug(f"{xterm('CYAN')}Received action_id: {action_id}{xterm('X')}")
+    _log.debug(f"{xterm('CYAN')}Received action_id: {action_id}")
     #@ populate options
     opts = {
         'opts_get_actors': (opts_get_actors, role_hunter),
@@ -2834,7 +2933,7 @@ async def slackoptions_conf(
                 f"{xterm('RED')}Failed running {func_perms[0]}: {e}{xterm('X')}"
             )
     else:
-        _log.error(f"{xterm('RED')}No actions specified for {action_id}{xterm('X')}")
+        _log.error(f"No actions specified for {action_id}")
         resp = None
 
     return resp
@@ -2881,13 +2980,13 @@ async def action_handler(
     try:
         payload = json.loads(payload)
     except TypeError as e:
-        _log.error(f"{xterm('RED')}MAKE SURE YOUR PAYLOAD IS SMALL!{xterm('X')}")
-        _log.error(f"{xterm('RED')}request:{pformat(form)}{xterm('X')}")
-        _log.error(f"{xterm('RED')}payload:{pformat(payload)}{xterm('X')}")
-        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}{xterm('X')}")
+        _log.error(f"MAKE SURE YOUR PAYLOAD IS SMALL!")
+        _log.error(f"request:{pformat(form)}")
+        _log.error(f"payload:{pformat(payload)}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
         raise
-    _log.debug(f"payload: {pformat(payload)}")
-    _log.debug(f"user: {user}")
+    # // _log.debug(f"payload: {pformat(payload)}")
+    # // _log.debug(f"user: {user}")
 
     resp = {}
     resp['payload'] = payload
