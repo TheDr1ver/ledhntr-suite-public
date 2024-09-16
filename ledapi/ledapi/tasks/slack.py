@@ -1936,6 +1936,85 @@ async def action_update_boolean_attribute(
         format_new_value=format_new_value,
     )
 
+async def action_set_confidence(
+    plugin: SlackClient = None,
+    payload: Dict = None,
+    user: User = None,
+)->Union[bool, Dict]:
+    _log.debug(f"Setting confidence...")
+    rez = await action_update_int_attribute(
+        plugin=plugin,
+        payload=payload,
+        user=user,
+    )
+    if not rez:
+        return False
+    try:
+        container = json.loads(payload['view']['private_metadata'])
+        db_name = container.get('db_name')
+        iid = container.get('iid')
+        # value = payload['actions'][0]['value'].split('|')[-1]
+    except Exception as e:
+        _log.error(f"Failed parsing private_metadata: {e}")
+        _log.error(f"Traceback: \n{pformat(traceback.format_exc())}")
+        return False
+    #; Get the old message
+    oldest = container.get('thread_ts')
+    old_message = await plugin.conversations_history(
+        channel=container['channel_id'],
+        oldest=oldest,
+        latest=container['message_ts'],
+        inclusive=True,
+    )
+    _log.debug(f"latest: {old_message['latest']}")
+    #; Modify the blocks
+    block_id = None
+    for message in old_message['messages']:
+        old_blocks = message['blocks']
+        updated_blocks = copy.deepcopy(old_blocks)
+        for block in old_blocks:
+            if 'accessory' in block:
+                if block['accessory'].get('value', None) == f"{db_name}|{iid}":
+                    block_id = block.get('block_id')
+        if block_id:
+            break
+    if block_id is None:
+        _log.warning(f"Couldn't find block_id in conversation history. Checking thread.")
+        thread_messages = await plugin.conversations_replies(
+            channel=container['channel_id'],
+            ts=container['thread_ts'],
+            inclusive=True,
+        )
+        for message in thread_messages['messages']:
+            if message['ts'] == container['message_ts']:
+                old_blocks = message['blocks']
+                updated_blocks = copy.deepcopy(old_blocks)
+                for block in old_blocks:
+                    if 'accessory' in block:
+                        if block['accessory'].get('value', None) == f"{db_name}|{iid}":
+                            block_id = block.get('block_id')
+                if block_id:
+                    break
+    if block_id is None:
+        _log.error(f"Missing block_id! old_blocks should have "
+                f"accessory|value of {db_name}|{iid}. "
+                f"old_blocks: {xterm('CYAN')}{pformat(old_blocks)}")
+        return False
+    _log.debug(f"payload: {pformat(payload)}")
+    for block in updated_blocks:
+        if block.get('block_id') == block_id:
+            block['accessory']['text']['text'] = payload['actions'][0]['selected_option']['text']['text']
+            break
+
+    #; Update the old message
+    resp = await plugin.update_message(
+        channel=container['channel_id'],
+        ts=container['message_ts'],
+        text=message['text'],
+        blocks=updated_blocks,
+    )
+    return {'response_action': 'clear'}
+
 async def action_update_int_attribute(
     plugin: SlackClient = None,
     payload: Dict = None,
@@ -2511,8 +2590,8 @@ async def slackaction_conf(
             'open_add_user_modal': (action_open_add_user_modal, role_dbadmin),
             'pivot_attr': (action_pivot_attr, role_everyone),
             'select_db': (action_select_db, role_everyone),
-            # 'set_confidence': (action_set_confidence, role_conman),
-            'set_confidence': (action_update_int_attribute, role_conman),
+            'set_confidence': (action_set_confidence, role_conman),
+            # 'set_confidence': (action_update_int_attribute, role_conman),
             #. role_everyone can open the dialog, but only con_man can change the confidence
             'set_confidence_modal': (action_set_confidence_modal, role_everyone),
             'action_update_boolean_attribute': (action_update_boolean_attribute, role_hunter),
