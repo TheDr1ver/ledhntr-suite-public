@@ -14,7 +14,8 @@ except ImportError:
 
 from datetime import datetime, timezone
 from operator import itemgetter
-from pkg_resources import resource_stream
+# // from pkg_resources import resource_stream
+from importlib.resources import path
 from pprint import pprint, pformat
 from time import time
 from typing import Dict, List, Optional, DefaultDict, Union
@@ -174,7 +175,9 @@ def _load_default_schema(schema:str=""):
     """
 
     if not schema:
-        schema = resource_stream('ledhntr', 'schemas/schema.tql').name
+        # // schema = resource_stream('ledhntr', 'schemas/schema.tql').name
+        with path('ledhntr', 'schemas/schema.tql') as schema_file:
+            schema = str(schema_file)
 
     scheyattrs = {}
     schema_val_types = {}

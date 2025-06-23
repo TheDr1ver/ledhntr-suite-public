@@ -16,7 +16,8 @@ import logging
 import re
 
 from datetime import datetime, timezone
-from pkg_resources import resource_stream
+# // from pkg_resources import resource_stream
+from importlib.resources import path
 from pprint import pformat
 from typedb.driver import (
     Annotation,
@@ -3035,7 +3036,9 @@ class TypeDBClient(ConnectorPlugin):
         """
         _log = self.logger
         if not schema:
-            schema = resource_stream('ledhntr', 'schemas/schema.tql').name
+        # //     schema = resource_stream('ledhntr', 'schemas/schema.tql').name
+            with path('ledhntr', 'schemas/schema.tql') as schema_file:
+                schema = str(schema_file)
 
         thing_objs = {
             'attribute': [],

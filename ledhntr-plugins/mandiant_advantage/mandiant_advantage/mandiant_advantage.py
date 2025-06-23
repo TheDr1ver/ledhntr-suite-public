@@ -21,7 +21,7 @@ import os
 import re
 
 import requests
-from pkg_resources import resource_stream
+# // from pkg_resources import resource_stream
 from pprint import pformat
 from datetime import datetime, timezone, timedelta
 import dateutil.parser

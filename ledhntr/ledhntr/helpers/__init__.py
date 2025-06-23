@@ -9,7 +9,8 @@ from configparser import ConfigParser
 from datetime import datetime, timezone
 from itertools import chain, starmap
 from pathlib import Path
-from pkg_resources import resource_stream
+# from pkg_resources import resource_stream
+from importlib.resources import path
 from pprint import pformat
 from typing import Any, Optional, Dict, DefaultDict, Union, List
 
@@ -520,7 +521,9 @@ def parse_schema_file(
     """
     # . _log = self.logger
     if not schema:
-        schema = resource_stream('ledhntr', 'schemas/schema.tql').name
+        # // schema = resource_stream('ledhntr', 'schemas/schema.tql').name
+        with path('ledhntr', 'schemas/schema.tql') as schema_file:
+            schema = str(schema_file)
 
     thing_objs = {
         'attribute': [],

@@ -15,7 +15,7 @@ import re
 
 from datetime import datetime, timezone
 from pathlib import Path
-from pkg_resources import resource_stream
+# // from pkg_resources import resource_stream
 from pprint import pformat
 
 from typing import (
