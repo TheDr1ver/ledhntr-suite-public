@@ -522,7 +522,7 @@ def parse_schema_file(
     # . _log = self.logger
     if not schema:
         # // schema = resource_stream('ledhntr', 'schemas/schema.tql').name
-        with path('ledhntr', 'schemas/schema.tql') as schema_file:
+        with path('ledhntr.schemas', 'schema.tql') as schema_file:
             schema = str(schema_file)
 
     thing_objs = {
