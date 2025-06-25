@@ -1833,7 +1833,7 @@ class HNTRPlugin(BasePlugin, ABC):
                     ent.has.append(comboid)
                 if not ent.keyval:
                     _log.debug(f"Missing {ent.keyattr} from {ent}. Skipping creation.")
-                    _log.debug(f"Entity: {ent.to_dict()}")
+                    # // _log.debug(f"Entity: {ent.to_dict()}")
                     continue
                 entities.append(ent)
             #@ If we end up with multiple keyvals for a single Entity
@@ -1862,9 +1862,9 @@ class HNTRPlugin(BasePlugin, ABC):
                     #! jsonpath_expr = parse(rule['multipath'])
                     #! sub_data_list = [match.value for match in jsonpath_expr.find(data)]
                     sub_data_list = jmespath.search(rule['multipath'], data)
-                    if not sub_data_list:
-                        _log.debug(f"No match found in data for rule: {rule['multipath']}")
-                        _log.debug(f"data: {str(data)[0:300]}")
+                    if sub_data_list is None:
+                        _log.debug(f"No match found in data for rule: {rule['multipath']}. Skipping rule generation.")
+                        # // _log.debug(f"data: {str(data)[0:300]}")
                         continue
                 else:
                     sub_data_list = [data]
@@ -1874,11 +1874,11 @@ class HNTRPlugin(BasePlugin, ABC):
                     #// sub_data_list = [{key: value} for key, value in jmespath.search(rule['multipath'], data).items()]
                     parsed = jmespath.search(rule['multipath'], data) or {}
                     
-                    _log.debug("#############################################################")
-                    _log.debug(f"sub_data_list: {sub_data_list} rule: {rule}")
-                    _log.debug("##############################################################")
-                    _log.debug(f"data: {str(data)[0:300]}")
-                    _log.debug(f"parsed: {parsed}")
+                    # // _log.debug("#############################################################")
+                    # // _log.debug(f"sub_data_list: {sub_data_list} rule: {rule}")
+                    # // _log.debug("##############################################################")
+                    # // _log.debug(f"data: {str(data)[0:300]}")
+                    # // _log.debug(f"parsed: {parsed}")
                     if not isinstance(parsed, dict):
                         parsed = {}
                     sub_data_list = [{k: v} for k, v in parsed.items()]
