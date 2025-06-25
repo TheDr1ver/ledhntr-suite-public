@@ -1862,7 +1862,7 @@ class HNTRPlugin(BasePlugin, ABC):
                     #! sub_data_list = [match.value for match in jsonpath_expr.find(data)]
                     sub_data_list = jmespath.search(rule['multipath'], data)
                     if not sub_data_list:
-                        _log.debug(f"No match found in data for rule: {rule['multipath']")
+                        _log.debug(f"No match found in data for rule: {rule['multipath']}")
                         _log.debug(f"data: {str(data)[0:300]}")
                         continue
                 else:
