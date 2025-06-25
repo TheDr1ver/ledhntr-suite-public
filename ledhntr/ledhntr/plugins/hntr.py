@@ -1833,6 +1833,7 @@ class HNTRPlugin(BasePlugin, ABC):
                     ent.has.append(comboid)
                 if not ent.keyval:
                     _log.debug(f"Missing {ent.keyattr} from {ent}. Skipping creation.")
+                    _log.debug(f"Entity: {ent.to_dict()}")
                     continue
                 entities.append(ent)
             #@ If we end up with multiple keyvals for a single Entity
