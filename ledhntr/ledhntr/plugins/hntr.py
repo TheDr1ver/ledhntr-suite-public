@@ -1867,7 +1867,10 @@ class HNTRPlugin(BasePlugin, ABC):
                     #// baby_blob = jmespath.search(f"{rule['multipath']} | to_entries(@)", data)
                     #// sub_data_list = [{entry['key']: entry['value']} for entry in baby_blob]
                     #// sub_data_list = [{key: value} for key, value in jmespath.search(rule['multipath'], data).items()]
+                    _log.debug("#############################################################")
                     _log.debug(f"sub_data_list: {sub_data_list} rule: {rule}")
+                    _log.debug("##############################################################")
+                    _log.debug(f"data: {data}")
                     parsed = jmespath.search(rule['multipath'], data) or {}
                     if not isinstance(parsed, dict):
                         parsed = {}
