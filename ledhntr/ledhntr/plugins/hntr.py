@@ -1866,7 +1866,12 @@ class HNTRPlugin(BasePlugin, ABC):
                 if not isinstance(sub_data_list, list):
                     #// baby_blob = jmespath.search(f"{rule['multipath']} | to_entries(@)", data)
                     #// sub_data_list = [{entry['key']: entry['value']} for entry in baby_blob]
-                    sub_data_list = [{key: value} for key, value in jmespath.search(rule['multipath'], data).items()]
+                    #// sub_data_list = [{key: value} for key, value in jmespath.search(rule['multipath'], data).items()]
+                    _log.debug(f"sub_data_list: {sub_data_list} rule: {rule}")
+                    parsed = jmespath.search(rule['multipath'], data) or {}
+                    if not isinstance(parsed, dict):
+                        parsed = {}
+                    sub_data_list = [{k: v} for k, v in parsed.items()]
                 newents = generate_entity(data, rule, sub_data_list)
                 if newents:
                     all_entities += newents
@@ -2529,7 +2534,7 @@ class HNTRPlugin(BasePlugin, ABC):
                     api_conf = api_conf,
                 )
             except Exception as e:
-                _log.error(f"Error parsing things: {e}")
+                _log.error(f"Error parsing things: {e}", exc_info=True)
                 things = []
 
         # Clean any potential None objects that got sucked up in the mix
