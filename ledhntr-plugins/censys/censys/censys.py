@@ -304,11 +304,15 @@ class Censys(HNTRPlugin):
             {'jsonpath': 'ip', 'label': 'ledsrc'},
             single=True
         )[0]
-        last_updated = self.process_parsing_rules(
+        lu_res = self.process_parsing_rules(
             data,
             {'jsonpath': 'last_updated_at', 'label': 'date-seen'},
             single=True
-        )[0]
+        )
+        if lu_res:
+            last_updated = lu_res[0]
+        else:
+            last_updated = Attribute(label="date-seen", value=datetime.utcnow())
         tags = self.process_parsing_rules(
             data,
             {'jsonpath': 'labels[*]', 'label': 'tag'},
