@@ -1876,7 +1876,7 @@ class HNTRPlugin(BasePlugin, ABC):
                     _log.debug("#############################################################")
                     _log.debug(f"sub_data_list: {sub_data_list} rule: {rule}")
                     _log.debug("##############################################################")
-                    _log.debug(f"data: {str(data)[0:300}")
+                    _log.debug(f"data: {str(data)[0:300]}")
                     _log.debug(f"parsed: {parsed}")
                     if not isinstance(parsed, dict):
                         parsed = {}
